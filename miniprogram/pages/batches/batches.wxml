@@ -1,0 +1,1 @@
+<view class="page"><view class="title">参停保批次</view><view class="card"><view class="muted">保司名单发送</view><button size="mini" data-kind="enrollment" bindtap="send">发送参保名单</button><button size="mini" data-kind="termination" bindtap="send">发送停保名单</button></view></view>

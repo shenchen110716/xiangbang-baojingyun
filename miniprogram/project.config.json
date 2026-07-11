@@ -1,0 +1,8 @@
+{
+  "appid": "touristappid",
+  "projectname": "xiangbangbao-jingyun",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "./",
+  "libVersion": "3.4.4",
+  "setting": { "es6": true, "minified": true, "urlCheck": false }
+}

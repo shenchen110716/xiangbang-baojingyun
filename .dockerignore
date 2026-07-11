@@ -1,0 +1,11 @@
+.DS_Store
+.env
+.git
+.gitignore
+__pycache__
+*.py[cod]
+*.db
+*.zip
+uploads
+backend.code-workspace
+微信小程序用户端-扫码测试.png

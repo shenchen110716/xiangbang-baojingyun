@@ -1,0 +1,5 @@
+{
+  "pages": ["pages/login/login", "pages/home/home", "pages/employees/employees", "pages/employee-edit/employee-edit", "pages/import/import", "pages/batches/batches", "pages/products/products", "pages/billing/billing", "pages/claims/claims", "pages/claim-create/claim-create", "pages/claim-detail/claim-detail"],
+  "window": { "navigationBarTitleText": "响帮帮保经云", "navigationBarBackgroundColor": "#ffffff", "navigationBarTextStyle": "black", "backgroundColor": "#f6f7fb" },
+  "tabBar": { "color": "#8991a5", "selectedColor": "#5b6ff3", "list": [{"pagePath":"pages/home/home","text":"首页"},{"pagePath":"pages/employees/employees","text":"员工"},{"pagePath":"pages/products/products","text":"产品"}] }
+}

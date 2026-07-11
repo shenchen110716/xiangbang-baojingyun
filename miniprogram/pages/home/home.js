@@ -1,0 +1,1 @@
+const app=getApp();Page({data:{dashboard:{enterprises:0,people:0,pending_people:0,usage_balance:0}},onShow(){app.request('/dashboard').then(r=>this.setData({dashboard:r.data||{}}));},onShareAppMessage(){return app.share('/pages/home/home','from=share');},go(e){wx.navigateTo({url:e.currentTarget.dataset.url});}});
