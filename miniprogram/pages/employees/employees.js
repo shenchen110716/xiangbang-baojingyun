@@ -1,1 +1,33 @@
-const app=getApp();Page({data:{items:[],q:'',loading:false},onShow(){this.load();},load(){this.setData({loading:true});app.request('/insured').then(r=>this.setData({items:r.data||[],loading:false}));},search(e){this.setData({q:e.detail.value});},onShareAppMessage(){return app.share('/pages/employees/employees','from=share');},edit(e){wx.navigateTo({url:`/pages/employee-edit/employee-edit?id=${e.currentTarget.dataset.id}`});},toggle(e){wx.showModal({title:'确认操作',content:'确认变更该员工参保状态？',success:r=>r.confirm&&wx.showToast({title:'已提交审核'})});}});
+const app = getApp();
+
+Page({
+  data: {
+    items: [],
+    filtered: [],
+    q: '',
+    status: '',
+    statuses: [{ value: '', label: '全部' }, { value: 'active', label: '在保' }, { value: 'pending', label: '待审核' }, { value: 'stopped', label: '已停保' }],
+    loading: false
+  },
+  onShow() { this.load(); },
+  onPullDownRefresh() { this.load().finally(() => wx.stopPullDownRefresh()); },
+  load() {
+    this.setData({ loading: true });
+    return app.request('/insured', { silent: true }).then((items) => {
+      const mapped = items.map((item) => ({ ...item, initial: String(item.name || '员').slice(0, 1), status_label: app.statusText(item.status), id_masked: this.maskId(item.id_number) }));
+      this.setData({ items: mapped, loading: false }); this.applyFilter();
+    }).catch((error) => { this.setData({ loading: false }); wx.showToast({ title: error.message, icon: 'none' }); });
+  },
+  maskId(value) { const text = String(value || ''); return text.length > 10 ? `${text.slice(0, 6)}********${text.slice(-4)}` : text; },
+  search(e) { this.setData({ q: e.detail.value }); this.applyFilter(); },
+  chooseStatus(e) { this.setData({ status: e.currentTarget.dataset.value }); this.applyFilter(); },
+  applyFilter() {
+    const q = this.data.q.trim().toLowerCase(), status = this.data.status;
+    const filtered = this.data.items.filter((item) => (!status || item.status === status) && (!q || `${item.name}${item.phone}${item.id_number}${item.position_name}${item.actual_employer_name}`.toLowerCase().includes(q)));
+    this.setData({ filtered });
+  },
+  add() { wx.navigateTo({ url: '/pages/employee-edit/employee-edit' }); },
+  detail(e) { wx.navigateTo({ url: `/pages/employee-detail/employee-detail?id=${e.currentTarget.dataset.id}` }); },
+  importFile() { wx.navigateTo({ url: '/pages/import/import' }); },
+  onShareAppMessage() { return app.share('/pages/employees/employees', 'from=share'); }
+});

@@ -1,0 +1,2 @@
+const app = getApp();
+Page({ data: { items: [], loading: true }, onShow() { app.request('/reports', { silent: true }).then((items) => this.setData({ items: items.map((item) => ({ ...item, value_text: item.id === 'premium' ? `¥${Number(item.value || 0).toFixed(2)}` : item.value })), loading: false })).catch(() => this.setData({ loading: false })); }, onShareAppMessage() { return app.share('/pages/reports/reports', 'from=share'); } });

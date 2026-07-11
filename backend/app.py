@@ -242,6 +242,7 @@ class PlanTierIn(BaseModel): plan_id: int; occupation_class: Literal["1-3类","4
 class PlanIn(BaseModel): insurer: str; insurer_email: str = ""; name: str; coverage: str = ""; occupation_classes: str = "1-4类"; price: float = Field(ge=0); commission_rate: float = Field(default=0, ge=0, le=1); payment_mode: str = "企业直投"; billing_mode: Literal["monthly","daily"] = "monthly"; effective_mode: Literal["next_day","immediate"] = "next_day"
 class PlanUpdate(BaseModel): insurer: Optional[str] = None; insurer_email: Optional[str] = None; name: Optional[str] = None; coverage: Optional[str] = None; occupation_classes: Optional[str] = None; price: Optional[float] = Field(default=None, ge=0); commission_rate: Optional[float] = Field(default=None, ge=0, le=1); payment_mode: Optional[str] = None; billing_mode: Optional[Literal["monthly","daily"]] = None; effective_mode: Optional[Literal["next_day","immediate"]] = None
 class PersonIn(BaseModel): enterprise_id: int; name: str; phone: str = ""; id_number: str = Field(min_length=6); occupation: str = ""; occupation_class: str = "3类"; position_id: Optional[int] = None
+class PersonUpdate(BaseModel): name: Optional[str] = None; phone: Optional[str] = None; id_number: Optional[str] = Field(default=None, min_length=6); position_id: Optional[int] = None
 class BulkPersonRow(BaseModel): name: str; id_number: str = Field(min_length=6); phone: str = ""
 class BulkPersonIn(BaseModel): enterprise_id: int; position_id: int; rows: list[BulkPersonRow] = Field(min_length=1, max_length=1000)
 class ClaimIn(BaseModel): enterprise_id: int; person_id: int; description: str; amount: float = Field(default=0,ge=0); accident_at: str; accident_place: str; accident_type: str = "工伤事故"; hospital: str = ""; diagnosis: str = ""; contact_name: str = ""; contact_phone: str = ""
@@ -474,6 +475,7 @@ def delete_enterprise(item_id: int, user: User = Depends(current_user), session:
 def recharge_enterprise(item_id: int, data: RechargeIn, user: User = Depends(current_user), session: Session = Depends(db)):
     item = session.get(Enterprise, item_id)
     if not item: raise HTTPException(404, "投保单位不存在")
+    if user.role == "enterprise" and user.enterprise_id != item_id: raise HTTPException(403, "无权为该单位充值")
     if data.account == "premium": item.premium_balance += data.amount
     elif data.account == "usage": item.usage_balance += data.amount
     else: raise HTTPException(400, "账户类型不合法")
@@ -541,6 +543,18 @@ def add_position_video(item_id:int,data:PositionVideoIn,user:User=Depends(curren
     if not pos: raise HTTPException(404,'岗位不存在')
     if user.role=='enterprise' and user.enterprise_id!=pos.enterprise_id: raise HTTPException(403,'无权上传')
     item=PositionVideo(position_id=item_id,**data.model_dump());session.add(item);session.commit();session.refresh(item);audit(session,user,'upload','position_video',str(item.id));return serialize(item)
+
+@app.post("/api/positions/{item_id}/videos/upload")
+async def upload_position_video(item_id:int,file:UploadFile=File(...),user:User=Depends(current_user),session:Session=Depends(db)):
+    pos=session.get(WorkPosition,item_id)
+    if not pos: raise HTTPException(404,'岗位不存在')
+    if user.role=='enterprise' and user.enterprise_id!=pos.enterprise_id: raise HTTPException(403,'无权上传')
+    suffix=Path(file.filename or '').suffix.lower()
+    if suffix not in {'.mp4','.mov','.m4v'}: raise HTTPException(400,'仅支持 MP4、MOV 或 M4V 视频')
+    content=await file.read()
+    if len(content)>100*1024*1024: raise HTTPException(400,'岗位视频不能超过 100MB')
+    folder=ROOT/'uploads'/'positions'/str(item_id);folder.mkdir(parents=True,exist_ok=True);stored=f'{secrets.token_hex(8)}{suffix}';(folder/stored).write_bytes(content)
+    item=PositionVideo(position_id=item_id,name=file.filename or stored,url=f'/uploads/positions/{item_id}/{stored}',status='pending');session.add(item);session.commit();session.refresh(item);audit(session,user,'upload','position_video',str(item.id));return serialize(item)
 
 @app.patch("/api/position-videos/{item_id}/review")
 def review_position_video(item_id:int,data:PositionVideoReviewIn,user:User=Depends(current_user),session:Session=Depends(db)):
@@ -619,6 +633,21 @@ def policies(user: User = Depends(current_user), session: Session = Depends(db))
         enterprise=session.get(Enterprise,x.enterprise_id);plan=session.get(InsurancePlan,x.plan_id);result.append({**serialize(x),"enterprise_name":enterprise.name if enterprise else "","insurer":plan.insurer if plan else "","plan_name":plan.name if plan else "","billing_mode":plan.billing_mode if plan else "monthly","effective_mode":plan.effective_mode if plan else "next_day"})
     return result
 
+@app.get("/api/policies/{item_id}/export")
+def export_policy(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
+    policy=session.get(Policy,item_id)
+    if not policy: raise HTTPException(404,'保单不存在')
+    if user.role=='enterprise' and user.enterprise_id!=policy.enterprise_id: raise HTTPException(403,'无权导出该保单')
+    enterprise=session.get(Enterprise,policy.enterprise_id);plan=session.get(InsurancePlan,policy.plan_id)
+    import io,openpyxl
+    book=openpyxl.Workbook();sheet=book.active;sheet.title='保单人员明细';sheet.append(['保单号','投保单位','实际用工单位','岗位','职业类别','被保险人','身份证号','保险公司','保险方案','开始日期','结束日期','保单状态'])
+    for person in session.scalars(select(InsuredPerson).where(InsuredPerson.policy_id==policy.id).order_by(InsuredPerson.id.asc())):
+        position=session.get(WorkPosition,person.position_id) if person.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None
+        sheet.append([policy.policy_no,enterprise.name if enterprise else '',employer.name if employer else (position.actual_employer if position else ''),position.name if position else person.occupation,person.occupation_class,person.name,person.id_number,plan.insurer if plan else '',plan.name if plan else '',policy.start_date,policy.end_date,policy.status])
+    for column in sheet.columns: sheet.column_dimensions[column[0].column_letter].width=min(32,max(12,max(len(str(cell.value or '')) for cell in column)+2))
+    output=io.BytesIO();book.save(output);output.seek(0)
+    return StreamingResponse(output,media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename=policy-{policy.policy_no}.xlsx'})
+
 @app.post("/api/plans")
 def add_plan(data: PlanIn, user: User = Depends(current_user), session: Session = Depends(db)):
     item = InsurancePlan(**data.model_dump()); session.add(item); session.commit(); session.refresh(item); audit(session, user, "create", "plan", str(item.id)); return serialize(item)
@@ -663,18 +692,39 @@ def insured(q: str = "", user: User = Depends(current_user), session: Session = 
     stmt = select(InsuredPerson).order_by(InsuredPerson.id.desc())
     if user.role=='enterprise' and user.enterprise_id: stmt=stmt.where(InsuredPerson.enterprise_id==user.enterprise_id)
     if q: stmt = stmt.where(or_(InsuredPerson.name.contains(q), InsuredPerson.phone.contains(q)))
-    return [serialize(x) for x in session.scalars(stmt)]
+    result=[]
+    for x in session.scalars(stmt):
+        item=serialize(x);enterprise=session.get(Enterprise,x.enterprise_id);position=session.get(WorkPosition,x.position_id) if x.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None;plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None;policy=session.get(Policy,x.policy_id) if x.policy_id else None
+        item.update(enterprise_name=enterprise.name if enterprise else '',position_name=position.name if position else x.occupation,actual_employer_name=employer.name if employer else (position.actual_employer if position else ''),plan_id=plan.id if plan else None,plan_name=plan.name if plan else '',insurer=plan.insurer if plan else '',policy_no=policy.policy_no if policy else '',policy_status=policy.status if policy else '')
+        result.append(item)
+    return result
 
 @app.post("/api/insured")
 def add_person(data: PersonIn, user: User = Depends(current_user), session: Session = Depends(db)):
     if not session.get(Enterprise, data.enterprise_id): raise HTTPException(404, "企业不存在")
     if user.role=="enterprise" and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,"无权操作该单位")
+    if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==data.enterprise_id,InsuredPerson.id_number==data.id_number).limit(1)): raise HTTPException(409,'该身份证号已存在')
     payload=data.model_dump()
     if data.position_id:
         position=session.get(WorkPosition,data.position_id)
         if not position or position.enterprise_id!=data.enterprise_id or position.status!='approved': raise HTTPException(400,"只能选择本单位已审核通过的有效岗位")
         payload['occupation']=position.name; payload['occupation_class']=position.occupation_class
     item = InsuredPerson(**payload); session.add(item); session.commit(); session.refresh(item); audit(session, user, "create", "insured_person", str(item.id)); return serialize(item)
+
+@app.patch("/api/insured/{item_id}")
+def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),session:Session=Depends(db)):
+    item=session.get(InsuredPerson,item_id)
+    if not item: raise HTTPException(404,'参保员工不存在')
+    if user.role=='enterprise' and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,'无权操作该员工')
+    values=data.model_dump(exclude_unset=True)
+    if 'id_number' in values and values['id_number']!=item.id_number and session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==item.enterprise_id,InsuredPerson.id_number==values['id_number'],InsuredPerson.id!=item.id).limit(1)): raise HTTPException(409,'该身份证号已存在')
+    if 'position_id' in values:
+        position=session.get(WorkPosition,values['position_id'])
+        if not position or position.enterprise_id!=item.enterprise_id or position.status!='approved': raise HTTPException(400,'只能选择本单位已审核通过的有效岗位')
+        item.position_id=position.id;item.occupation=position.name;item.occupation_class=position.occupation_class
+    for key in ('name','phone','id_number'):
+        if key in values and values[key] is not None: setattr(item,key,values[key])
+    session.commit();audit(session,user,'update','insured_person',str(item.id));return serialize(item)
 
 @app.patch("/api/insured/{item_id}/status")
 def insured_status(item_id:int,status_value:Literal["active","stopped","pending"]=Query(...,alias="status"),user:User=Depends(current_user),session:Session=Depends(db)):
@@ -782,6 +832,24 @@ def enrollment_summary(date_value:str=Query(default="",alias="date"),user:User=D
         people=list(people);new_count=sum(1 for x in people if str(x.created_at or '')[:10]==target and x.status!='stopped');stop_count=sum(1 for x in people if str(x.created_at or '')[:10]==target and x.status=='stopped')
         result.append({'plan_id':plan.id,'insurer':plan.insurer,'insurer_email':plan.insurer_email,'product':plan.name,'insured_count':len([x for x in people if x.status!='stopped']),'new_count':new_count,'stop_count':stop_count})
     return result
+
+@app.get("/api/messages")
+def messages(user:User=Depends(current_user),session:Session=Depends(db)):
+    enterprise_ids=[user.enterprise_id] if user.role=='enterprise' and user.enterprise_id else [x for x in session.scalars(select(Enterprise.id))]
+    now=datetime.now(timezone.utc);rows=[]
+    for enterprise_id in enterprise_ids:
+        enterprise=session.get(Enterprise,enterprise_id)
+        if not enterprise: continue
+        active_count=session.query(InsuredPerson).filter(InsuredPerson.enterprise_id==enterprise_id,InsuredPerson.status.in_(['active','pending'])).count();usage_daily=active_count*float(enterprise.usage_fee_daily or 0.1)
+        if usage_daily>0 and enterprise.usage_balance/usage_daily<=int(enterprise.alert_days or 3): rows.append({'id':f'balance-{enterprise_id}','type':'warning','title':'使用费账户余额预警','content':f'{enterprise.name}余额预计可用 {enterprise.usage_balance/usage_daily:.1f} 天','created_at':now.isoformat(),'path':'/pages/billing/billing'})
+        pending=session.query(InsuredPerson).filter(InsuredPerson.enterprise_id==enterprise_id,InsuredPerson.status=='pending').count()
+        if pending: rows.append({'id':f'pending-{enterprise_id}','type':'todo','title':'员工待审核','content':f'{pending} 名员工正在等待参保审核','created_at':now.isoformat(),'path':'/pages/employees/employees'})
+        supplements=session.query(Claim).filter(Claim.enterprise_id==enterprise_id,Claim.status=='supplement').count()
+        if supplements: rows.append({'id':f'claim-{enterprise_id}','type':'danger','title':'理赔材料待补充','content':f'{supplements} 件理赔需要补充材料','created_at':now.isoformat(),'path':'/pages/claims/claims'})
+        pending_positions=session.query(WorkPosition).filter(WorkPosition.enterprise_id==enterprise_id,WorkPosition.status.in_(['pending','supplement'])).count()
+        if pending_positions: rows.append({'id':f'position-{enterprise_id}','type':'todo','title':'岗位定类进度','content':f'{pending_positions} 个岗位待审核或补充材料','created_at':now.isoformat(),'path':'/pages/positions/positions'})
+    if not rows: rows.append({'id':'welcome','type':'success','title':'当前没有待办','content':'所有参保、账户和理赔业务运行正常','created_at':now.isoformat(),'path':'/pages/home/home'})
+    return rows
 
 @app.get("/api/claims")
 def claims(user: User = Depends(current_user), session: Session = Depends(db)):

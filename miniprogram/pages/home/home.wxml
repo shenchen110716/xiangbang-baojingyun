@@ -1,1 +1,42 @@
-<view class="page"><view class="title">你好，企业管理员 👋</view><view class="muted">今日用工与保障数据</view><view class="grid" style="margin-top:32rpx"><view class="stat"><text>参保员工</text><b>{{dashboard.people}}</b></view><view class="stat"><text>待处理</text><b>{{dashboard.pending_people}}</b></view><view class="stat"><text>保费余额</text><b>¥{{dashboard.premium_balance}}</b></view><view class="stat"><text>使用费余额</text><b>¥{{dashboard.usage_balance}}</b></view></view><view class="card"><view class="section-title">快捷操作</view><view class="grid"><view class="primary" data-url="/pages/employee-edit/employee-edit" bindtap="go">手工新增</view><view class="primary" data-url="/pages/import/import" bindtap="go">批量导入</view><view class="btn" data-url="/pages/batches/batches" bindtap="go">参停保批次</view><view class="btn" data-url="/pages/billing/billing" bindtap="go">资金与发票</view><view class="btn" data-url="/pages/claims/claims" bindtap="go">理赔材料</view><view class="btn" data-url="/pages/products/products" bindtap="go">可用产品</view></view></view></view>
+<view class="page safe-bottom">
+  <view class="hero">
+    <view class="hero-sub">{{today}}</view>
+    <view class="hero-title">{{greeting}}，{{user.name||'企业管理员'}} 👋</view>
+    <view class="hero-sub">{{enterprise.name||'响帮帮保经云'}}｜今日业务运行正常</view>
+  </view>
+
+  <view class="grid-2 section">
+    <view class="stat"><text class="stat-label">参保员工</text><text class="stat-value">{{dashboard.people||0}}<text class="stat-unit">人</text></text></view>
+    <view class="stat"><text class="stat-label">待审核</text><text class="stat-value">{{dashboard.pending_people||0}}<text class="stat-unit">人</text></text></view>
+    <view class="stat"><text class="stat-label">保费余额</text><text class="stat-value">¥{{dashboard.premium_balance||0}}</text></view>
+    <view class="stat"><text class="stat-label">理赔处理中</text><text class="stat-value">{{dashboard.claims_open||0}}<text class="stat-unit">件</text></text></view>
+  </view>
+
+  <view wx:if="{{dashboard.balance_alerts.length}}" class="section">
+    <view wx:for="{{dashboard.balance_alerts}}" wx:key="account" class="card notice notice-danger" data-url="/pages/billing/billing" bindtap="go">
+      <view class="row between"><text class="strong">账户余额预警</text><text class="tag tag-danger">{{item.days_left}} 天</text></view>
+      <view class="list-meta">{{item.account==='premium'?'保费账户':'平台使用费账户'}}余额 ¥{{item.balance}}，请及时充值</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head"><text class="section-title">快捷办理</text></view>
+    <view class="grid-3">
+      <view class="quick" data-url="/pages/employee-edit/employee-edit" bindtap="go"><view class="quick-icon">+</view><view class="quick-text">新增员工</view></view>
+      <view class="quick" data-url="/pages/import/import" bindtap="go"><view class="quick-icon">⇧</view><view class="quick-text">批量导入</view></view>
+      <view class="quick" data-url="/pages/batches/batches" bindtap="go"><view class="quick-icon">⇄</view><view class="quick-text">参停保</view></view>
+      <view class="quick" data-url="/pages/positions/positions" bindtap="go"><view class="quick-icon">岗</view><view class="quick-text">岗位管理</view></view>
+      <view class="quick" data-url="/pages/policies/policies" bindtap="go"><view class="quick-icon">保</view><view class="quick-text">保单</view></view>
+      <view class="quick" data-url="/pages/billing/billing" bindtap="go"><view class="quick-icon">¥</view><view class="quick-text">资金账户</view></view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head"><text class="section-title">消息与待办</text><text class="section-link" data-url="/pages/messages/messages" bindtap="go">全部 →</text></view>
+    <view wx:for="{{messages}}" wx:key="id" class="card" data-path="{{item.path}}" bindtap="openMessage">
+      <view class="row between"><text class="strong">{{item.title}}</text><text class="tag {{item.type==='danger'?'tag-danger':item.type==='warning'?'tag-warning':'tag-success'}}">{{item.type==='todo'?'待办':'通知'}}</text></view>
+      <view class="list-meta">{{item.content}}</view>
+    </view>
+    <view wx:if="{{!messages.length&&!loading}}" class="card empty">暂无消息</view>
+  </view>
+</view>

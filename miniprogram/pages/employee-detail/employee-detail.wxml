@@ -1,0 +1,27 @@
+<view class="page safe-bottom">
+  <view wx:if="{{loading}}" class="loading">正在加载员工详情…</view>
+  <view wx:elif="{{item}}">
+    <view class="hero">
+      <view class="row"><view class="avatar" style="background:rgba(255,255,255,.16);color:#fff">{{item.initial}}</view><view><view class="hero-title">{{item.name}}</view><view class="hero-sub">{{item.id_number}}</view></view></view>
+      <view style="margin-top:26rpx"><text class="tag {{item.status==='active'?'tag-success':item.status==='pending'?'tag-warning':'tag-gray'}}">{{item.status_label}}</text></view>
+    </view>
+    <view class="card section">
+      <view class="section-title">投保关系</view><view class="divider"></view>
+      <view class="row between"><text class="muted">投保单位</text><text>{{item.enterprise_name||'—'}}</text></view>
+      <view class="row between" style="margin-top:22rpx"><text class="muted">实际用工单位</text><text>{{item.actual_employer_name||'—'}}</text></view>
+      <view class="row between" style="margin-top:22rpx"><text class="muted">投保岗位</text><text>{{item.position_name||'—'}}</text></view>
+      <view class="row between" style="margin-top:22rpx"><text class="muted">职业类别</text><text>{{item.occupation_class||'—'}}</text></view>
+    </view>
+    <view class="card">
+      <view class="section-title">保障信息</view><view class="divider"></view>
+      <view class="row between"><text class="muted">保险公司</text><text>{{item.insurer||'待关联'}}</text></view>
+      <view class="row between" style="margin-top:22rpx"><text class="muted">保险方案</text><text>{{item.plan_name||'待关联'}}</text></view>
+      <view class="row between" style="margin-top:22rpx"><text class="muted">保单号</text><text>{{item.policy_no||'待出单'}}</text></view>
+    </view>
+    <view class="card"><view class="row between"><text class="muted">联系手机</text><text>{{item.phone||'未填写'}}</text></view><view class="row between" style="margin-top:22rpx"><text class="muted">创建时间</text><text>{{item.created_at}}</text></view></view>
+    <view class="toolbar"><button class="secondary" bindtap="edit">编辑信息</button><button class="secondary" bindtap="claim">理赔报案</button></view>
+    <button wx:if="{{item.status!=='pending'}}" class="{{item.status==='stopped'?'primary':'danger-btn'}}" style="margin-top:18rpx" loading="{{operating}}" bindtap="changeStatus">{{item.status==='stopped'?'申请恢复参保':'申请停保'}}</button>
+    <view wx:else class="card notice" style="margin-top:18rpx">员工正在等待人工审核，审核通过后将进入待生效/在保状态。</view>
+  </view>
+  <view wx:else class="empty">员工记录不存在或无权查看</view>
+</view>

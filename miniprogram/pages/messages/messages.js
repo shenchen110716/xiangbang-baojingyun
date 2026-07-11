@@ -1,0 +1,2 @@
+const app = getApp();
+Page({ data: { items: [], loading: true }, onShow() { app.request('/messages', { silent: true }).then((items) => this.setData({ items, loading: false })).catch(() => this.setData({ loading: false })); }, open(e) { const path = e.currentTarget.dataset.path; if (path) { if (['/pages/home/home', '/pages/employees/employees', '/pages/claims/claims', '/pages/profile/profile'].includes(path)) wx.switchTab({ url: path }); else wx.navigateTo({ url: path }); } }, onShareAppMessage() { return app.share('/pages/messages/messages', 'from=share'); } });

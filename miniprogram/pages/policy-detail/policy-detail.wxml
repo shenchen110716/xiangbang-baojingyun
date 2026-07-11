@@ -1,0 +1,10 @@
+<view class="page">
+  <view wx:if="{{loading}}" class="loading">正在加载保单…</view>
+  <view wx:elif="{{item}}">
+    <view class="hero"><view class="hero-sub">保单号</view><view class="hero-title">{{item.policy_no}}</view><view style="margin-top:24rpx"><text class="tag tag-success">{{item.status==='active'?'保障中':item.status}}</text></view></view>
+    <view class="card section"><view class="row between"><text class="muted">投保单位</text><text>{{item.enterprise_name}}</text></view><view class="row between" style="margin-top:22rpx"><text class="muted">保险公司</text><text>{{item.insurer}}</text></view><view class="row between" style="margin-top:22rpx"><text class="muted">保险方案</text><text>{{item.plan_name}}</text></view><view class="row between" style="margin-top:22rpx"><text class="muted">保障期限</text><text>{{item.start_date}} 至 {{item.end_date}}</text></view><view class="row between" style="margin-top:22rpx"><text class="muted">保费</text><text class="strong">¥{{item.premium}}</text></view><button class="secondary" style="margin-top:26rpx" loading="{{exporting}}" bindtap="exportPolicy">导出 Excel 保单明细</button></view>
+    <view class="section-head"><text class="section-title">被保险人（{{people.length}}）</text></view>
+    <view wx:for="{{people}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="person"><view class="row between"><text>{{item.name}}</text><text class="tag">{{item.occupation_class}}</text></view><view class="list-meta">{{item.actual_employer_name}} · {{item.position_name}}</view></view>
+  </view>
+  <view wx:else class="empty">保单不存在</view>
+</view>

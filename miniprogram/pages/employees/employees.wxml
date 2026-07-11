@@ -1,1 +1,24 @@
-<view class="page"><view class="row"><view class="title">参保员工</view><button class="btn" bindtap="edit">＋ 新增</button></view><input class="input" placeholder="搜索姓名或手机号" bindinput="search"/><view wx:for="{{items}}" wx:key="id" class="card"><view class="row"><view><text>{{item.name}}</text><view class="muted">{{item.phone}} · {{item.occupation}}</view></view><text class="tag">{{item.status}}</text></view><view style="margin-top:20rpx" class="row"><button class="btn" data-id="{{item.id}}" bindtap="edit">编辑</button><button class="btn danger" data-id="{{item.id}}" bindtap="toggle">停保 / 恢复</button></view></view><view wx:if="{{!items.length}}" class="card muted">暂无参保员工</view></view>
+<view class="page safe-bottom">
+  <view class="row between">
+    <view><view class="title">参保员工</view><view class="subtitle">共 {{items.length}} 人，按单位和岗位管理</view></view>
+    <button class="mini-btn" bindtap="importFile">批量导入</button>
+  </view>
+  <view class="search"><input class="input" placeholder="姓名、身份证、手机号或岗位" bindinput="search" /></view>
+  <scroll-view class="chips" scroll-x enhanced show-scrollbar="{{false}}">
+    <view wx:for="{{statuses}}" wx:key="value" class="chip {{status===item.value?'active':''}}" data-value="{{item.value}}" bindtap="chooseStatus">{{item.label}}</view>
+  </scroll-view>
+  <view wx:if="{{loading}}" class="loading">正在加载员工…</view>
+  <view wx:for="{{filtered}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="detail">
+    <view class="row top">
+      <view class="avatar">{{item.initial}}</view>
+      <view class="grow">
+        <view class="row between"><text class="list-title">{{item.name}}</text><text class="tag {{item.status==='active'?'tag-success':item.status==='pending'?'tag-warning':'tag-gray'}}">{{item.status_label}}</text></view>
+        <view class="list-meta">{{item.id_masked}}<text wx:if="{{item.phone}}"> · {{item.phone}}</text></view>
+        <view class="list-meta">{{item.actual_employer_name||'未关联用工单位'}} · {{item.position_name||'未关联岗位'}}</view>
+        <view wx:if="{{item.plan_name}}" class="small" style="margin-top:10rpx">{{item.insurer}} · {{item.plan_name}}</view>
+      </view>
+    </view>
+  </view>
+  <view wx:if="{{!loading&&!filtered.length}}" class="empty"><view class="empty-icon">☷</view><view>暂无符合条件的员工</view><view class="small">可以手工新增或批量导入</view></view>
+  <view class="fab" bindtap="add">+</view>
+</view>
