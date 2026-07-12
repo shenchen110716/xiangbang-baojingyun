@@ -73,160 +73,11 @@ from .routers.audit_logs import audit_logs  # noqa: F401
 from .routers.integrations import provider_status  # noqa: F401
 from .routers.health import health  # noqa: F401
 
-def operator_dict(item:User,session:Session):
-    enterprise=session.get(Enterprise,item.enterprise_id) if item.enterprise_id else None
-    return {"id":item.id,"username":item.username,"name":item.name,"phone":item.phone,"role":item.role,"enterprise_id":item.enterprise_id,"enterprise_name":enterprise.name if enterprise else "","is_owner":item.is_owner,"active":item.active,"created_at":item.created_at}
-
-@app.get("/api/operators")
-def operators(user:User=Depends(current_user),session:Session=Depends(db)):
-    stmt=select(User).where(User.role=="enterprise").order_by(User.is_owner.desc(),User.id.asc())
-    if user.role=="enterprise":
-        if not user.enterprise_id: return []
-        stmt=stmt.where(User.enterprise_id==user.enterprise_id)
-    elif user.role!="admin": raise HTTPException(403,"无权查看操作员")
-    return [operator_dict(item,session) for item in session.scalars(stmt)]
-
-@app.post("/api/operators")
-def add_operator(data:OperatorIn,user:User=Depends(current_user),session:Session=Depends(db)):
-    if user.role=="enterprise" and not user.is_owner: raise HTTPException(403,"仅单位主管可管理操作员")
-    if user.role not in {"admin","enterprise"}: raise HTTPException(403,"无权管理操作员")
-    enterprise_id=user.enterprise_id if user.role=="enterprise" else data.enterprise_id
-    if not enterprise_id or not session.get(Enterprise,enterprise_id): raise HTTPException(400,"请选择有效投保单位")
-    if session.scalar(select(User).where(User.username==data.username)): raise HTTPException(409,"登录账号已存在")
-    item=User(username=data.username.strip(),password_hash=pwd.hash(data.password),name=data.name.strip(),phone=data.phone.strip(),role="enterprise",enterprise_id=enterprise_id,is_owner=False,active=True,status="active")
-    session.add(item);session.commit();session.refresh(item);audit(session,user,"create","operator",str(item.id));return operator_dict(item,session)
-
-@app.patch("/api/operators/{item_id}")
-def update_operator(item_id:int,data:OperatorUpdate,user:User=Depends(current_user),session:Session=Depends(db)):
-    item=session.get(User,item_id)
-    if not item or item.role!="enterprise": raise HTTPException(404,"操作员不存在")
-    if user.role=="enterprise":
-        if not user.is_owner: raise HTTPException(403,"仅单位主管可管理操作员")
-        if item.enterprise_id!=user.enterprise_id: raise HTTPException(403,"无权管理其他单位操作员")
-    elif user.role!="admin": raise HTTPException(403,"无权管理操作员")
-    if item.id==user.id and data.active is False: raise HTTPException(400,"不能停用当前登录账号")
-    if item.is_owner and data.active is False: raise HTTPException(400,"单位主管不能停用")
-    values=data.model_dump(exclude_unset=True)
-    if values.get("name") is not None: item.name=values["name"].strip()
-    if values.get("phone") is not None: item.phone=values["phone"].strip()
-    if values.get("password"): item.password_hash=pwd.hash(values["password"])
-    if values.get("active") is not None: item.active=values["active"];item.status="active" if item.active else "inactive"
-    session.commit();audit(session,user,"update","operator",str(item.id));return operator_dict(item,session)
-
 from .routers.agents import add_agent, add_agent_commission, update_agent_commission  # noqa: F401
-
-@app.get("/api/dashboard")
-def dashboard(user: User = Depends(current_user), session: Session = Depends(db)):
-    enterprise_filter = [user.enterprise_id] if user.role == "enterprise" and user.enterprise_id else None
-    enterprises = session.query(Enterprise).filter(Enterprise.id.in_(enterprise_filter)).all() if enterprise_filter else session.query(Enterprise).all()
-    people = session.query(InsuredPerson).filter(InsuredPerson.enterprise_id.in_(enterprise_filter)).all() if enterprise_filter else session.query(InsuredPerson).all()
-    active_people=[x for x in people if x.status in {'active','pending'}]
-    alerts=[]
-    for ent in enterprises:
-        enterprise_active_count=session.query(InsuredPerson).filter(InsuredPerson.enterprise_id==ent.id,InsuredPerson.status.in_(['active','pending'])).count()
-        daily_usage=enterprise_active_count*float(ent.usage_fee_daily or 0.1)
-        daily_premium=sum(float(policy_dict(p,session)['premium'] or 0)/(1 if policy_dict(p,session)['billing_mode']=='daily' else 30) for p in session.scalars(select(Policy).where(Policy.enterprise_id==ent.id,Policy.status=='active')))
-        for account,balance,daily in [('premium',ent.premium_balance,daily_premium),('usage',ent.usage_balance,daily_usage)]:
-            days_left=999999 if daily<=0 else balance/daily
-            if days_left <= int(ent.alert_days or 3): alerts.append({'enterprise_id':ent.id,'enterprise_name':ent.name,'account':account,'balance':balance,'daily_burn':daily,'days_left':round(days_left,1),'alert_days':ent.alert_days or 3,'level':'critical' if days_left<=1 else 'warning'})
-    return {"portal": "enterprise" if user.role == "enterprise" else "admin", "enterprises": len(enterprises), "people": len(people), "active_people":len(active_people), "active_policies": session.query(Policy).filter(Policy.status == "active", Policy.enterprise_id.in_(enterprise_filter)).count() if enterprise_filter else session.query(Policy).filter(Policy.status == "active").count(), "pending_enterprises": session.query(Enterprise).filter(Enterprise.status == "pending").count() if not enterprise_filter else 0, "pending_people": len([x for x in people if x.status == "pending"]), "claims_open": session.query(Claim).filter(Claim.status.not_in(["paid", "closed"]), Claim.enterprise_id.in_(enterprise_filter)).count() if enterprise_filter else session.query(Claim).filter(Claim.status.not_in(["paid", "closed"])).count(), "premium_balance": sum(x.premium_balance for x in enterprises), "usage_balance": sum(x.usage_balance for x in enterprises), "balance_alerts": alerts}
-
-@app.get("/api/screen/products")
-def screen_products(user: User = Depends(current_user), session: Session = Depends(db)):
-    result=[]
-    for plan in session.scalars(select(InsurancePlan).order_by(InsurancePlan.id.desc())):
-        policy_query=session.query(Policy).filter(Policy.plan_id==plan.id)
-        if user.role=="enterprise" and user.enterprise_id: policy_query=policy_query.filter(Policy.enterprise_id==user.enterprise_id)
-        policies=policy_query.all();insured_query=session.query(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).filter(WorkPosition.plan_id==plan.id,InsuredPerson.status.in_(['active','pending']))
-        if user.role=="enterprise" and user.enterprise_id: insured_query=insured_query.filter(InsuredPerson.enterprise_id==user.enterprise_id)
-        people=insured_query.all();enterprise_ids={x.enterprise_id for x in people}|{x.enterprise_id for x in policies};premium_total=sum(float(policy_dict(x,session)['premium'] or 0) for x in policies)
-        result.append({"plan_id":plan.id,"insurer":plan.insurer,"product":plan.name,"insured_count":len(people),"enterprise_count":len(enterprise_ids),"premium_total":amount(premium_total),"policy_count":len(policies),**pricing_snapshot(plan)})
-    return result
-
-@app.get("/api/enterprises")
-def enterprises(q: str = "", status_filter: Optional[str] = Query(None, alias="status"), user: User = Depends(current_user), session: Session = Depends(db)):
-    stmt = select(Enterprise).order_by(Enterprise.id.desc())
-    if user.role == "enterprise" and user.enterprise_id: stmt = stmt.where(Enterprise.id == user.enterprise_id)
-    if q: stmt = stmt.where(or_(Enterprise.name.contains(q), Enterprise.contact.contains(q)))
-    if status_filter: stmt = stmt.where(Enterprise.status == status_filter)
-    result=[]
-    for x in session.scalars(stmt):
-        linked = session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id == x.id).order_by(AgentCommission.id.asc())) if not x.agent_id else None
-        agent_id = x.agent_id or (linked.agent_id if linked else None)
-        item=serialize(x); agent=session.get(User,agent_id) if agent_id else None; item["agent_id"]=agent_id; item["agent_name"]=agent.name if agent else "未分配"; result.append(item)
-    return result
-
-@app.post("/api/enterprises")
-def add_enterprise(data: EnterpriseIn, user: User = Depends(current_user), session: Session = Depends(db)):
-    if user.role != "admin": raise HTTPException(403, "仅总后台可新增投保单位")
-    if data.agent_id is not None:
-        agent = session.get(User, data.agent_id)
-        if not agent or agent.role != "salesperson": raise HTTPException(404, "业务员不存在")
-    item = Enterprise(**data.model_dump()); session.add(item); session.commit(); session.refresh(item); audit(session, user, "create", "enterprise", str(item.id)); return serialize(item)
-
-@app.patch("/api/enterprises/{item_id}/status")
-def enterprise_status(item_id: int, status_value: str = Query(..., alias="status"), user: User = Depends(current_user), session: Session = Depends(db)):
-    if user.role != "admin": raise HTTPException(403, "仅总后台可审核投保单位")
-    item = session.get(Enterprise, item_id)
-    if not item: raise HTTPException(404, "企业不存在")
-    item.status = status_value; session.commit(); audit(session, user, "status_change", "enterprise", str(item.id), status_value); return serialize(item)
-
-@app.patch("/api/enterprises/{item_id}")
-def update_enterprise(item_id: int, data: EnterpriseUpdate, user: User = Depends(current_user), session: Session = Depends(db)):
-    item = session.get(Enterprise, item_id)
-    if not item: raise HTTPException(404, "投保单位不存在")
-    if user.role not in {"admin","enterprise"}: raise HTTPException(403,"无权操作投保单位")
-    if user.role == "enterprise" and user.enterprise_id != item_id: raise HTTPException(403, "无权操作该单位")
-    if data.agent_id is not None:
-        agent = session.get(User, data.agent_id)
-        if not agent or agent.role != "salesperson": raise HTTPException(404, "业务员不存在")
-        existing = session.scalars(select(AgentCommission).where(AgentCommission.enterprise_id == item_id)).all()
-        if existing and any(x.agent_id != data.agent_id for x in existing):
-            raise HTTPException(409, "一个投保单位只能关联一个业务员；该单位已关联其他业务员")
-    for key, value in data.model_dump(exclude_unset=True).items():
-        if value is not None: setattr(item, key, value)
-    session.commit(); audit(session, user, "update", "enterprise", str(item.id)); return serialize(item)
-
-@app.delete("/api/enterprises/{item_id}")
-def delete_enterprise(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):
-    if user.role != "admin": raise HTTPException(403, "仅总后台可删除投保单位")
-    item = session.get(Enterprise, item_id)
-    if not item: raise HTTPException(404, "投保单位不存在")
-    if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id == item_id).limit(1)) or session.scalar(select(Policy.id).where(Policy.enterprise_id == item_id).limit(1)): raise HTTPException(409, "该单位已有参保人员或保单，不能删除；请先停保并归档")
-    session.delete(item); session.commit(); audit(session, user, "delete", "enterprise", str(item_id)); return {"ok": True}
-
-@app.post("/api/enterprises/{item_id}/recharge")
-def recharge_enterprise(item_id: int, data: RechargeIn, user: User = Depends(current_user), session: Session = Depends(db)):
-    item = session.get(Enterprise, item_id)
-    if not item: raise HTTPException(404, "投保单位不存在")
-    if user.role not in {"admin","enterprise"}: raise HTTPException(403,"无权为投保单位充值")
-    if user.role == "enterprise" and user.enterprise_id != item_id: raise HTTPException(403, "无权为该单位充值")
-    if data.account == "premium": item.premium_balance += data.amount
-    elif data.account == "usage": item.usage_balance += data.amount
-    else: raise HTTPException(400, "账户类型不合法")
-    session.commit(); audit(session, user, "recharge", "enterprise", str(item_id), f"{data.account}:{data.amount}"); return serialize(item)
-
-@app.get("/api/enterprises/{item_id}/admins")
-def enterprise_admins(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):
-    if user.role not in {"admin","enterprise"}: raise HTTPException(403,"无权查看单位管理员")
-    if user.role == "enterprise" and user.enterprise_id != item_id: raise HTTPException(403, "无权查看该单位")
-    return [{"id": x.id, "username": x.username, "name": x.name, "phone": x.phone, "active": x.active} for x in session.scalars(select(User).where(User.enterprise_id == item_id, User.role == "enterprise"))]
-
-@app.post("/api/enterprises/{item_id}/admins")
-def add_enterprise_admin(item_id: int, data: AgentIn, user: User = Depends(current_user), session: Session = Depends(db)):
-    if user.role != "admin": raise HTTPException(403, "仅总后台可管理单位管理员")
-    if not session.get(Enterprise, item_id): raise HTTPException(404, "投保单位不存在")
-    if session.scalar(select(User).where(User.username == data.username)): raise HTTPException(409, "账号已存在")
-    item=User(username=data.username,password_hash=pwd.hash(data.password),name=data.name,phone=data.phone,role="enterprise",enterprise_id=item_id);session.add(item);session.commit();session.refresh(item);audit(session,user,"create","enterprise_admin",str(item.id));return {"id":item.id,"username":item.username,"name":item.name,"phone":item.phone,"active":item.active}
-
-@app.get("/api/enterprises/{item_id}/products")
-def enterprise_products(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
-    if user.role=="enterprise" and user.enterprise_id!=item_id: raise HTTPException(403,"无权查看该单位")
-    if not session.get(Enterprise,item_id): raise HTTPException(404,"投保单位不存在")
-    rows=[]
-    for x in session.scalars(select(AgentCommission).where(AgentCommission.enterprise_id==item_id).order_by(AgentCommission.id.desc())):
-        plan=session.get(InsurancePlan,x.plan_id);agent=session.get(User,x.agent_id); people=session.query(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).filter(InsuredPerson.enterprise_id==item_id,WorkPosition.plan_id==x.plan_id,InsuredPerson.status!='stopped').count(); premium=session.query(Policy).filter(Policy.enterprise_id==item_id,Policy.plan_id==x.plan_id).with_entities(Policy.premium).all(); rows.append({"id":x.id,"product":plan.name if plan else "","insurer":plan.insurer if plan else "","agent":agent.name if agent else "","commission_rate":x.rate,"insured_count":people,"premium_total":sum(float(p[0] or 0) for p in premium),"status":x.status,**(pricing_snapshot(plan,x) if plan else {})})
-    return rows
+from .routers.operators import add_operator  # noqa: F401
+from .services.operators import operator_dict  # noqa: F401
+from .routers.enterprises import add_enterprise  # noqa: F401
+from .routers.dashboard import dashboard, screen_products  # noqa: F401
 
 @app.get("/api/positions")
 def positions(user: User = Depends(current_user), session: Session = Depends(db)):
@@ -850,6 +701,10 @@ from .routers.agents import router as agents_router
 from .routers.payments import router as payments_router
 from .routers.invoices import router as invoices_router
 
+from .routers.operators import router as operators_router
+from .routers.dashboard import router as dashboard_router
+from .routers.enterprises import router as enterprises_router
+
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(audit_logs_router)
@@ -857,5 +712,8 @@ app.include_router(integrations_router)
 app.include_router(agents_router)
 app.include_router(payments_router)
 app.include_router(invoices_router)
+app.include_router(operators_router)
+app.include_router(dashboard_router)
+app.include_router(enterprises_router)
 
 app.mount("/", StaticFiles(directory=ROOT, html=True), name="frontend")
