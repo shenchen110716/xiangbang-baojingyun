@@ -17,7 +17,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from passlib.context import CryptContext
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from .providers import insurer_provider, sms_provider, email_provider, payment_provider
@@ -29,45 +28,21 @@ from .models import (
     Claim, ClaimTimeline, ClaimDocument, AuditLog, PaymentRecord,
     Invoice, EnrollmentEmail,
 )
+from .schemas import (
+    LoginIn, PasswordChangeIn, TokenOut, UserOut,
+    OperatorIn, OperatorUpdate,
+    EnterpriseIn, EnterpriseUpdate, RechargeIn,
+    AgentIn, CommissionIn, CommissionUpdate,
+    PositionIn, ActualEmployerIn, ActualEmployerUpdate,
+    PositionVideoIn, PositionVideoReviewIn, PositionReviewIn,
+    PlanTierIn, PlanIn, PlanUpdate,
+    PersonIn, PersonUpdate, BulkPersonRow, BulkPersonIn,
+    ClaimIn, ClaimUpdate, ClaimStatusIn, ClaimDocumentIn, ClaimDocumentReviewIn,
+    PaymentIn, PaymentCallbackIn, InvoiceIn, InvoiceUpdate,
+    NotificationIn,
+)
 
 pwd = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
-
-class LoginIn(BaseModel): username: str; password: str; portal: Literal["admin","enterprise"] = "admin"
-class EnterpriseIn(BaseModel): name: str; kind: str = "企业"; contact: str = ""; phone: str = ""; credit_code: str = ""; agent_id: Optional[int] = None; usage_fee_daily: float = Field(default=0.1, ge=0); alert_days: int = Field(default=3, ge=3, le=7)
-class EnterpriseUpdate(BaseModel): name: Optional[str] = None; kind: Optional[str] = None; contact: Optional[str] = None; phone: Optional[str] = None; credit_code: Optional[str] = None; agent_id: Optional[int] = None; usage_fee_daily: Optional[float] = Field(default=None, ge=0); alert_days: Optional[int] = Field(default=None, ge=3, le=7)
-class PositionIn(BaseModel): enterprise_id: Optional[int] = None; actual_employer: str; actual_employer_id: Optional[int] = None; name: str; occupation_class: Literal["1-3类","4类","5类","超5类"] = "1-3类"; plan_id: Optional[int] = None
-class ActualEmployerIn(BaseModel): enterprise_id: Optional[int] = None; name: str; credit_code: str = ""; contact: str = ""; phone: str = ""
-class ActualEmployerUpdate(BaseModel): name: Optional[str] = Field(default=None,min_length=1); credit_code: Optional[str] = None; contact: Optional[str] = None; phone: Optional[str] = None
-class PositionVideoIn(BaseModel): name: str; url: str = ""
-class PositionVideoReviewIn(BaseModel): status: Literal["pending","approved","rejected","supplement"]; review_note: str = ""
-class PositionReviewIn(BaseModel): occupation_class: Optional[Literal["1-3类","4类","5类","超5类"]] = None; status: Literal["approved","rejected","supplement"] = "approved"; plan_id: Optional[int] = None; review_note: str = ""
-class RechargeIn(BaseModel): account: str = "premium"; amount: float = Field(gt=0)
-class CommissionIn(BaseModel): agent_id: int; enterprise_id: int; plan_id: int; rate: float = Field(default=0, ge=0, le=1); mode: Literal["rebate","price","markup"] = "rebate"; markup_amount: float = Field(default=0, ge=0); sale_price: float = Field(default=0, ge=0)
-class CommissionUpdate(BaseModel): rate: Optional[float] = Field(default=None, ge=0, le=1); mode: Optional[Literal["rebate","price","markup"]] = None; markup_amount: Optional[float] = Field(default=None, ge=0); sale_price: Optional[float] = Field(default=None, ge=0); status: Optional[str] = None
-class PlanTierIn(BaseModel): plan_id: int; occupation_class: Literal["1-3类","4类","5类","超5类"]; price: float = Field(ge=0); coverage: str = ""
-class PlanIn(BaseModel): insurer: str; insurer_email: str = ""; name: str; coverage: str = ""; occupation_classes: str = "1-4类"; price: float = Field(ge=0); commission_rate: float = Field(default=0, ge=0, le=1); profit_amount: float = Field(default=0,ge=0); payment_mode: str = "企业直投"; billing_mode: Literal["monthly","daily"] = "monthly"; effective_mode: Literal["next_day","immediate"] = "next_day"
-class PlanUpdate(BaseModel): insurer: Optional[str] = None; insurer_email: Optional[str] = None; name: Optional[str] = None; coverage: Optional[str] = None; occupation_classes: Optional[str] = None; price: Optional[float] = Field(default=None, ge=0); commission_rate: Optional[float] = Field(default=None, ge=0, le=1); profit_amount: Optional[float] = Field(default=None,ge=0); payment_mode: Optional[str] = None; billing_mode: Optional[Literal["monthly","daily"]] = None; effective_mode: Optional[Literal["next_day","immediate"]] = None
-class PersonIn(BaseModel): enterprise_id: int; name: str; phone: str = ""; id_number: str = Field(min_length=6); occupation: str = ""; occupation_class: str = "3类"; position_id: Optional[int] = None
-class PersonUpdate(BaseModel): name: Optional[str] = None; phone: Optional[str] = None; id_number: Optional[str] = Field(default=None, min_length=6); position_id: Optional[int] = None
-class BulkPersonRow(BaseModel): name: str; id_number: str = Field(min_length=6); phone: str = ""
-class BulkPersonIn(BaseModel): enterprise_id: int; position_id: int; rows: list[BulkPersonRow] = Field(min_length=1, max_length=1000)
-class ClaimIn(BaseModel): enterprise_id: int; person_id: int; description: str; amount: float = Field(default=0,ge=0); medical_cost: float = Field(default=0,ge=0); accident_at: str; accident_place: str; accident_type: str = "工伤事故"; hospital: str = ""; diagnosis: str = ""; contact_name: str = ""; contact_phone: str = ""
-class ClaimUpdate(BaseModel): description: Optional[str]=None; hospital:Optional[str]=None; diagnosis:Optional[str]=None; medical_cost:Optional[float]=Field(default=None,ge=0); amount:Optional[float]=Field(default=None,ge=0); contact_name:Optional[str]=None; contact_phone:Optional[str]=None; insurer_report_no:Optional[str]=None; current_handler:Optional[str]=None; deadline:Optional[str]=None; sla_deadline:Optional[str]=None; rejection_reason:Optional[str]=None; review_note:Optional[str]=None; risk_level:Optional[Literal['normal','attention','high']]=None
-class ClaimStatusIn(BaseModel): status: Literal["reported","collecting","submitted","insurer_review","supplement","approved","paid","rejected","closed"]; note: str = ""; approved_amount: Optional[float] = Field(default=None,ge=0); insurer_report_no: Optional[str] = None; rejection_reason: Optional[str] = None; paid_at: Optional[str] = None; current_handler: Optional[str] = None; sla_deadline: Optional[str] = None
-class ClaimDocumentIn(BaseModel): name: str; url: str = ""; doc_type: str = "other"
-class ClaimDocumentReviewIn(BaseModel): status: Literal["uploaded","accepted","rejected"]; review_note: str = ""
-class PaymentIn(BaseModel): enterprise_id: int; account: Literal["premium","usage"] = "premium"; amount: float = Field(gt=0)
-class PaymentCallbackIn(BaseModel): order_no: str; status: Literal["paid","failed","pending"]; provider_trade_no: str = ""
-class InvoiceIn(BaseModel): enterprise_id: int; account: Literal["premium","usage"] = "premium"; amount: float = Field(gt=0); title: str = Field(min_length=1,max_length=160); tax_no: str = ""; email: str = ""
-class InvoiceUpdate(BaseModel): status: Literal["pending","approved","issued","rejected"]
-class NotificationIn(BaseModel): kind: Literal["sms","email"]; recipient: str; subject: str = "响帮帮保经云通知"; content: str; template: str = "general"
-class AgentIn(BaseModel): username: str; password: str; name: str; phone: str = ""
-class OperatorIn(BaseModel): username: str = Field(min_length=3, max_length=80); password: str = Field(min_length=6, max_length=128); name: str = Field(min_length=1, max_length=80); phone: str = ""; enterprise_id: Optional[int] = None
-class OperatorUpdate(BaseModel): name: Optional[str] = Field(default=None, min_length=1, max_length=80); phone: Optional[str] = None; password: Optional[str] = Field(default=None, min_length=6, max_length=128); active: Optional[bool] = None
-class PasswordChangeIn(BaseModel): current_password: str; new_password: str = Field(min_length=6,max_length=128)
-
-class TokenOut(BaseModel): access_token: str; token_type: str = "bearer"
-class UserOut(BaseModel): model_config = ConfigDict(from_attributes=True); id: int; username: str; name: str; role: str; enterprise_id: Optional[int] = None; phone: str = ""; is_owner: bool = False; active: bool = True
 
 security = HTTPBearer(auto_error=False)
 
