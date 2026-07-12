@@ -68,24 +68,10 @@ def startup():
         run_sqlite_bridge_migrations(s, DATABASE_URL)
         seed_default_accounts(s)
 
-@app.post("/api/auth/login", response_model=TokenOut)
-def login(data: LoginIn, session: Session = Depends(db)):
-    user = session.scalar(select(User).where(User.username == data.username))
-    if not user or not pwd.verify(data.password, user.password_hash): raise HTTPException(401, "账号或密码错误")
-    if not user.active: raise HTTPException(403, "该账号已停用，请联系单位主管")
-    if data.portal == "admin" and user.role != "admin": raise HTTPException(403, "该账号不是总后台账号")
-    if data.portal == "enterprise" and user.role != "enterprise": raise HTTPException(403, "该账号不是参保单位账号")
-    token = jwt.encode({"sub": str(user.id), "exp": datetime.now(timezone.utc) + timedelta(hours=12)}, SECRET_KEY, algorithm=ALGORITHM)
-    return TokenOut(access_token=token)
-
-@app.get("/api/auth/me", response_model=UserOut)
-def me(user: User = Depends(current_user)): return user
-
-@app.patch("/api/auth/password")
-def change_password(data:PasswordChangeIn,user:User=Depends(current_user),session:Session=Depends(db)):
-    if not pwd.verify(data.current_password,user.password_hash): raise HTTPException(400,'当前密码不正确')
-    if data.current_password==data.new_password: raise HTTPException(400,'新密码不能与当前密码相同')
-    user.password_hash=pwd.hash(data.new_password);session.commit();audit(session,user,'password_change','user',str(user.id));return {'ok':True}
+from .routers.auth import login, me, change_password  # noqa: F401 (temporary compat re-exports)
+from .routers.audit_logs import audit_logs  # noqa: F401
+from .routers.integrations import provider_status  # noqa: F401
+from .routers.health import health  # noqa: F401
 
 def operator_dict(item:User,session:Session):
     enterprise=session.get(Enterprise,item.enterprise_id) if item.enterprise_id else None
@@ -925,23 +911,6 @@ def update_invoice(item_id:int,data:InvoiceUpdate,user:User=Depends(current_user
     if not item: raise HTTPException(404,'发票申请不存在')
     item.status=data.status;session.commit();audit(session,user,'status_change','invoice',str(item.id),data.status);return serialize(item)
 
-@app.get("/api/audit-logs")
-def audit_logs(limit:int=Query(100,ge=1,le=500),user:User=Depends(current_user),session:Session=Depends(db)):
-    stmt=select(AuditLog).order_by(AuditLog.id.desc()).limit(limit)
-    if user.role=='enterprise':
-        operator_ids=select(User.id).where(User.enterprise_id==user.enterprise_id)
-        stmt=select(AuditLog).where(AuditLog.user_id.in_(operator_ids)).order_by(AuditLog.id.desc()).limit(limit)
-    elif user.role!='admin': raise HTTPException(403,'无权查看审计日志')
-    result=[]
-    for item in session.scalars(stmt):
-        operator=session.get(User,item.user_id)
-        result.append({**serialize(item),'operator':operator.name if operator else '系统'})
-    return result
-
-@app.get("/api/providers/status")
-def provider_status(user: User = Depends(current_user)):
-    return {"mode": os.getenv("INTEGRATION_MODE", "mock"), "insurer_api": bool(os.getenv("INSURER_API_BASE_URL")), "sms": bool(os.getenv("SMS_PROVIDER_URL")), "email": bool(os.getenv("SMTP_HOST")), "payment": bool(os.getenv("PAYMENT_PROVIDER_URL"))}
-
 @app.post("/api/enrollment/send")
 def enrollment_send(enterprise_id:int, plan_id:int, kind:Literal["enrollment","termination"]="enrollment", user:User=Depends(current_user), session:Session=Depends(db)):
     if user.role=="enterprise" and user.enterprise_id!=enterprise_id: raise HTTPException(403,"无权发送该单位名单")
@@ -981,7 +950,14 @@ def enrollment_emails(user:User=Depends(current_user),session:Session=Depends(db
         ent=session.get(Enterprise,item.enterprise_id);plan=session.get(InsurancePlan,item.plan_id);result.append({**serialize(item),'enterprise_name':ent.name if ent else '','plan_name':plan.name if plan else '','insurer':plan.insurer if plan else ''})
     return result
 
-@app.get("/api/health")
-def health(): return {"ok": True, "service": "xiangbangbaojingyun", "time": datetime.now(timezone.utc).isoformat()}
+from .routers.health import router as health_router
+from .routers.auth import router as auth_router
+from .routers.audit_logs import router as audit_logs_router
+from .routers.integrations import router as integrations_router
+
+app.include_router(health_router)
+app.include_router(auth_router)
+app.include_router(audit_logs_router)
+app.include_router(integrations_router)
 
 app.mount("/", StaticFiles(directory=ROOT, html=True), name="frontend")
