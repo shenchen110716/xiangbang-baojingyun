@@ -41,6 +41,12 @@ from .schemas import (
     PaymentIn, PaymentCallbackIn, InvoiceIn, InvoiceUpdate,
     NotificationIn,
 )
+from .services import (
+    serialize, amount,
+    plan_price_for_class, pricing_snapshot, plan_dict, validate_commission_price,
+    commission_dict, agent_commission_rows, agent_commission_summary,
+    policy_dict,
+)
 
 pwd = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
@@ -57,95 +63,6 @@ def current_user(creds: HTTPAuthorizationCredentials = Depends(security), sessio
 
 def audit(session: Session, user: User, action: str, object_type: str, object_id: str, detail: str = ""):
     session.add(AuditLog(user_id=user.id, action=action, object_type=object_type, object_id=object_id, detail=detail)); session.commit()
-
-def serialize(obj):
-    return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
-
-def amount(value:float) -> float:
-    return round(float(value or 0),2)
-
-def plan_price_for_class(session:Session,plan:InsurancePlan,occupation_class:str="") -> float:
-    if occupation_class:
-        tier=session.scalar(select(PlanTier).where(PlanTier.plan_id==plan.id,PlanTier.occupation_class==occupation_class,PlanTier.status=='active').order_by(PlanTier.id.desc()))
-        if tier: return float(tier.price or 0)
-    return float(plan.price or 0)
-
-def pricing_snapshot(plan:InsurancePlan,relation:Optional[AgentCommission]=None,base_price:Optional[float]=None) -> dict:
-    insurance_base=float(plan.price if base_price is None else base_price)
-    total_rate=float(plan.commission_rate or 0)
-    total_commission=insurance_base*total_rate
-    floor=insurance_base-total_commission
-    profit=float(plan.profit_amount or 0)
-    minimum=floor+profit
-    mode='price' if relation and relation.mode in {'price','markup'} else 'rebate'
-    ratio=float(relation.rate or 0) if relation else 0
-    if mode=='price':
-        configured=float(relation.sale_price or 0) if relation else 0
-        if configured<=0 and relation: configured=minimum+float(relation.markup_amount or 0)
-        sale=max(minimum,configured or minimum)
-        agent_commission=max(0,sale-minimum)
-    else:
-        sale=minimum
-        agent_commission=insurance_base*ratio
-    return {
-        'insurance_base_price':amount(insurance_base),
-        'total_commission_rate':round(total_rate,6),
-        'total_commission_amount':amount(total_commission),
-        'policy_floor_price':amount(floor),
-        'insurer_settlement_price':amount(floor),
-        'profit_amount':amount(profit),
-        'minimum_sale_price':amount(minimum),
-        'commission_mode':mode,
-        'agent_commission_rate':round(ratio,6) if mode=='rebate' else 0,
-        'agent_commission_amount':amount(agent_commission),
-        'sale_price':amount(sale),
-        'platform_margin_amount':amount(max(0,profit-agent_commission) if mode=='rebate' else profit),
-    }
-
-def plan_dict(plan:InsurancePlan) -> dict:
-    return {**serialize(plan),**pricing_snapshot(plan)}
-
-def commission_dict(item:AgentCommission,session:Session) -> dict:
-    agent=session.get(User,item.agent_id);enterprise=session.get(Enterprise,item.enterprise_id);plan=session.get(InsurancePlan,item.plan_id)
-    return {**serialize(item),'mode':'price' if item.mode in {'price','markup'} else 'rebate','agent_name':agent.name if agent else '', 'enterprise_name':enterprise.name if enterprise else '', 'plan_name':plan.name if plan else '', 'insurer':plan.insurer if plan else '', **(pricing_snapshot(plan,item) if plan else {})}
-
-def agent_commission_rows(session:Session, agent_id:int) -> list[dict]:
-    rows=[]
-    agent=session.get(User,agent_id)
-    for rel in session.scalars(select(AgentCommission).where(AgentCommission.agent_id==agent_id).order_by(AgentCommission.id.desc())):
-        plan=session.get(InsurancePlan,rel.plan_id); enterprise=session.get(Enterprise,rel.enterprise_id)
-        if not plan or not enterprise: continue
-        insured_count=session.query(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).filter(InsuredPerson.enterprise_id==rel.enterprise_id,WorkPosition.plan_id==rel.plan_id,InsuredPerson.status!='stopped').count()
-        unit=pricing_snapshot(plan,rel)
-        rows.append({**serialize(rel),'mode':unit['commission_mode'],'agent_name':agent.name if agent else '','enterprise_name':enterprise.name,'plan_name':plan.name,'insurer':plan.insurer,'insured_count':insured_count,'agent_commission_unit':unit['agent_commission_amount'],'agent_commission_total':amount(unit['agent_commission_amount']*insured_count)})
-    return rows
-
-def agent_commission_summary(session:Session, agent_id:int) -> dict:
-    rows=agent_commission_rows(session,agent_id)
-    active=[r for r in rows if r['status']=='active']
-    return {'enterprise_count':len({r['enterprise_id'] for r in active}),'product_count':len(active),'insured_count':sum(r['insured_count'] for r in active),'total_commission':amount(sum(r['agent_commission_total'] for r in active))}
-
-def validate_commission_price(data,plan:InsurancePlan):
-    mode='price' if data.mode in {'price','markup'} else 'rebate'
-    minimum=pricing_snapshot(plan)['minimum_sale_price']
-    if mode=='rebate' and float(data.rate or 0)>float(plan.commission_rate or 0): raise HTTPException(400,'业务员返佣比例不能超过产品总返佣比例')
-    sale=float(getattr(data,'sale_price',0) or 0)
-    if mode=='price' and sale<=0: sale=minimum+float(getattr(data,'markup_amount',0) or 0)
-    if mode=='price' and sale<minimum: raise HTTPException(400,f'销售价格不能低于销售最低价 ¥{minimum:.2f}')
-    return mode,sale
-
-def policy_dict(policy:Policy,session:Session) -> dict:
-    enterprise=session.get(Enterprise,policy.enterprise_id);plan=session.get(InsurancePlan,policy.plan_id);relation=session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id==policy.enterprise_id,AgentCommission.plan_id==policy.plan_id,AgentCommission.status=='active').order_by(AgentCommission.id.desc()))
-    people=list(session.scalars(select(InsuredPerson).where(InsuredPerson.policy_id==policy.id)))
-    snapshots=[]
-    if plan:
-        for person in people:
-            snapshots.append(pricing_snapshot(plan,relation,plan_price_for_class(session,plan,person.occupation_class)))
-        if not snapshots: snapshots=[pricing_snapshot(plan,relation)]
-    total=lambda key:amount(sum(float(row.get(key,0)) for row in snapshots))
-    calculated=total('sale_price') if people else float(policy.premium or 0)
-    unit=snapshots[0] if snapshots else {}
-    return {**serialize(policy),'premium_original':amount(policy.premium),'premium':amount(calculated),'calculated_premium':amount(calculated),'insured_count':len(people),'enterprise_name':enterprise.name if enterprise else '', 'insurer':plan.insurer if plan else '', 'plan_name':plan.name if plan else '', 'billing_mode':plan.billing_mode if plan else 'monthly','effective_mode':plan.effective_mode if plan else 'next_day',**unit,'insurance_base_total':total('insurance_base_price') if people else unit.get('insurance_base_price',0),'policy_floor_total':total('policy_floor_price') if people else unit.get('policy_floor_price',0),'minimum_sale_total':total('minimum_sale_price') if people else unit.get('minimum_sale_price',0),'sale_total':total('sale_price') if people else unit.get('sale_price',0),'total_commission_total':total('total_commission_amount') if people else unit.get('total_commission_amount',0),'agent_commission_total':total('agent_commission_amount') if people else unit.get('agent_commission_amount',0)}
 
 app = FastAPI(title="响帮帮保经云 API", version="3.6.0")
 cors_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "*").split(",") if origin.strip()]
