@@ -14,9 +14,7 @@ import jwt
 from fastapi import Depends, FastAPI, HTTPException, Query, status, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
-from passlib.context import CryptContext
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from .providers import insurer_provider, sms_provider, email_provider, payment_provider
@@ -48,21 +46,8 @@ from .services import (
     policy_dict,
 )
 
-pwd = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
-
-security = HTTPBearer(auto_error=False)
-
-def current_user(creds: HTTPAuthorizationCredentials = Depends(security), session: Session = Depends(db)) -> User:
-    if not creds: raise HTTPException(status_code=401, detail="请先登录")
-    try: payload = jwt.decode(creds.credentials, SECRET_KEY, algorithms=[ALGORITHM]); uid = int(payload["sub"])
-    except Exception: raise HTTPException(status_code=401, detail="登录已过期")
-    user = session.get(User, uid)
-    if not user or not user.active: raise HTTPException(status_code=401, detail="用户无效")
-    if user.role not in {"admin","enterprise"}: raise HTTPException(status_code=403, detail="该账号暂未开通管理端权限")
-    return user
-
-def audit(session: Session, user: User, action: str, object_type: str, object_id: str, detail: str = ""):
-    session.add(AuditLog(user_id=user.id, action=action, object_type=object_type, object_id=object_id, detail=detail)); session.commit()
+from .core.security import pwd, security, current_user
+from .core.audit import audit
 
 app = FastAPI(title="响帮帮保经云 API", version="3.6.0")
 cors_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "*").split(",") if origin.strip()]
