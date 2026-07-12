@@ -113,67 +113,7 @@ def update_operator(item_id:int,data:OperatorUpdate,user:User=Depends(current_us
     if values.get("active") is not None: item.active=values["active"];item.status="active" if item.active else "inactive"
     session.commit();audit(session,user,"update","operator",str(item.id));return operator_dict(item,session)
 
-@app.get("/api/agents")
-def agents(user: User = Depends(current_user), session: Session = Depends(db)):
-    if user.role != "admin": raise HTTPException(403, "仅总后台可管理业务员")
-    return [{"id": x.id, "username": x.username, "name": x.name, "phone": x.phone, "role": x.role, "active": x.active, "status": x.status, "created_at": x.created_at, **agent_commission_summary(session, x.id)} for x in session.scalars(select(User).where(User.role == "salesperson").order_by(User.id.desc()))]
-
-@app.get("/api/agents/{item_id}/commissions")
-def agent_commissions_detail(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):
-    if user.role != "admin": raise HTTPException(403, "仅总后台可查看业务员佣金")
-    if not session.get(User, item_id): raise HTTPException(404, "业务员不存在")
-    return agent_commission_rows(session, item_id)
-
-@app.post("/api/agents")
-def add_agent(data: AgentIn, user: User = Depends(current_user), session: Session = Depends(db)):
-    if user.role != "admin": raise HTTPException(403, "仅总后台可管理业务员")
-    if session.scalar(select(User).where(User.username == data.username)): raise HTTPException(409, "业务员账号已存在")
-    item = User(username=data.username, password_hash=pwd.hash(data.password), name=data.name, phone=data.phone, role="salesperson")
-    session.add(item); session.commit(); session.refresh(item); audit(session, user, "create", "salesperson", str(item.id)); return {"id": item.id, "username": item.username, "name": item.name, "role": item.role, "active": item.active}
-
-@app.patch("/api/agents/{item_id}/status")
-def agent_status(item_id: int, status_value: str = Query(..., alias="status"), user: User = Depends(current_user), session: Session = Depends(db)):
-    if user.role != "admin": raise HTTPException(403, "仅总后台可管理业务员")
-    item = session.get(User, item_id)
-    if not item or item.role != "salesperson": raise HTTPException(404, "业务员不存在")
-    item.status = status_value; item.active = status_value == "active"; session.commit(); audit(session, user, "status_change", "salesperson", str(item.id), status_value); return {"ok": True, "status": item.status}
-
-@app.get("/api/agent-commissions")
-def agent_commissions(user: User = Depends(current_user), session: Session = Depends(db)):
-    if user.role != "admin": raise HTTPException(403, "仅总后台可查看业务员佣金")
-    return [commission_dict(x,session) for x in session.scalars(select(AgentCommission).order_by(AgentCommission.id.desc()))]
-
-@app.post("/api/agent-commissions")
-def add_agent_commission(data: CommissionIn, user: User = Depends(current_user), session: Session = Depends(db)):
-    if user.role != "admin": raise HTTPException(403, "仅总后台可配置佣金")
-    agent=session.get(User,data.agent_id); enterprise=session.get(Enterprise,data.enterprise_id); plan=session.get(InsurancePlan,data.plan_id)
-    if not agent or agent.role != "salesperson": raise HTTPException(404,"业务员不存在")
-    if not enterprise or not plan: raise HTTPException(404,"投保单位或产品方案不存在")
-    if enterprise.agent_id is not None and enterprise.agent_id != data.agent_id: raise HTTPException(409,"一个投保单位只能关联一个业务员；该单位已关联其他业务员")
-    mode,sale_price=validate_commission_price(data,plan);values=data.model_dump();values['mode']=mode;values['sale_price']=sale_price;values['markup_amount']=max(0,sale_price-pricing_snapshot(plan)['minimum_sale_price']) if mode=='price' else 0
-    if mode=='price': values['rate']=0
-    item=AgentCommission(**values);session.add(item)
-    if enterprise.agent_id is None: enterprise.agent_id = data.agent_id
-    session.commit();session.refresh(item);audit(session,user,"create","agent_commission",str(item.id));return serialize(item)
-
-@app.patch("/api/agent-commissions/{item_id}")
-def update_agent_commission(item_id:int,data:CommissionUpdate,user:User=Depends(current_user),session:Session=Depends(db)):
-    if user.role!="admin": raise HTTPException(403,"仅总后台可修改佣金关系")
-    item=session.get(AgentCommission,item_id)
-    if not item: raise HTTPException(404,"佣金关系不存在")
-    values=data.model_dump(exclude_unset=True)
-    for k,v in values.items():
-        if v is not None: setattr(item,k,v)
-    plan=session.get(InsurancePlan,item.plan_id);mode,sale_price=validate_commission_price(item,plan);item.mode=mode;item.sale_price=sale_price;item.markup_amount=max(0,sale_price-pricing_snapshot(plan)['minimum_sale_price']) if mode=='price' else 0
-    if mode=='price': item.rate=0
-    session.commit();audit(session,user,"update","agent_commission",str(item.id));return commission_dict(item,session)
-
-@app.delete("/api/agent-commissions/{item_id}")
-def delete_agent_commission(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
-    if user.role!="admin": raise HTTPException(403,"仅总后台可删除佣金关系")
-    item=session.get(AgentCommission,item_id)
-    if not item: raise HTTPException(404,"佣金关系不存在")
-    session.delete(item); session.commit(); audit(session,user,"delete","agent_commission",str(item_id)); return {"ok":True}
+from .routers.agents import add_agent, add_agent_commission, update_agent_commission  # noqa: F401
 
 @app.get("/api/dashboard")
 def dashboard(user: User = Depends(current_user), session: Session = Depends(db)):
@@ -860,56 +800,8 @@ def send_notification(data:NotificationIn,user:User=Depends(current_user),sessio
     result=sms_provider().send_sms(data.recipient,data.template,{"content":data.content}) if data.kind=="sms" else email_provider().send_email(data.recipient,data.subject,data.content)
     audit(session,user,"send",data.kind,data.recipient,result.message);return {"ok":result.ok,"provider":result.provider,"request_id":result.request_id,"message":result.message}
 
-@app.post("/api/payments")
-def create_payment(data:PaymentIn,user:User=Depends(current_user),session:Session=Depends(db)):
-    if user.role not in {"admin","enterprise"}: raise HTTPException(403,"无权创建充值订单")
-    if user.role=="enterprise" and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,"无权为该单位充值")
-    if not session.get(Enterprise,data.enterprise_id): raise HTTPException(404,"投保单位不存在")
-    order=f"PAY-{datetime.now().strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(3).upper()}"; result=payment_provider().create_payment(data.amount,order)
-    row=PaymentRecord(order_no=order,enterprise_id=data.enterprise_id,account=data.account,amount=data.amount,status="pending",provider=result.provider);session.add(row);session.commit();return {"order_no":order,"status":row.status,"pay_url":result.data.get("pay_url",""),"request_id":result.request_id}
-
-@app.post("/api/payments/callback")
-def payment_callback(data:PaymentCallbackIn,session:Session=Depends(db)):
-    row=session.scalar(select(PaymentRecord).where(PaymentRecord.order_no==data.order_no))
-    if not row: raise HTTPException(404,"支付订单不存在")
-    previous=row.status
-    if previous=="paid": return {"ok":True,"order_no":row.order_no,"status":row.status,"idempotent":True}
-    row.status=data.status
-    if data.status=="paid":
-        ent=session.get(Enterprise,row.enterprise_id)
-        if row.account=="premium": ent.premium_balance += row.amount
-        else: ent.usage_balance += row.amount
-    session.commit();return {"ok":True,"order_no":row.order_no,"status":row.status,"idempotent":False}
-
-@app.get("/api/payments/reconcile")
-def payment_reconcile(user:User=Depends(current_user),session:Session=Depends(db)):
-    if user.role!="admin": raise HTTPException(403,"仅总后台可对账")
-    return {"pending":session.query(PaymentRecord).filter(PaymentRecord.status=="pending").count(),"paid":session.query(PaymentRecord).filter(PaymentRecord.status=="paid").count(),"failed":session.query(PaymentRecord).filter(PaymentRecord.status=="failed").count()}
-
-@app.get("/api/invoices")
-def invoices(user:User=Depends(current_user),session:Session=Depends(db)):
-    stmt=select(Invoice).order_by(Invoice.id.desc())
-    if user.role=='enterprise' and user.enterprise_id: stmt=stmt.where(Invoice.enterprise_id==user.enterprise_id)
-    elif user.role!='admin': raise HTTPException(403,'无权查看发票')
-    result=[]
-    for item in session.scalars(stmt):
-        enterprise=session.get(Enterprise,item.enterprise_id)
-        result.append({**serialize(item),'enterprise_name':enterprise.name if enterprise else ''})
-    return result
-
-@app.post("/api/invoices")
-def create_invoice(data:InvoiceIn,user:User=Depends(current_user),session:Session=Depends(db)):
-    if user.role=='enterprise' and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,'无权申请其他单位发票')
-    if user.role not in {'admin','enterprise'}: raise HTTPException(403,'无权申请发票')
-    if not session.get(Enterprise,data.enterprise_id): raise HTTPException(404,'投保单位不存在')
-    item=Invoice(**data.model_dump());session.add(item);session.commit();session.refresh(item);audit(session,user,'create','invoice',str(item.id),f'{item.account}:{item.amount}');return serialize(item)
-
-@app.patch("/api/invoices/{item_id}")
-def update_invoice(item_id:int,data:InvoiceUpdate,user:User=Depends(current_user),session:Session=Depends(db)):
-    if user.role!='admin': raise HTTPException(403,'仅总后台可审核发票')
-    item=session.get(Invoice,item_id)
-    if not item: raise HTTPException(404,'发票申请不存在')
-    item.status=data.status;session.commit();audit(session,user,'status_change','invoice',str(item.id),data.status);return serialize(item)
+from .routers.payments import create_payment, payment_callback  # noqa: F401
+from .routers.invoices import create_invoice, update_invoice  # noqa: F401
 
 @app.post("/api/enrollment/send")
 def enrollment_send(enterprise_id:int, plan_id:int, kind:Literal["enrollment","termination"]="enrollment", user:User=Depends(current_user), session:Session=Depends(db)):
@@ -954,10 +846,16 @@ from .routers.health import router as health_router
 from .routers.auth import router as auth_router
 from .routers.audit_logs import router as audit_logs_router
 from .routers.integrations import router as integrations_router
+from .routers.agents import router as agents_router
+from .routers.payments import router as payments_router
+from .routers.invoices import router as invoices_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(audit_logs_router)
 app.include_router(integrations_router)
+app.include_router(agents_router)
+app.include_router(payments_router)
+app.include_router(invoices_router)
 
 app.mount("/", StaticFiles(directory=ROOT, html=True), name="frontend")
