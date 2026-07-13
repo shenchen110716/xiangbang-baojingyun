@@ -186,13 +186,13 @@ public class InsuredPersonController {
         if (item == null) throw ApiException.notFound("参保员工不存在");
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(item.getEnterpriseId())) throw ApiException.forbidden("无权操作该员工");
         String previous = item.getStatus();
-        item.setStatus(status);
         if ("active".equals(status) && !"active".equals(previous)) {
             item.setPolicyId(policyMemberService.activate(item));
         } else if ("active".equals(previous) && !"active".equals(status)) {
             policyMemberService.terminate(item);
             item.setPolicyId(null);
         }
+        item.setStatus(status);
         personMapper.update(item);
         auditService.log(user, "status_change", "insured_person", String.valueOf(id), status);
         return enrich(item);
@@ -232,6 +232,7 @@ public class InsuredPersonController {
     private LocalDateTime parseImportDate(String raw) {
         if (raw == null || raw.isBlank()) return null;
         String s = raw.strip();
+        try { return LocalDateTime.parse(s); } catch (Exception ignored) {}
         for (var fmt : IMPORT_DATE_FORMATS) {
             try {
                 return s.length() <= 10 ? java.time.LocalDate.parse(s, fmt).atStartOfDay() : LocalDateTime.parse(s, fmt);

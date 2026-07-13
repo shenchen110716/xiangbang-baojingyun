@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Literal
 
 import openpyxl
@@ -10,6 +10,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..core.audit import audit
+from ..core.business_time import as_business_time
 from ..core.db import db
 from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
@@ -26,7 +27,7 @@ def _parse_business_time(raw: str | None, label: str) -> datetime | None:
         value = datetime.fromisoformat(raw.strip().replace("Z", "+00:00"))
     except ValueError as exc:
         raise HTTPException(400, f"{label}时间格式不正确，应为 yyyy-MM-dd") from exc
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return as_business_time(value)
 
 
 def _coverage_dates(session: Session, person_id: int) -> tuple[datetime | None, datetime | None]:
@@ -95,9 +96,10 @@ def insured_status(item_id:int,status_value:Literal["active","stopped","pending"
     item=session.get(InsuredPerson,item_id)
     if not item: raise HTTPException(404,"参保员工不存在")
     if user.role=="enterprise" and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,"无权操作该员工")
-    previous_status=item.status;item.status=status_value
+    previous_status=item.status
     if status_value=="active" and previous_status!="active": activate_person_policy(session,item)
     elif previous_status=="active" and status_value!="active": terminate_person_policy(session,item)
+    item.status=status_value
     session.commit();audit(session,user,"status_change","insured_person",str(item.id),status_value);return _person_payload(session,item)
 
 @router.get("/insured/{item_id}/policy-members")

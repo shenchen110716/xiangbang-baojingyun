@@ -3,6 +3,7 @@ package com.xbb.baojing.insured;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.baojing.agent.AgentCommission;
 import com.xbb.baojing.agent.AgentCommissionMapper;
+import com.xbb.baojing.common.ApiException;
 import com.xbb.baojing.plan.InsurancePlan;
 import com.xbb.baojing.plan.InsurancePlanMapper;
 import com.xbb.baojing.plan.PricingService;
@@ -12,7 +13,9 @@ import com.xbb.baojing.position.WorkPositionMapper;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 /** Ports backend/services/policy_members.py — the "PolicyMember bridge" that
  * lazily creates Policy/PolicyMember rows the first time a person's status
@@ -65,10 +68,53 @@ public class PolicyMemberService {
         return policy;
     }
 
+    private InsurancePlan planFor(InsuredPerson person) {
+        if (person.getPositionId() == null) return null;
+        WorkPosition position = positionMapper.findById(person.getPositionId());
+        return position != null && position.getPlanId() != null ? planMapper.findById(position.getPlanId()) : null;
+    }
+
+    public LocalDateTime earliestEffectiveAt(InsurancePlan plan, LocalDateTime operationTime) {
+        LocalDateTime operation = operationTime != null ? operationTime : LocalDateTime.now();
+        return "immediate".equals(plan.getEffectiveMode())
+                ? operation.plusHours(1)
+                : LocalDateTime.of(operation.toLocalDate().plusDays(1), LocalTime.MIDNIGHT);
+    }
+
+    public LocalDateTime earliestTerminationAt(LocalDateTime operationTime) {
+        LocalDateTime operation = operationTime != null ? operationTime : LocalDateTime.now();
+        return LocalDateTime.of(operation.toLocalDate().plusDays(1), LocalTime.MIDNIGHT);
+    }
+
+    private InsurancePlan validateDates(InsuredPerson person, LocalDateTime effectiveAt,
+                                        LocalDateTime terminatedAt, LocalDateTime operationTime) {
+        InsurancePlan plan = planFor(person);
+        if (plan == null) return null;
+        LocalDateTime operation = operationTime != null ? operationTime : LocalDateTime.now();
+        if (effectiveAt != null) {
+            LocalDateTime earliest = earliestEffectiveAt(plan, operation);
+            if (effectiveAt.isBefore(earliest)) {
+                String rule = "immediate".equals(plan.getEffectiveMode()) ? "操作时间后 1 小时" : "操作日次日 00:00";
+                throw ApiException.badRequest("生效时间不合理：该方案最早可于" + rule + "生效（" + earliest + "）");
+            }
+        }
+        if (terminatedAt != null) {
+            LocalDateTime earliest = earliestTerminationAt(operation);
+            if (terminatedAt.isBefore(earliest)) throw ApiException.badRequest("停保时间不合理：最早可于操作日次日 00:00 停保（" + earliest + "）");
+        }
+        PolicyMember latest = policyMemberMapper.findLatestForPerson(person.getId());
+        LocalDateTime candidateEffective = effectiveAt != null ? effectiveAt : (latest != null ? latest.getEffectiveAt() : null);
+        LocalDateTime candidateTermination = terminatedAt != null ? terminatedAt : (latest != null ? latest.getTerminatedAt() : null);
+        if (candidateEffective != null && candidateTermination != null && !candidateTermination.isAfter(candidateEffective)) {
+            throw ApiException.badRequest("停保时间必须晚于生效时间");
+        }
+        return plan;
+    }
+
     /** Returns the resolved policyId to set on the person (or null to no-op),
      * matching activate_person_policy()'s early-return conditions exactly. */
     public Integer activate(InsuredPerson person) {
-        return activate(person, LocalDateTime.now());
+        return activate(person, null);
     }
 
     /** Same as activate(), but records the given moment as 生效时间/effective_at
@@ -80,6 +126,13 @@ public class PolicyMemberService {
         if (position == null || position.getPlanId() == null) return null;
         InsurancePlan plan = planMapper.findById(position.getPlanId());
         if (plan == null) return null;
+        LocalDateTime operation = LocalDateTime.now();
+        if (effectiveAt != null) validateDates(person, effectiveAt, null, operation);
+        LocalDateTime targetEffectiveAt = effectiveAt != null ? effectiveAt : earliestEffectiveAt(plan, operation);
+        PolicyMember latest = policyMemberMapper.findLatestForPerson(person.getId());
+        if (latest != null && latest.getTerminatedAt() != null && targetEffectiveAt.isBefore(latest.getTerminatedAt())) {
+            throw ApiException.badRequest("生效时间不能早于上一保障期间的停保时间（" + latest.getTerminatedAt() + "）");
+        }
 
         Policy policy = findOrCreatePolicy(person.getEnterpriseId(), plan.getId());
         AgentCommission relation = commissionMapper.findActiveRelation(person.getEnterpriseId(), plan.getId());
@@ -93,7 +146,7 @@ public class PolicyMemberService {
         } catch (Exception e) {
             member.setRateSnapshotJson("{}");
         }
-        member.setEffectiveAt(effectiveAt != null ? effectiveAt : LocalDateTime.now());
+        member.setEffectiveAt(targetEffectiveAt);
         member.setStatus("active");
         member.setCreatedAt(LocalDateTime.now());
         policyMemberMapper.insert(member);
@@ -103,7 +156,7 @@ public class PolicyMemberService {
     /** Closes the person's open coverage period, if any. Caller is
      * responsible for clearing person.policyId afterwards. */
     public void terminate(InsuredPerson person) {
-        terminate(person, LocalDateTime.now());
+        terminate(person, null);
     }
 
     /** Same as terminate(), but records the given moment as 停保时间/terminated_at
@@ -112,7 +165,16 @@ public class PolicyMemberService {
     public void terminate(InsuredPerson person, LocalDateTime terminatedAt) {
         PolicyMember open = policyMemberMapper.findOpenForPerson(person.getId());
         if (open != null) {
-            open.setTerminatedAt(terminatedAt != null ? terminatedAt : LocalDateTime.now());
+            LocalDateTime operation = LocalDateTime.now();
+            LocalDateTime target;
+            if (terminatedAt != null) {
+                validateDates(person, null, terminatedAt, operation);
+                target = terminatedAt;
+            } else {
+                target = earliestTerminationAt(operation);
+                if (!target.isAfter(open.getEffectiveAt())) target = open.getEffectiveAt().plusHours(1);
+            }
+            open.setTerminatedAt(target);
             open.setStatus("terminated");
             policyMemberMapper.update(open);
         }
@@ -128,6 +190,7 @@ public class PolicyMemberService {
      * or null if nothing changed. */
     public Integer correctDates(InsuredPerson person, LocalDateTime effectiveAt, LocalDateTime terminatedAt) {
         if (effectiveAt == null && terminatedAt == null) return person.getPolicyId();
+        validateDates(person, effectiveAt, terminatedAt, LocalDateTime.now());
         PolicyMember latest = policyMemberMapper.findLatestForPerson(person.getId());
         if (latest == null) {
             if (effectiveAt == null) return null; // nothing to backfill onto

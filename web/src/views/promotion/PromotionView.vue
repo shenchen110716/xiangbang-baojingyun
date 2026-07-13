@@ -36,8 +36,8 @@ const filtered = computed(() => {
 })
 
 const totalFloor = computed(() => list.value.reduce((s, x) => s + (x.policy_floor_price || 0), 0))
-const totalCommission = computed(() => list.value.reduce((s, x) => s + (x.total_commission_amount || 0), 0))
-const totalAgentCommission = computed(() => list.value.reduce((s, x) => s + (x.agent_commission_amount || 0), 0))
+const totalCommission = computed(() => list.value.reduce((s, x) => s + (x.accrued_total_commission || 0), 0))
+const totalAgentCommission = computed(() => list.value.reduce((s, x) => s + (x.accrued_agent_commission || 0), 0))
 
 const detailVisible = ref(false)
 const detailItem = ref<AgentCommission | null>(null)
@@ -76,11 +76,11 @@ async function removeItem(item: AgentCommission) {
     <div class="stat-grid">
       <StatTile label="业务关系" :value="list.length" />
       <StatTile label="保司结算底价合计" :value="money(totalFloor)" />
-      <StatTile label="总返佣金额合计" :value="money(totalCommission)" />
-      <StatTile label="业务员佣金合计" :value="money(totalAgentCommission)" />
+      <StatTile label="累计总返佣" :value="money(totalCommission)" />
+      <StatTile label="累计业务员佣金" :value="money(totalAgentCommission)" />
     </div>
 
-    <PageCard title="业务计价列表" :count="filtered.length" hint="所有金额均为元/人/计费周期">
+    <PageCard title="业务计价列表" :count="filtered.length" hint="返佣与业务员佣金按实际参保天数累计至今日；其余价格为元/人/计费周期">
       <template #actions>
         <el-button type="primary" @click="openCreate">＋ 新增业务</el-button>
       </template>
@@ -115,8 +115,8 @@ async function removeItem(item: AgentCommission) {
         <el-table-column label="保司结算底价" width="110"><template #default="{ row }">{{ money(row.policy_floor_price) }}</template></el-table-column>
         <el-table-column label="销售最低价" width="110"><template #default="{ row }">{{ money(row.minimum_sale_price) }}</template></el-table-column>
         <el-table-column label="实际销售价" width="100"><template #default="{ row }">{{ money(row.sale_price) }}</template></el-table-column>
-        <el-table-column label="总返佣金额" width="110"><template #default="{ row }">{{ money(row.total_commission_amount) }}</template></el-table-column>
-        <el-table-column label="业务员佣金" width="110"><template #default="{ row }">{{ money(row.agent_commission_amount) }}</template></el-table-column>
+        <el-table-column label="累计总返佣" width="125"><template #default="{ row }"><div>{{ money(row.accrued_total_commission) }}</div><small class="muted">单价 {{ money(row.total_commission_amount) }}</small></template></el-table-column>
+        <el-table-column label="累计业务员佣金" width="135"><template #default="{ row }"><div>{{ money(row.accrued_agent_commission) }}</div><small class="muted">单价 {{ money(row.agent_commission_amount) }}</small></template></el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '推广中' : '已暂停' }}</el-tag></template>
         </el-table-column>
@@ -134,13 +134,15 @@ async function removeItem(item: AgentCommission) {
       <template v-if="detailItem">
         <p><b>{{ detailItem.agent_name }}</b> · {{ detailItem.enterprise_name }} · {{ detailItem.plan_name }}</p>
         <p>保险原价：{{ money(detailItem.insurance_base_price) }}</p>
-        <p>总返佣金额：{{ money(detailItem.total_commission_amount) }}（{{ ((detailItem.total_commission_rate || 0) * 100).toFixed(1) }}%）</p>
+        <p>总返佣单价：{{ money(detailItem.total_commission_amount) }}（{{ ((detailItem.total_commission_rate || 0) * 100).toFixed(1) }}%）</p>
+        <p>累计总返佣：{{ money(detailItem.accrued_total_commission) }}（截至 {{ detailItem.accrual_as_of }}）</p>
         <p>保司结算底价：{{ money(detailItem.policy_floor_price) }}</p>
         <p>平台利润：{{ money(detailItem.profit_amount) }}</p>
         <p>销售最低价：{{ money(detailItem.minimum_sale_price) }}</p>
         <p>实际销售价：{{ money(detailItem.sale_price) }}</p>
         <p>返佣模式：{{ commissionModeText(detailItem.mode) }}</p>
-        <p>业务员佣金：{{ money(detailItem.agent_commission_amount) }}</p>
+        <p>业务员佣金单价：{{ money(detailItem.agent_commission_amount) }}</p>
+        <p>累计业务员佣金：{{ money(detailItem.accrued_agent_commission) }}</p>
       </template>
     </DetailModal>
 

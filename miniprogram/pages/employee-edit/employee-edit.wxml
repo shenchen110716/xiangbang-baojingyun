@@ -15,12 +15,14 @@
     <label class="field">
       <view class="field-label">生效时间</view>
       <picker mode="date" value="{{form.effective_at}}" data-key="effective_at" bindchange="dateChange"><view class="picker">{{form.effective_at||'不填则不修改'}}</view></picker>
-      <view class="list-meta">填写后员工将变为「在保」状态</view>
+      <picker wx:if="{{form.effective_at}}" mode="time" value="{{effectiveTime}}" data-key="effectiveTime" bindchange="timeChange"><view class="picker" style="margin-top:12rpx">时间 {{effectiveTime}}</view></picker>
+      <view class="list-meta">{{effectiveRuleText}}；系统会自动校验</view>
     </label>
     <label class="field">
       <view class="field-label">停保时间</view>
       <picker mode="date" value="{{form.terminated_at}}" data-key="terminated_at" bindchange="dateChange"><view class="picker">{{form.terminated_at||'不填则不修改'}}</view></picker>
-      <view class="list-meta">填写后员工将变为「已停保」状态</view>
+      <picker wx:if="{{form.terminated_at}}" mode="time" value="{{terminatedTime}}" data-key="terminatedTime" bindchange="timeChange"><view class="picker" style="margin-top:12rpx">时间 {{terminatedTime}}</view></picker>
+      <view class="list-meta">最早为操作日次日 00:00，且必须晚于生效时间</view>
     </label>
     <button class="primary" style="margin-top:28rpx" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{id?'保存员工信息':'提交参保审核'}}</button>
   </view>

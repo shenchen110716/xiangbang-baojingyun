@@ -263,6 +263,10 @@ export interface AgentCommission extends Partial<PricingSnapshot> {
   insured_count?: number
   agent_commission_unit?: number
   agent_commission_total?: number
+  accrued_total_commission?: number
+  accrued_agent_commission?: number
+  accrued_person_count?: number
+  accrual_as_of?: string
   created_at: string
 }
 
@@ -437,6 +441,8 @@ export interface PremiumDetailRow {
   billing_mode: 'monthly' | 'daily'
   unit_sale_price: number
   unit_policy_floor_price: number
+  unit_total_commission: number
+  unit_agent_commission: number
   coverage_start: string
   coverage_end: string | null
   period_start: string
@@ -444,13 +450,18 @@ export interface PremiumDetailRow {
   active_days: number
   premium_amount: number
   settlement_amount: number
+  commission_amount: number
+  agent_commission_amount: number
 }
 
 export interface PremiumDetailReport {
   start_date: string
   end_date: string
+  as_of_date: string
   total_premium: number
   total_settlement: number
+  total_commission: number
+  total_agent_commission: number
   detail_count: number
   enterprise_id: number | null
   insurer: string

@@ -2,9 +2,10 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listEnterprises } from '@/api/enterprises'
+import { listPlans } from '@/api/plans'
 import { listPositions } from '@/api/positions'
 import { createInsured, updateInsured } from '@/api/insured'
-import type { Enterprise, InsuredPerson, WorkPosition } from '@/api/types'
+import type { Enterprise, InsurancePlan, InsuredPerson, WorkPosition } from '@/api/types'
 
 const props = defineProps<{ person: InsuredPerson | null }>()
 const visible = defineModel<boolean>({ default: false })
@@ -12,6 +13,7 @@ const emit = defineEmits<{ saved: [] }>()
 
 const enterprises = ref<Enterprise[]>([])
 const positions = ref<WorkPosition[]>([])
+const plans = ref<InsurancePlan[]>([])
 const form = reactive({
   enterprise_id: null as number | null,
   position_id: null as number | null,
@@ -25,9 +27,10 @@ const saving = ref(false)
 
 watch(visible, async (isVisible) => {
   if (!isVisible) return
-  const [enterpriseList, positionList] = await Promise.all([listEnterprises(), listPositions()])
+  const [enterpriseList, positionList, planList] = await Promise.all([listEnterprises(), listPositions(), listPlans()])
   enterprises.value = enterpriseList
   positions.value = positionList
+  plans.value = planList
   if (props.person) {
     Object.assign(form, {
       enterprise_id: props.person.enterprise_id,
@@ -35,8 +38,8 @@ watch(visible, async (isVisible) => {
       name: props.person.name,
       id_number: props.person.id_number,
       phone: props.person.phone,
-      effective_at: props.person.effective_at ? props.person.effective_at.slice(0, 10) : null,
-      terminated_at: props.person.terminated_at ? props.person.terminated_at.slice(0, 10) : null,
+      effective_at: props.person.effective_at ? props.person.effective_at.replace('Z', '').slice(0, 19) : null,
+      terminated_at: props.person.terminated_at ? props.person.terminated_at.replace('Z', '').slice(0, 19) : null,
     })
   } else {
     Object.assign(form, { enterprise_id: null, position_id: null, name: '', id_number: '', phone: '', effective_at: null, terminated_at: null })
@@ -51,6 +54,13 @@ const selectedPositionHint = computed(() => {
   if (!pos) return '当前单位暂无审核通过的岗位'
   return `${pos.actual_employer_name || pos.actual_employer} · ${pos.name} · ${pos.occupation_class}`
 })
+const selectedPlan = computed(() => {
+  const position = positions.value.find((item) => item.id === form.position_id)
+  return plans.value.find((item) => item.id === position?.plan_id)
+})
+const effectiveRuleHint = computed(() => selectedPlan.value?.effective_mode === 'immediate'
+  ? '即时单：生效时间不得早于操作时间后 1 小时'
+  : '月单：生效时间不得早于操作日次日 00:00')
 
 async function submit() {
   if (!props.person && !form.enterprise_id) { ElMessage.error('请选择投保单位'); return }
@@ -61,8 +71,8 @@ async function submit() {
     if (props.person) {
       const payload: Partial<InsuredPerson> = { name: form.name, id_number: form.id_number, phone: form.phone }
       if (form.position_id !== props.person.position_id) payload.position_id = form.position_id
-      if (form.effective_at !== (props.person.effective_at ? props.person.effective_at.slice(0, 10) : null)) payload.effective_at = form.effective_at
-      if (form.terminated_at !== (props.person.terminated_at ? props.person.terminated_at.slice(0, 10) : null)) payload.terminated_at = form.terminated_at
+      if (form.effective_at !== (props.person.effective_at ? props.person.effective_at.replace('Z', '').slice(0, 19) : null)) payload.effective_at = form.effective_at
+      if (form.terminated_at !== (props.person.terminated_at ? props.person.terminated_at.replace('Z', '').slice(0, 19) : null)) payload.terminated_at = form.terminated_at
       await updateInsured(props.person.id, payload)
     } else {
       await createInsured({
@@ -99,12 +109,12 @@ async function submit() {
       <el-form-item label="身份证号" required><el-input v-model="form.id_number" /></el-form-item>
       <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
       <el-form-item label="生效时间">
-        <el-date-picker v-model="form.effective_at" type="date" value-format="YYYY-MM-DD" placeholder="不填则不改变生效时间" style="width: 100%" />
-        <small class="hint">留空则不修改；填写后员工将变为「在保」状态</small>
+        <el-date-picker v-model="form.effective_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="请选择生效日期和时间" style="width: 100%" />
+        <small class="hint">{{ effectiveRuleHint }}；留空则不修改</small>
       </el-form-item>
       <el-form-item label="停保时间">
-        <el-date-picker v-model="form.terminated_at" type="date" value-format="YYYY-MM-DD" placeholder="不填则不改变停保时间" style="width: 100%" />
-        <small class="hint">留空则不修改；填写后员工将变为「已停保」状态</small>
+        <el-date-picker v-model="form.terminated_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="请选择停保日期和时间" style="width: 100%" />
+        <small class="hint">最早为操作日次日 00:00，且必须晚于生效时间；留空则不修改</small>
       </el-form-item>
     </el-form>
     <template #footer>

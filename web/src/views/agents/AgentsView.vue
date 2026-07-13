@@ -79,7 +79,7 @@ function onCommissionSaved() {
     <div class="stat-grid">
       <StatTile label="业务员总数" :value="list.length" />
       <StatTile label="对接产品关系数" :value="totalProductRelations" />
-      <StatTile label="预计佣金合计" :value="money(totalCommission)" />
+      <StatTile label="累计佣金合计" :value="money(totalCommission)" />
     </div>
 
     <PageCard title="录入业务员" hint="佣金比例不在业务员账号上设置：请在下方列表中点击「关联业务」逐一配置">
@@ -99,7 +99,7 @@ function onCommissionSaved() {
         <el-table-column prop="phone" label="手机" width="120" />
         <el-table-column prop="enterprise_count" label="对接企业" width="90" />
         <el-table-column prop="product_count" label="对接产品" width="90" />
-        <el-table-column label="预计佣金" width="110"><template #default="{ row }">{{ money(row.total_commission) }}</template></el-table-column>
+        <el-table-column label="累计佣金" width="110"><template #default="{ row }">{{ money(row.total_commission) }}</template></el-table-column>
         <el-table-column label="状态" width="80">
           <template #default="{ row }"><el-tag size="small" :type="row.active ? 'success' : 'info'">{{ row.active ? '启用' : '停用' }}</el-tag></template>
         </el-table-column>
@@ -117,7 +117,7 @@ function onCommissionSaved() {
       <template v-if="commissionsTarget">
         <p>{{ commissionsTarget.name }} · 共 {{ commissionsList.length }} 条对接业务</p>
         <p v-for="c in commissionsList" :key="c.id">
-          {{ c.enterprise_name }} · {{ c.insurer }} {{ c.plan_name }} · 佣金 {{ money(c.agent_commission_amount) }}
+          {{ c.enterprise_name }} · {{ c.insurer }} {{ c.plan_name }} · 累计佣金 {{ money(c.agent_commission_total) }}
         </p>
         <p v-if="!commissionsList.length">暂无对接业务</p>
       </template>

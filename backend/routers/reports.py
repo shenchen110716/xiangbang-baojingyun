@@ -1,7 +1,7 @@
 import calendar
 import io
 import json
-from datetime import date, timedelta
+from datetime import date
 
 import openpyxl
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,13 +9,14 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.business_time import business_today
 from ..core.db import db
 from ..core.security import current_user
 from ..models import (
     ActualEmployer, AgentCommission, Claim, Enterprise, InsurancePlan,
     InsuredPerson, Policy, PolicyMember, User, WorkPosition,
 )
-from ..services import amount, plan_price_for_class, policy_dict, pricing_snapshot
+from ..services import amount, billable_date_range, period_amount, plan_price_for_class, policy_dict, pricing_snapshot
 
 router = APIRouter(prefix="/api", tags=["reports"])
 
@@ -34,32 +35,32 @@ def _parse_report_range(start_value: str, end_value: str) -> tuple[date, date]:
 
 
 def _period_premium(unit_price: float, billing_mode: str, start: date, end: date) -> float:
-    if billing_mode == "daily":
-        return unit_price * ((end - start).days + 1)
-    total = 0.0
-    cursor = start
-    while cursor <= end:
-        month_days = calendar.monthrange(cursor.year, cursor.month)[1]
-        month_end = date(cursor.year, cursor.month, month_days)
-        segment_end = min(end, month_end)
-        active_days = (segment_end - cursor).days + 1
-        total += unit_price * active_days / month_days
-        cursor = segment_end + timedelta(days=1)
-    return total
+    return period_amount(unit_price, billing_mode, start, end)
 
 
-def _member_prices(session: Session, member: PolicyMember, policy: Policy, person: InsuredPerson, plan: InsurancePlan | None) -> tuple[float, float]:
+def _member_prices(session: Session, member: PolicyMember, policy: Policy, person: InsuredPerson, plan: InsurancePlan | None) -> tuple[float, float, float, float]:
     try:
         snapshot = json.loads(member.rate_snapshot_json or "{}")
-        if "sale_price" in snapshot and "policy_floor_price" in snapshot:
-            return float(snapshot["sale_price"] or 0), float(snapshot["policy_floor_price"] or 0)
+        required = {"sale_price", "policy_floor_price", "total_commission_amount", "agent_commission_amount"}
+        if required.issubset(snapshot):
+            return (
+                float(snapshot["sale_price"] or 0),
+                float(snapshot["policy_floor_price"] or 0),
+                float(snapshot["total_commission_amount"] or 0),
+                float(snapshot["agent_commission_amount"] or 0),
+            )
     except (TypeError, ValueError, json.JSONDecodeError):
         pass
     if not plan:
-        return float(policy.premium or 0), 0
+        return float(policy.premium or 0), 0, 0, 0
     relation = session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id == policy.enterprise_id, AgentCommission.plan_id == policy.plan_id, AgentCommission.status == "active").order_by(AgentCommission.id.desc()))
     pricing = pricing_snapshot(plan, relation, plan_price_for_class(session, plan, person.occupation_class))
-    return float(pricing.get("sale_price", 0)), float(pricing.get("policy_floor_price", 0))
+    return (
+        float(pricing.get("sale_price", 0)),
+        float(pricing.get("policy_floor_price", 0)),
+        float(pricing.get("total_commission_amount", 0)),
+        float(pricing.get("agent_commission_amount", 0)),
+    )
 
 
 def _premium_detail_payload(start: date, end: date, user: User, session: Session, enterprise_id: int | None = None, insurer: str = "") -> dict:
@@ -82,20 +83,20 @@ def _premium_detail_payload(start: date, end: date, user: User, session: Session
         plan = session.get(InsurancePlan, policy.plan_id)
         if insurer_filter and (not plan or plan.insurer != insurer_filter):
             continue
-        effective = member.effective_at.date()
-        terminated = member.terminated_at.date() if member.terminated_at else None
-        period_start = max(start, effective)
-        period_end = min(end, terminated or end)
-        if period_start > period_end:
+        billable = billable_date_range(member, start, end)
+        if billable is None:
             continue
+        period_start, period_end = billable
         enterprise = session.get(Enterprise, policy.enterprise_id)
         position = session.get(WorkPosition, person.position_id) if person.position_id else None
         employer = session.get(ActualEmployer, position.actual_employer_id) if position and position.actual_employer_id else None
         billing_mode = plan.billing_mode if plan else "monthly"
-        unit_price, unit_floor_price = _member_prices(session, member, policy, person, plan)
+        unit_price, unit_floor_price, unit_commission, unit_agent_commission = _member_prices(session, member, policy, person, plan)
         active_days = (period_end - period_start).days + 1
         premium = amount(_period_premium(unit_price, billing_mode, period_start, period_end))
         settlement = amount(_period_premium(unit_floor_price, billing_mode, period_start, period_end))
+        commission = amount(_period_premium(unit_commission, billing_mode, period_start, period_end))
+        agent_commission = amount(_period_premium(unit_agent_commission, billing_mode, period_start, period_end))
         rows.append({
             "member_id": member.id,
             "person_id": person.id,
@@ -111,6 +112,8 @@ def _premium_detail_payload(start: date, end: date, user: User, session: Session
             "billing_mode": billing_mode,
             "unit_sale_price": amount(unit_price),
             "unit_policy_floor_price": amount(unit_floor_price),
+            "unit_total_commission": amount(unit_commission),
+            "unit_agent_commission": amount(unit_agent_commission),
             "coverage_start": member.effective_at,
             "coverage_end": member.terminated_at,
             "period_start": period_start.isoformat(),
@@ -118,17 +121,22 @@ def _premium_detail_payload(start: date, end: date, user: User, session: Session
             "active_days": active_days,
             "premium_amount": premium,
             "settlement_amount": settlement,
+            "commission_amount": commission,
+            "agent_commission_amount": agent_commission,
         })
     platform_view = user.role == "admin"
     response_rows = rows if platform_view else [
-        {key: value for key, value in row.items() if key not in {"unit_policy_floor_price", "settlement_amount"}}
+        {key: value for key, value in row.items() if key not in {"unit_policy_floor_price", "settlement_amount", "unit_total_commission", "unit_agent_commission", "commission_amount", "agent_commission_amount"}}
         for row in rows
     ]
     return {
         "start_date": start.isoformat(),
         "end_date": end.isoformat(),
+        "as_of_date": min(end, business_today()).isoformat(),
         "total_premium": amount(sum(row["premium_amount"] for row in rows)),
         "total_settlement": amount(sum(row["settlement_amount"] for row in rows)) if platform_view else 0,
+        "total_commission": amount(sum(row["commission_amount"] for row in rows)) if platform_view else 0,
+        "total_agent_commission": amount(sum(row["agent_commission_amount"] for row in rows)) if platform_view else 0,
         "detail_count": len(rows),
         "enterprise_id": scoped_enterprise_id,
         "insurer": insurer_filter,
@@ -142,15 +150,16 @@ def reports(user: User = Depends(current_user), session: Session = Depends(db)):
     policy_rows = session.scalars(select(Policy).where(Policy.enterprise_id == enterprise_id) if enterprise_id else select(Policy)).all();policies=[policy_dict(x,session) for x in policy_rows]
     people = session.query(InsuredPerson).filter(InsuredPerson.enterprise_id == enterprise_id).count() if enterprise_id else session.query(InsuredPerson).count()
     claims = session.query(Claim).filter(Claim.enterprise_id == enterprise_id).count() if enterprise_id else session.query(Claim).count()
-    now=date.today(); days=calendar.monthrange(now.year,now.month)[1]
-    current_detail = _premium_detail_payload(now.replace(day=1), now.replace(day=days), user, session)
+    now=business_today()
+    current_detail = _premium_detail_payload(now.replace(day=1), now, user, session)
     premium = current_detail["total_premium"]
-    settlement=current_detail["total_settlement"];commission=sum(float(x.get('total_commission_total',0)) for x in policies)
-    premium_row={"id":"premium","name":"销售保费汇总","period":f"{now.year}-{now.month:02d}按实际天数","value":premium,"detail":f"{len(policies)} 张保单，统一按销售价格计算"}
+    settlement=current_detail["total_settlement"];commission=current_detail["total_commission"]
+    period_label=f"{now.year}-{now.month:02d}截至{now.day}日"
+    premium_row={"id":"premium","name":"销售保费汇总","period":period_label,"value":premium,"detail":f"{len(policies)} 张保单，按日折算并累计至当前日期"}
     people_row={"id":"people","name":"参保人员报表","period":"当前","value":people,"detail":"在册参保人员"}
     claims_row={"id":"claims","name":"理赔统计报表","period":"累计","value":claims,"detail":"理赔案件"}
     if user.role == "enterprise": return [premium_row,people_row,claims_row]
-    return [premium_row,{"id":"settlement","name":"保司结算底价","period":f"{now.year}-{now.month:02d}按实际天数","value":settlement,"detail":"保司结算底价按实际保障天数折算"},{"id":"commission","name":"总返佣金额","period":"当前","value":commission,"detail":"保险原价 × 总返佣比例"},people_row,claims_row]
+    return [premium_row,{"id":"settlement","name":"保司结算底价","period":period_label,"value":settlement,"detail":"结算底价按日折算并累计至当前日期"},{"id":"commission","name":"总返佣金额","period":period_label,"value":commission,"detail":"返佣单价按日折算并累计至当前日期"},people_row,claims_row]
 
 
 @router.get("/reports/premium-details")
@@ -166,14 +175,16 @@ def export_premium_details(start_date: str = Query(...), end_date: str = Query(.
     book = openpyxl.Workbook(); sheet = book.active; sheet.title = "销售保费明细"
     platform_export = user.role == "admin"
     headers = ["统计开始", "统计结束", "被保险人", "身份证号", "投保单位", "实际用工单位", "岗位", "职业类别", "保单号", "保险公司", "保险方案", "计费方式", "实际销售价", "本期开始", "本期结束", "计费天数", "保费金额"]
-    if platform_export: headers += ["保司结算底价", "保司结算金额"]
+    if platform_export: headers += ["保司结算底价", "保司结算金额", "总返佣单价", "总返佣金额", "业务员佣金单价", "业务员佣金金额"]
     sheet.append(headers)
     for row in payload["rows"]:
         values = [payload["start_date"], payload["end_date"], row["person_name"], row["id_number"], row["enterprise_name"], row["actual_employer_name"], row["position_name"], row["occupation_class"], row["policy_no"], row["insurer"], row["plan_name"], "按天" if row["billing_mode"] == "daily" else "按月", row["unit_sale_price"], row["period_start"], row["period_end"], row["active_days"], row["premium_amount"]]
-        if platform_export: values += [row["unit_policy_floor_price"], row["settlement_amount"]]
+        if platform_export: values += [row["unit_policy_floor_price"], row["settlement_amount"], row["unit_total_commission"], row["commission_amount"], row["unit_agent_commission"], row["agent_commission_amount"]]
         sheet.append(values)
     sheet.append([]); sheet.append(["销售保费总额", payload["total_premium"]])
     if platform_export: sheet.append(["保司结算总额", payload["total_settlement"]])
+    if platform_export: sheet.append(["总返佣金额", payload["total_commission"]])
+    if platform_export: sheet.append(["业务员佣金金额", payload["total_agent_commission"]])
     for column in sheet.columns: sheet.column_dimensions[column[0].column_letter].width = min(32, max(12, max(len(str(cell.value or "")) for cell in column) + 2))
     output = io.BytesIO(); book.save(output); output.seek(0)
     filename = f"premium-details-{start.isoformat()}-{end.isoformat()}.xlsx"
@@ -185,7 +196,7 @@ def billing(user: User = Depends(current_user), session: Session = Depends(db)):
     rows=[]
     for x in session.scalars(stmt):
         people = session.query(InsuredPerson).filter(InsuredPerson.enterprise_id==x.id, InsuredPerson.status.in_(['active','pending'])).count()
-        days = calendar.monthrange(date.today().year,date.today().month)[1]
+        today = business_today(); days = calendar.monthrange(today.year,today.month)[1]
         daily_usage = people * float(x.usage_fee_daily or 0.1)
         rows.append({"id":x.id,"enterprise_name":x.name,"account":"保费账户","balance":x.premium_balance,"status":"正常","daily_rate":0,"estimated_daily":0})
         rows.append({"id":x.id,"enterprise_name":x.name,"account":"平台使用费账户","balance":x.usage_balance,"status":"正常","daily_rate":x.usage_fee_daily or 0.1,"estimated_daily":daily_usage,"monthly_estimate":daily_usage*days})

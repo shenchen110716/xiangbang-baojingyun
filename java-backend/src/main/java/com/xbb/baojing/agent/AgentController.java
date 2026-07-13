@@ -1,10 +1,15 @@
 package com.xbb.baojing.agent;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.xbb.baojing.common.*;
 import com.xbb.baojing.enterprise.Enterprise;
 import com.xbb.baojing.enterprise.EnterpriseMapper;
 import com.xbb.baojing.insured.InsuredPersonMapper;
+import com.xbb.baojing.insured.Policy;
+import com.xbb.baojing.insured.PolicyMapper;
+import com.xbb.baojing.insured.PolicyMember;
+import com.xbb.baojing.insured.PolicyMemberMapper;
 import com.xbb.baojing.plan.InsurancePlan;
 import com.xbb.baojing.plan.InsurancePlanMapper;
 import com.xbb.baojing.plan.PricingService;
@@ -14,6 +19,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @RestController
@@ -25,20 +34,27 @@ public class AgentController {
     private final InsurancePlanMapper planMapper;
     private final InsuredPersonMapper personMapper;
     private final WorkPositionMapper positionMapper;
+    private final PolicyMapper policyMapper;
+    private final PolicyMemberMapper policyMemberMapper;
     private final PricingService pricingService;
+    private final ObjectMapper objectMapper;
     private final AuditService auditService;
     private final PasswordEncoder passwordEncoder;
 
     public AgentController(UserMapper userMapper, AgentCommissionMapper commissionMapper, EnterpriseMapper enterpriseMapper,
                             InsurancePlanMapper planMapper, InsuredPersonMapper personMapper, WorkPositionMapper positionMapper,
-                            PricingService pricingService, AuditService auditService, PasswordEncoder passwordEncoder) {
+                            PolicyMapper policyMapper, PolicyMemberMapper policyMemberMapper, PricingService pricingService,
+                            ObjectMapper objectMapper, AuditService auditService, PasswordEncoder passwordEncoder) {
         this.userMapper = userMapper;
         this.commissionMapper = commissionMapper;
         this.enterpriseMapper = enterpriseMapper;
         this.planMapper = planMapper;
         this.personMapper = personMapper;
         this.positionMapper = positionMapper;
+        this.policyMapper = policyMapper;
+        this.policyMemberMapper = policyMemberMapper;
         this.pricingService = pricingService;
+        this.objectMapper = objectMapper;
         this.auditService = auditService;
         this.passwordEncoder = passwordEncoder;
     }
@@ -48,6 +64,9 @@ public class AgentController {
 
     public static class CommissionOut extends AgentCommission {
         private String agentName, enterpriseName, planName, insurer;
+        private double accruedTotalCommission, accruedAgentCommission;
+        private int accruedPersonCount;
+        private String accrualAsOf;
         private PricingSnapshot pricing;
         public String getAgentName() { return agentName; }
         public void setAgentName(String v) { this.agentName = v; }
@@ -57,6 +76,14 @@ public class AgentController {
         public void setPlanName(String v) { this.planName = v; }
         public String getInsurer() { return insurer; }
         public void setInsurer(String v) { this.insurer = v; }
+        public double getAccruedTotalCommission() { return accruedTotalCommission; }
+        public void setAccruedTotalCommission(double v) { this.accruedTotalCommission = v; }
+        public double getAccruedAgentCommission() { return accruedAgentCommission; }
+        public void setAccruedAgentCommission(double v) { this.accruedAgentCommission = v; }
+        public int getAccruedPersonCount() { return accruedPersonCount; }
+        public void setAccruedPersonCount(int v) { this.accruedPersonCount = v; }
+        public String getAccrualAsOf() { return accrualAsOf; }
+        public void setAccrualAsOf(String v) { this.accrualAsOf = v; }
         @JsonUnwrapped
         public PricingSnapshot getPricing() { return pricing; }
         public void setPricing(PricingSnapshot v) { this.pricing = v; }
@@ -81,8 +108,66 @@ public class AgentController {
         out.setEnterpriseName(enterprise != null ? enterprise.getName() : "");
         out.setPlanName(plan != null ? plan.getName() : "");
         out.setInsurer(plan != null ? plan.getInsurer() : "");
-        if (plan != null) out.setPricing(pricingService.snapshot(plan, item));
+        if (plan != null) {
+            out.setPricing(pricingService.snapshot(plan, item));
+            CommissionAccrual accrual = commissionAccrual(item, plan);
+            out.setAccruedTotalCommission(accrual.totalCommission());
+            out.setAccruedAgentCommission(accrual.agentCommission());
+            out.setAccruedPersonCount(accrual.personCount());
+            out.setAccrualAsOf(LocalDate.now().toString());
+        }
         return out;
+    }
+
+    private record CommissionAccrual(double totalCommission, double agentCommission, int personCount) {}
+
+    private double periodAmount(double unitPrice, String billingMode, LocalDate start, LocalDate end) {
+        if (start.isAfter(end)) return 0;
+        if ("daily".equals(billingMode)) return unitPrice * (ChronoUnit.DAYS.between(start, end) + 1);
+        double total = 0;
+        LocalDate cursor = start;
+        while (!cursor.isAfter(end)) {
+            YearMonth month = YearMonth.from(cursor);
+            LocalDate segmentEnd = end.isBefore(month.atEndOfMonth()) ? end : month.atEndOfMonth();
+            total += unitPrice * (ChronoUnit.DAYS.between(cursor, segmentEnd) + 1) / month.lengthOfMonth();
+            cursor = segmentEnd.plusDays(1);
+        }
+        return total;
+    }
+
+    private CommissionAccrual commissionAccrual(AgentCommission relation, InsurancePlan plan) {
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
+        double totalCommission = 0, agentCommission = 0;
+        Set<Integer> personIds = new HashSet<>();
+        for (PolicyMember member : policyMemberMapper.findAll()) {
+            Policy policy = policyMapper.findById(member.getPolicyId());
+            if (policy == null || !Objects.equals(policy.getEnterpriseId(), relation.getEnterpriseId()) || !Objects.equals(policy.getPlanId(), relation.getPlanId())) continue;
+            if (member.getEffectiveAt().isAfter(now)) continue;
+            LocalDate end = today;
+            if (member.getTerminatedAt() != null) {
+                LocalDate terminated = member.getTerminatedAt().toLocalDate();
+                if (LocalTime.MIDNIGHT.equals(member.getTerminatedAt().toLocalTime())) terminated = terminated.minusDays(1);
+                if (terminated.isBefore(end)) end = terminated;
+            }
+            LocalDate start = member.getEffectiveAt().toLocalDate();
+            if (start.isAfter(end)) continue;
+            double unitTotal, unitAgent;
+            try {
+                var node = objectMapper.readTree(member.getRateSnapshotJson());
+                unitTotal = node.get("total_commission_amount").asDouble();
+                unitAgent = node.get("agent_commission_amount").asDouble();
+            } catch (Exception error) {
+                var person = personMapper.findById(member.getPersonId());
+                PricingSnapshot pricing = pricingService.snapshot(plan, relation, pricingService.planPriceForClass(plan, person != null ? person.getOccupationClass() : ""));
+                unitTotal = pricing.getTotalCommissionAmount();
+                unitAgent = pricing.getAgentCommissionAmount();
+            }
+            totalCommission += periodAmount(unitTotal, plan.getBillingMode(), start, end);
+            agentCommission += periodAmount(unitAgent, plan.getBillingMode(), start, end);
+            personIds.add(member.getPersonId());
+        }
+        return new CommissionAccrual(PricingService.amount(totalCommission), PricingService.amount(agentCommission), personIds.size());
     }
 
     public record AgentOut(int id, String username, String name, String phone, String role, boolean active, String status,
@@ -104,6 +189,7 @@ public class AgentController {
                             && Objects.equals(positionMapper.findById(p.getPositionId()).getPlanId(), rel.getPlanId()))
                     .count();
             PricingSnapshot unit = pricingService.snapshot(plan, rel);
+            CommissionAccrual accrual = commissionAccrual(rel, plan);
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id", rel.getId());
             row.put("agent_id", rel.getAgentId());
@@ -118,7 +204,11 @@ public class AgentController {
             row.put("insurer", plan.getInsurer());
             row.put("insured_count", insuredCount);
             row.put("agent_commission_unit", unit.getAgentCommissionAmount());
-            row.put("agent_commission_total", PricingService.amount(unit.getAgentCommissionAmount() * insuredCount));
+            row.put("agent_commission_total", accrual.agentCommission());
+            row.put("accrued_total_commission", accrual.totalCommission());
+            row.put("accrued_agent_commission", accrual.agentCommission());
+            row.put("accrued_person_count", accrual.personCount());
+            row.put("accrual_as_of", LocalDate.now().toString());
             rows.add(row);
         }
         return rows;

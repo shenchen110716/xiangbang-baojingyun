@@ -131,7 +131,7 @@ async function exportPremiumDetails() {
       </el-table>
     </PageCard>
 
-    <PageCard :title="auth.isEnterprise() ? '销售保费总额及明细' : '平台保费与保司结算明细'" :count="premiumReport?.detail_count || 0" hint="按保障生效和停保时间计算；按月方案按自然月实际保障天数折算">
+    <PageCard :title="auth.isEnterprise() ? '销售保费总额及明细' : '平台保费、结算与返佣明细'" :count="premiumReport?.detail_count || 0" hint="只累计实际已发生费用；按月方案按自然月天数折算，查询结束时间晚于今天时自动截止今天">
       <template #actions>
         <el-button :disabled="!premiumReport" @click="exportPremiumDetails">导出明细</el-button>
       </template>
@@ -151,10 +151,12 @@ async function exportPremiumDetails() {
         <el-button type="primary" :loading="premiumLoading" @click="loadPremiumDetails">查询</el-button>
       </div>
       <div v-if="premiumReport" class="premium-summary">
-        <span>统计区间 {{ premiumReport.start_date }} 至 {{ premiumReport.end_date }}</span>
+        <span>查询区间 {{ premiumReport.start_date }} 至 {{ premiumReport.end_date }}<br>实际累计截止 {{ premiumReport.as_of_date }}</span>
         <div class="premium-totals">
           <b>销售保费总额：{{ money(premiumReport.total_premium) }}</b>
           <b v-if="!auth.isEnterprise()">保司结算总额：{{ money(premiumReport.total_settlement) }}</b>
+          <b v-if="!auth.isEnterprise()">总返佣金额：{{ money(premiumReport.total_commission) }}</b>
+          <b v-if="!auth.isEnterprise()">业务员佣金：{{ money(premiumReport.total_agent_commission) }}</b>
         </div>
       </div>
       <el-table v-loading="premiumLoading" :data="premiumReport?.rows || []" size="small" empty-text="该时间段暂无保费明细">
@@ -175,6 +177,8 @@ async function exportPremiumDetails() {
         <el-table-column prop="active_days" label="计费天数" width="90" />
         <el-table-column label="保费金额" width="120"><template #default="{ row }"><b>{{ money(row.premium_amount) }}</b></template></el-table-column>
         <el-table-column v-if="!auth.isEnterprise()" label="保司结算金额" width="135"><template #default="{ row }"><b>{{ money(row.settlement_amount) }}</b></template></el-table-column>
+        <el-table-column v-if="!auth.isEnterprise()" label="总返佣金额" width="125"><template #default="{ row }"><div><b>{{ money(row.commission_amount) }}</b></div><small class="muted">单价 {{ money(row.unit_total_commission) }}</small></template></el-table-column>
+        <el-table-column v-if="!auth.isEnterprise()" label="业务员佣金" width="125"><template #default="{ row }"><div><b>{{ money(row.agent_commission_amount) }}</b></div><small class="muted">单价 {{ money(row.unit_agent_commission) }}</small></template></el-table-column>
       </el-table>
     </PageCard>
   </div>
