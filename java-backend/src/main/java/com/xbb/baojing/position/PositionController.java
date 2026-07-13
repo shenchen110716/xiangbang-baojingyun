@@ -225,6 +225,20 @@ public class PositionController {
         return videoDto(item);
     }
 
+    @DeleteMapping("/position-videos/{id}")
+    public Map<String, Boolean> deleteVideo(@PathVariable int id, User user) throws IOException {
+        Rbac.requireRole(user, "仅平台端可删除岗位视频", "admin");
+        PositionVideo item = videoMapper.findById(id);
+        if (item == null) throw ApiException.notFound("岗位视频不存在");
+        if (!item.getUrl().startsWith("http://") && !item.getUrl().startsWith("https://")) {
+            Path path = Paths.get(".", item.getUrl());
+            Files.deleteIfExists(path);
+        }
+        videoMapper.delete(id);
+        auditService.log(user, "delete", "position_video", String.valueOf(id));
+        return Map.of("ok", true);
+    }
+
     @PatchMapping("/positions/{id}/review")
     public WorkPosition review(@PathVariable int id, @RequestBody PositionReviewIn data, User user) {
         Rbac.requireRole(user, "仅平台端可确定岗位职业类别", "admin");

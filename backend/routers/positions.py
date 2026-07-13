@@ -125,6 +125,15 @@ def review_position_video(item_id:int,data:PositionVideoReviewIn,user:User=Depen
     if not item: raise HTTPException(404,'岗位视频不存在')
     item.status=data.status;item.review_note=data.review_note;session.commit();audit(session,user,'review','position_video',str(item.id),data.status);return serialize(item)
 
+@router.delete("/position-videos/{item_id}", dependencies=[Depends(require_role("admin", detail="仅平台端可删除岗位视频"))])
+def delete_position_video(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
+    item=session.get(PositionVideo,item_id)
+    if not item: raise HTTPException(404,'岗位视频不存在')
+    if not (item.url.startswith('http://') or item.url.startswith('https://')):
+        path=ROOT/item.url.lstrip('/')
+        if path.is_file(): path.unlink()
+    session.delete(item);session.commit();audit(session,user,'delete','position_video',str(item_id));return {'ok':True}
+
 @router.patch("/positions/{item_id}/review", dependencies=[Depends(require_role("admin", detail="仅平台端可确定岗位职业类别"))])
 def review_position(item_id:int,data:PositionReviewIn,user:User=Depends(current_user),session:Session=Depends(db)):
     item=session.get(WorkPosition,item_id)

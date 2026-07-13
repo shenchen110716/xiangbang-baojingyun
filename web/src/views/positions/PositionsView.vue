@@ -116,9 +116,26 @@ async function removePosition(item: WorkPosition) {
 // ---- video viewer ----
 const videosVisible = ref(false)
 const videosList = ref<PositionVideo[]>([])
+const videosTargetId = ref<number | null>(null)
 async function openVideos(item: WorkPosition) {
   videosVisible.value = true
+  videosTargetId.value = item.id
   videosList.value = await positionsApi.listPositionVideos(item.id)
+}
+async function removeVideo(video: PositionVideo) {
+  try {
+    await ElMessageBox.confirm('删除后视频文件不可恢复，确认删除该无效视频？', '删除视频', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await positionsApi.deletePositionVideo(video.id)
+    ElMessage.success('已删除')
+    if (videosTargetId.value) videosList.value = await positionsApi.listPositionVideos(videosTargetId.value)
+    load()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
 }
 
 // ---- review (admin) ----
@@ -219,6 +236,7 @@ async function submitReview() {
           </el-tag>
           <span v-if="v.review_note" class="muted">{{ v.review_note }}</span>
           <span class="muted">{{ formatDateTime(v.created_at) }}</span>
+          <el-button v-if="!isEnterprise" link type="danger" size="small" @click="removeVideo(v)">删除</el-button>
         </div>
       </div>
       <el-empty v-if="!videosList.length" description="暂无视频" />

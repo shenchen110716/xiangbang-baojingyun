@@ -27,4 +27,7 @@ public interface PositionVideoMapper {
 
     @Update("UPDATE position_videos SET status=#{status}, review_note=#{reviewNote} WHERE id=#{id}")
     int update(PositionVideo v);
+
+    @Delete("DELETE FROM position_videos WHERE id = #{id}")
+    int delete(Integer id);
 }

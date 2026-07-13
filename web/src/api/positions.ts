@@ -39,6 +39,10 @@ export function reviewPositionVideo(videoId: number, data: { status: string; rev
   return client.patch<PositionVideo>(`/position-videos/${videoId}/review`, data).then((r) => r.data)
 }
 
+export function deletePositionVideo(videoId: number) {
+  return client.delete<{ ok: boolean }>(`/position-videos/${videoId}`).then((r) => r.data)
+}
+
 export function listActualEmployers() {
   return client.get<ActualEmployer[]>('/actual-employers').then((r) => r.data)
 }
