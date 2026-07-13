@@ -1,13 +1,50 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { getReports } from '@/api/reports'
-import type { ReportRow } from '@/api/types'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { getPremiumDetails, getReports } from '@/api/reports'
+import type { PremiumDetailReport, ReportRow } from '@/api/types'
 import { money } from '@/utils/format'
+import { downloadAuthenticated } from '@/utils/download'
+import { useAuthStore } from '@/stores/auth'
 import PageCard from '@/components/PageCard.vue'
 
+const auth = useAuthStore()
 const loading = ref(true)
 const rows = ref<ReportRow[]>([])
 const currencyIds = new Set(['premium', 'settlement', 'commission'])
+const visibleRows = computed(() => auth.isEnterprise() ? rows.value.filter((row) => !['settlement', 'commission'].includes(row.id)) : rows.value)
+
+const today = new Date()
+const defaultMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+const periodMode = ref<'month' | 'range'>('month')
+const selectedMonth = ref(defaultMonth)
+const selectedRange = ref<[string, string] | null>(null)
+const premiumLoading = ref(false)
+const premiumReport = ref<PremiumDetailReport | null>(null)
+
+function monthRange(month: string): [string, string] {
+  const [year, monthNumber] = month.split('-').map(Number)
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()
+  return [`${month}-01`, `${month}-${String(lastDay).padStart(2, '0')}`]
+}
+
+function reportRange(): [string, string] | null {
+  if (periodMode.value === 'month') return monthRange(selectedMonth.value)
+  return selectedRange.value
+}
+
+async function loadPremiumDetails() {
+  const range = reportRange()
+  if (!range) { ElMessage.warning('请选择统计时间段'); return }
+  premiumLoading.value = true
+  try {
+    premiumReport.value = await getPremiumDetails(range[0], range[1])
+  } catch (error) {
+    ElMessage.error((error as Error).message)
+  } finally {
+    premiumLoading.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -17,7 +54,9 @@ async function load() {
     loading.value = false
   }
 }
-onMounted(load)
+onMounted(async () => {
+  await Promise.all([load(), auth.isEnterprise() ? loadPremiumDetails() : Promise.resolve()])
+})
 
 function displayValue(row: ReportRow) {
   return currencyIds.has(row.id) ? money(row.value) : String(row.value)
@@ -25,7 +64,7 @@ function displayValue(row: ReportRow) {
 
 function exportCsv() {
   const header = ['报表', '周期', '指标', '说明']
-  const csv = '﻿' + [header, ...rows.value.map((r) => [r.name, r.period, displayValue(r), r.detail])]
+  const csv = '﻿' + [header, ...visibleRows.value.map((r) => [r.name, r.period, displayValue(r), r.detail])]
     .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
     .join('\n')
   const blob = new Blob([csv], { type: 'text/csv' })
@@ -35,26 +74,72 @@ function exportCsv() {
   link.click()
   URL.revokeObjectURL(link.href)
 }
+
+async function exportPremiumDetails() {
+  const range = reportRange()
+  if (!range) { ElMessage.warning('请选择统计时间段'); return }
+  try {
+    const params = new URLSearchParams({ start_date: range[0], end_date: range[1] })
+    await downloadAuthenticated(`/reports/premium-details/export?${params.toString()}`, `销售保费明细-${range[0]}-${range[1]}.xlsx`)
+  } catch (error) {
+    ElMessage.error((error as Error).message)
+  }
+}
 </script>
 
 <template>
   <div v-loading="loading" class="reports-view">
     <div class="stat-grid">
-      <div v-for="row in rows" :key="row.id" class="stat-item">
+      <div v-for="row in visibleRows" :key="row.id" class="stat-item">
         <span>{{ row.name }}</span>
         <b>{{ displayValue(row) }}</b>
       </div>
     </div>
 
-    <PageCard title="报表中心" :count="rows.length" hint="销售保费、保司结算和返佣金额统一统计">
+    <PageCard title="报表中心" :count="visibleRows.length" :hint="auth.isEnterprise() ? '销售保费、参保人员和理赔数据统一统计' : '销售保费、保司结算和返佣金额统一统计'">
       <template #actions>
         <el-button type="primary" @click="exportCsv">导出报表</el-button>
       </template>
-      <el-table :data="rows" size="small">
+      <el-table :data="visibleRows" size="small">
         <el-table-column prop="name" label="报表名称" min-width="140" />
         <el-table-column prop="period" label="周期" min-width="160" />
         <el-table-column label="指标" width="140"><template #default="{ row }">{{ displayValue(row) }}</template></el-table-column>
         <el-table-column prop="detail" label="口径说明" min-width="200" />
+      </el-table>
+    </PageCard>
+
+    <PageCard v-if="auth.isEnterprise()" title="销售保费总额及明细" :count="premiumReport?.detail_count || 0" hint="按保障生效和停保时间计算；按月方案按自然月实际保障天数折算">
+      <template #actions>
+        <el-button :disabled="!premiumReport" @click="exportPremiumDetails">导出明细</el-button>
+      </template>
+      <div class="premium-filter">
+        <el-radio-group v-model="periodMode">
+          <el-radio-button value="month">按月</el-radio-button>
+          <el-radio-button value="range">按时间段</el-radio-button>
+        </el-radio-group>
+        <el-date-picker v-if="periodMode === 'month'" v-model="selectedMonth" type="month" value-format="YYYY-MM" placeholder="选择月份" />
+        <el-date-picker v-else v-model="selectedRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" />
+        <el-button type="primary" :loading="premiumLoading" @click="loadPremiumDetails">查询</el-button>
+      </div>
+      <div v-if="premiumReport" class="premium-summary">
+        <span>统计区间 {{ premiumReport.start_date }} 至 {{ premiumReport.end_date }}</span>
+        <b>保费总额：{{ money(premiumReport.total_premium) }}</b>
+      </div>
+      <el-table v-loading="premiumLoading" :data="premiumReport?.rows || []" size="small" empty-text="该时间段暂无保费明细">
+        <el-table-column label="被保险人" min-width="150">
+          <template #default="{ row }"><div>{{ row.person_name }}</div><small class="muted">{{ row.id_number }}</small></template>
+        </el-table-column>
+        <el-table-column label="实际用工单位 / 岗位" min-width="180">
+          <template #default="{ row }"><div>{{ row.actual_employer_name || '—' }}</div><small class="muted">{{ row.position_name }} · {{ row.occupation_class }}</small></template>
+        </el-table-column>
+        <el-table-column label="保险方案 / 保单" min-width="190">
+          <template #default="{ row }"><div>{{ row.insurer }} · {{ row.plan_name }}</div><small class="muted">{{ row.policy_no }}</small></template>
+        </el-table-column>
+        <el-table-column label="计费方式" width="90"><template #default="{ row }">{{ row.billing_mode === 'daily' ? '按天' : '按月' }}</template></el-table-column>
+        <el-table-column label="实际销售价" width="120"><template #default="{ row }">{{ money(row.unit_sale_price) }}</template></el-table-column>
+        <el-table-column label="本期保障时间" min-width="185"><template #default="{ row }">{{ row.period_start }} 至 {{ row.period_end }}</template></el-table-column>
+        <el-table-column prop="active_days" label="计费天数" width="90" />
+        <el-table-column label="保费金额" width="120"><template #default="{ row }"><b>{{ money(row.premium_amount) }}</b></template></el-table-column>
       </el-table>
     </PageCard>
   </div>
@@ -84,5 +169,30 @@ function exportCsv() {
 }
 .stat-item b {
   font-size: 20px;
+}
+.premium-filter {
+  padding: 0 20px 16px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.premium-summary {
+  margin: 0 20px 16px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--el-color-primary-light-9);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.premium-summary span,
+.muted {
+  color: var(--el-text-color-secondary);
+}
+.premium-summary b {
+  color: var(--el-color-primary);
+  font-size: 18px;
 }
 </style>

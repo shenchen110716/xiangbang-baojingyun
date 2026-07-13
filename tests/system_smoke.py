@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import tempfile
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -45,7 +46,7 @@ def run():
         from backend.routers.positions import (
             add_actual_employer, add_position, delete_actual_employer, update_actual_employer,
         )
-        from backend.routers.reports import billing
+        from backend.routers.reports import _period_premium, billing, premium_details
         from backend.routers.reports import export_policy
         from backend.routers.reports import policies as list_policies
 
@@ -116,6 +117,13 @@ def run():
             assert len(members) == 2
             assert members[0].status == "terminated" and members[0].terminated_at is not None
             assert members[1].status == "active" and members[1].terminated_at is None
+
+            premium_report = premium_details("2026-01-01", "2026-01-31", user, session)
+            assert premium_report["detail_count"] == 1
+            assert premium_report["rows"][0]["active_days"] == 30
+            assert premium_report["total_premium"] == 3300
+            assert round(_period_premium(31, "monthly", date(2026, 7, 14), date(2026, 7, 31)), 2) == 18
+            assert round(_period_premium(31, "monthly", date(2026, 7, 14), date(2026, 8, 13)), 2) == 31
 
             # a person with no position/plan yet must activate without error and
             # simply skip Policy/PolicyMember creation (same permissiveness as today)

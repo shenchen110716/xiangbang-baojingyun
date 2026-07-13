@@ -422,6 +422,36 @@ export interface ReportRow {
   detail: string
 }
 
+export interface PremiumDetailRow {
+  member_id: number
+  person_id: number
+  person_name: string
+  id_number: string
+  enterprise_name: string
+  actual_employer_name: string
+  position_name: string
+  occupation_class: string
+  policy_no: string
+  insurer: string
+  plan_name: string
+  billing_mode: 'monthly' | 'daily'
+  unit_sale_price: number
+  coverage_start: string
+  coverage_end: string | null
+  period_start: string
+  period_end: string
+  active_days: number
+  premium_amount: number
+}
+
+export interface PremiumDetailReport {
+  start_date: string
+  end_date: string
+  total_premium: number
+  detail_count: number
+  rows: PremiumDetailRow[]
+}
+
 export interface ProviderStatus {
   mode: 'mock' | 'real'
   insurer_api: boolean

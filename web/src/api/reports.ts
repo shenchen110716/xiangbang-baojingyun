@@ -1,5 +1,5 @@
 import { client } from './client'
-import type { BillingRow, Policy, ReportRow } from './types'
+import type { BillingRow, Policy, PremiumDetailReport, ReportRow } from './types'
 
 export function listPolicies() {
   return client.get<Policy[]>('/policies').then((r) => r.data)
@@ -11,6 +11,10 @@ export function exportPolicyUrl(id: number) {
 
 export function getReports() {
   return client.get<ReportRow[]>('/reports').then((r) => r.data)
+}
+
+export function getPremiumDetails(start_date: string, end_date: string) {
+  return client.get<PremiumDetailReport>('/reports/premium-details', { params: { start_date, end_date } }).then((r) => r.data)
 }
 
 export function getBilling() {

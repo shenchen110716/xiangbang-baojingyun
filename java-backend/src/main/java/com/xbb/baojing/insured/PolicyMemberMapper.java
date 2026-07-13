@@ -12,6 +12,9 @@ public interface PolicyMemberMapper {
     @Select("SELECT " + COLS + " FROM policy_members WHERE person_id = #{personId} ORDER BY id DESC")
     List<PolicyMember> findByPerson(Integer personId);
 
+    @Select("SELECT " + COLS + " FROM policy_members ORDER BY effective_at ASC, id ASC")
+    List<PolicyMember> findAll();
+
     @Select("SELECT " + COLS + " FROM policy_members WHERE person_id = #{personId} AND status = 'active' AND terminated_at IS NULL ORDER BY id DESC LIMIT 1")
     PolicyMember findOpenForPerson(Integer personId);
 

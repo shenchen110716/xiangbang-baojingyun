@@ -39,6 +39,15 @@ public class PolicyPricingService {
         return totals(policy).salePrice();
     }
 
+    /** Historical report fallback for legacy PolicyMember rows that predate
+     * rate_snapshot_json. New rows always use their frozen snapshot instead. */
+    public double salePriceFor(Policy policy, InsuredPerson person) {
+        InsurancePlan plan = planMapper.findById(policy.getPlanId());
+        if (plan == null) return policy.getPremium();
+        AgentCommission relation = commissionMapper.findActiveRelation(policy.getEnterpriseId(), policy.getPlanId());
+        return pricingService.snapshot(plan, relation, pricingService.planPriceForClass(plan, person.getOccupationClass())).getSalePrice();
+    }
+
     public record Totals(double salePrice, double policyFloor, double totalCommission) {}
 
     /** Ports the totals half of policy_dict() — used by ReportsController's

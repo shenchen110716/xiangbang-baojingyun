@@ -154,8 +154,10 @@ public class PolicyController {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("保单人员明细");
             Row header = sheet.createRow(0);
-            String[] cols = {"保单号", "投保单位", "实际用工单位", "岗位", "职业类别", "被保险人", "身份证号", "保险公司", "保险方案",
-                    "保险原价", "总返佣比例", "总返佣金额", "保司结算底价", "平台利润", "销售最低价", "实际销售价", "业务员佣金", "开始日期", "结束日期", "保单状态"};
+            boolean enterpriseExport = "enterprise".equals(user.getRole());
+            String[] cols = enterpriseExport
+                    ? new String[]{"保单号", "投保单位", "实际用工单位", "岗位", "职业类别", "被保险人", "身份证号", "保险公司", "保险方案", "实际销售价", "开始日期", "结束日期", "保单状态"}
+                    : new String[]{"保单号", "投保单位", "实际用工单位", "岗位", "职业类别", "被保险人", "身份证号", "保险公司", "保险方案", "保险原价", "总返佣比例", "总返佣金额", "保司结算底价", "平台利润", "销售最低价", "实际销售价", "业务员佣金", "开始日期", "结束日期", "保单状态"};
             for (int i = 0; i < cols.length; i++) header.createCell(i).setCellValue(cols[i]);
             int rowIdx = 1;
             for (InsuredPerson person : personMapper.findByPolicy(id)) {
@@ -163,15 +165,21 @@ public class PolicyController {
                 ActualEmployer employer = position != null && position.getActualEmployerId() != null ? actualEmployerMapper.findById(position.getActualEmployerId()) : null;
                 PricingSnapshot pricing = plan != null ? pricingService.snapshot(plan, relation, pricingService.planPriceForClass(plan, person.getOccupationClass())) : null;
                 Row row = sheet.createRow(rowIdx++);
-                Object[] values = {policy.getPolicyNo(), enterprise != null ? enterprise.getName() : "",
+                Object[] prefix = {policy.getPolicyNo(), enterprise != null ? enterprise.getName() : "",
                         employer != null ? employer.getName() : (position != null ? position.getActualEmployer() : ""),
                         position != null ? position.getName() : person.getOccupation(), person.getOccupationClass(), person.getName(), person.getIdNumber(),
-                        plan != null ? plan.getInsurer() : "", plan != null ? plan.getName() : "",
-                        pricing != null ? pricing.getInsuranceBasePrice() : 0, pricing != null ? pricing.getTotalCommissionRate() : 0,
-                        pricing != null ? pricing.getTotalCommissionAmount() : 0, pricing != null ? pricing.getPolicyFloorPrice() : 0,
-                        pricing != null ? pricing.getProfitAmount() : 0, pricing != null ? pricing.getMinimumSalePrice() : 0,
-                        pricing != null ? pricing.getSalePrice() : 0, pricing != null ? pricing.getAgentCommissionAmount() : 0,
-                        policy.getStartDate(), policy.getEndDate(), policy.getStatus()};
+                        plan != null ? plan.getInsurer() : "", plan != null ? plan.getName() : ""};
+                java.util.List<Object> valueList = new java.util.ArrayList<>(java.util.Arrays.asList(prefix));
+                if (enterpriseExport) {
+                    valueList.add(pricing != null ? pricing.getSalePrice() : 0);
+                } else {
+                    valueList.addAll(java.util.List.of(pricing != null ? pricing.getInsuranceBasePrice() : 0, pricing != null ? pricing.getTotalCommissionRate() : 0,
+                            pricing != null ? pricing.getTotalCommissionAmount() : 0, pricing != null ? pricing.getPolicyFloorPrice() : 0,
+                            pricing != null ? pricing.getProfitAmount() : 0, pricing != null ? pricing.getMinimumSalePrice() : 0,
+                            pricing != null ? pricing.getSalePrice() : 0, pricing != null ? pricing.getAgentCommissionAmount() : 0));
+                }
+                valueList.addAll(java.util.List.of(policy.getStartDate(), policy.getEndDate(), policy.getStatus()));
+                Object[] values = valueList.toArray();
                 for (int i = 0; i < values.length; i++) {
                     Object v = values[i];
                     if (v instanceof Number n) row.createCell(i).setCellValue(n.doubleValue());
