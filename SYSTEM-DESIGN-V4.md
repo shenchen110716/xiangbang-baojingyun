@@ -620,25 +620,25 @@ class InsurerAdapter:
 
 ### 阶段 0：立即止血（1–2 天）
 
-- 静态目录收敛到前端构建目录。
-- 理赔材料和岗位视频改为鉴权下载，临时关闭匿名 URL。
-- 禁用企业直接充值接口。
-- 支付真实模式保持关闭，直到验签和账本完成。
-- 生产配置缺失时拒绝启动。
-- 修复现有冒烟测试的 UTC/业务时区问题。
+- ✅ 静态目录收敛到前端构建目录。（仅显式暴露 index.html/script.js/styles.css，移除 `StaticFiles(directory=ROOT)` 全量挂载）
+- ✅ 理赔材料和岗位视频改为鉴权下载，临时关闭匿名 URL。（`core/file_tokens.py` 短时签名下载链接，替代匿名 `/uploads` 挂载）
+- ✅ 禁用企业直接充值接口。（`/api/enterprises/{id}/recharge` 收紧为仅管理员）
+- ✅ 支付真实模式保持关闭，直到验签和账本完成。（`INTEGRATION_MODE` 默认 `mock`，`render.yaml` 亦显式设置，确认无需改动）
+- ✅ 生产配置缺失时拒绝启动。（`core/config.py` 在 `ENVIRONMENT=production` 时校验 JWT_SECRET/ADMIN_PASSWORD/DATABASE_URL）
+- ✅ 修复现有冒烟测试的 UTC/业务时区问题。（`routers/enrollment.py` 的日期比较改为 UTC 一致；已排查确认代码库内无同类残留）
 
-交付门槛：不存在匿名数据库/源码/文件访问，不存在无支付加余额路径。
+交付门槛：不存在匿名数据库/源码/文件访问，不存在无支付加余额路径。**已达成**（`tests/security_smoke.py` 覆盖回归）。
 
 ### 阶段 1：安全与数据底座（1–2 周）
 
-- 引入 TenantContext、角色权限和会话版本。
-- 引入 Alembic，完成现有表基线迁移。
-- 创建私有对象存储和文件元数据表。
-- 金额字段迁移为 Numeric/Decimal。
-- 建立支付订单、账户和不可变账本。
-- 补齐支付、租户和文件安全测试。
+- ⏳ 引入 TenantContext、角色权限和会话版本。（会话版本 ✅ 已实现——`User.session_version`，密码修改/账号停用后旧 Token 立即失效；完整 TenantContext 抽象层和 6.3 节granular 角色权限矩阵尚未实现，现有系统仍以 `user.enterprise_id` 内联校验 + 集中式 `require_role`/`assert_enterprise_scope` 为主，对当前团队规模足够，暂不升级为独立 Role/Permission 表）
+- ✅ 引入 Alembic，完成现有表基线迁移。
+- ⏸️ 创建私有对象存储和文件元数据表。（阻塞：无真实对象存储凭据/基础设施，当前仍用本地磁盘 + 签名下载链接过渡）
+- ⏸️ 金额字段迁移为 Numeric/Decimal。（评估后降级为技术债：账本 `LedgerEntry` 已用 Decimal 承载权威流水并有对账检查兜底，`Enterprise.premium_balance` 等缓存快照字段仍是 Float，混合运算改造涉及面广，暂缓）
+- ✅ 建立支付订单、账户和不可变账本。（`LedgerEntry` 单账户追加流水模型，见 7.5 节；`Account` 独立实体、复式记账仍未做，按 v4.1 设计仅在需要时再升级）
+- ✅ 补齐支付、租户和文件安全测试。（`tests/security_smoke.py`）
 
-交付门槛：可在沙箱支付环境完成验签、入账、重复回调和对账。
+交付门槛：可在沙箱支付环境完成验签、入账、重复回调和对账。**已达成**（`tests/security_smoke.py` 验证幂等入账+对账为零差异；真实第三方签名验证仍待接入真实 Provider）。
 
 ### 阶段 2：参停保与保单重构（2–4 周）
 
