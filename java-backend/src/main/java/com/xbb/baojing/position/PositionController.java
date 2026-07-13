@@ -177,6 +177,11 @@ public class PositionController {
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(pos.getEnterpriseId())) throw ApiException.forbidden("无权上传");
         String original = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
         String suffix = original.contains(".") ? original.substring(original.lastIndexOf('.')).toLowerCase() : "";
+        if (suffix.isBlank()) {
+            String contentType = file.getContentType();
+            if ("video/mp4".equalsIgnoreCase(contentType)) suffix = ".mp4";
+            else if ("video/quicktime".equalsIgnoreCase(contentType)) suffix = ".mov";
+        }
         if (!Set.of(".mp4", ".mov", ".m4v").contains(suffix)) throw ApiException.badRequest("仅支持 MP4、MOV 或 M4V 视频");
         if (file.getSize() > 100L * 1024 * 1024) throw ApiException.badRequest("岗位视频不能超过 100MB");
         Path folder = Paths.get(uploadsDir, "positions", String.valueOf(id));
