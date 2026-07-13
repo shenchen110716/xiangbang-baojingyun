@@ -16,4 +16,6 @@ RUN mkdir -p /app/uploads && chown -R app:app /app
 USER app
 EXPOSE 8000
 
-CMD uvicorn backend.app:app --host 0.0.0.0 --port ${PORT:-8000}
+# Run pending Alembic migrations before the app starts, not inside the
+# FastAPI startup hook, so multiple workers/replicas never race on DDL.
+CMD alembic upgrade head && uvicorn backend.app:app --host 0.0.0.0 --port ${PORT:-8000}
