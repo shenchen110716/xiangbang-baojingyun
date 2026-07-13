@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ..core.audit import audit
 from ..core.db import db
 from ..core.security import current_user
-from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, User, WorkPosition
+from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
 from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
 from ..services import activate_person_policy, plan_price_for_class, pricing_snapshot, serialize, terminate_person_policy
 
@@ -67,6 +67,21 @@ def insured_status(item_id:int,status_value:Literal["active","stopped","pending"
     if status_value=="active" and previous_status!="active": activate_person_policy(session,item)
     elif previous_status=="active" and status_value!="active": terminate_person_policy(session,item)
     session.commit();audit(session,user,"status_change","insured_person",str(item.id),status_value);return serialize(item)
+
+@router.get("/insured/{item_id}/policy-members")
+def insured_policy_members(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):
+    item = session.get(InsuredPerson, item_id)
+    if not item: raise HTTPException(404, "参保员工不存在")
+    if user.role == "enterprise" and user.enterprise_id != item.enterprise_id: raise HTTPException(403, "无权查看该员工")
+    rows = session.scalars(select(PolicyMember).where(PolicyMember.person_id == item_id).order_by(PolicyMember.id.desc()))
+    result = []
+    for pm in rows:
+        policy = session.get(Policy, pm.policy_id)
+        plan = session.get(InsurancePlan, policy.plan_id) if policy else None
+        entry = serialize(pm)
+        entry.update(policy_no=policy.policy_no if policy else "", insurer=plan.insurer if plan else "", plan_name=plan.name if plan else "")
+        result.append(entry)
+    return result
 
 @router.get("/insured/import-template")
 def insured_import_template(user:User=Depends(current_user)):

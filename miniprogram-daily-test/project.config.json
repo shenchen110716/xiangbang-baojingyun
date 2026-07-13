@@ -1,0 +1,20 @@
+{
+  "appid": "touristappid",
+  "projectname": "xiangbangbang-daily-test",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "./",
+  "libVersion": "3.4.4",
+  "setting": {
+    "es6": true,
+    "minified": true,
+    "urlCheck": false,
+    "postcss": false,
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "uploadWithSourceMap": true
+  },
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  }
+}

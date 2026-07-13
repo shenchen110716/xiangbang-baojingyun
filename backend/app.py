@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .core.config import ROOT, DATABASE_URL
 from .core.db import Base, engine, SessionLocal
@@ -70,37 +71,32 @@ app.include_router(claims_router)
 
 # SYSTEM-DESIGN-V4.md Phase 0 stop-loss item #1: the project root (source
 # code, data.db, .env, requirements.txt, ...) must never be reachable over
-# HTTP. Explicitly allowlist only the three static web assets the SPA
-# needs, instead of mounting StaticFiles(directory=ROOT) for the whole tree.
-_WEB_ASSET_MEDIA_TYPES = {
-    "index.html": "text/html",
-    "script.js": "application/javascript",
-    "styles.css": "text/css",
+# HTTP. The Vue admin build lives entirely under web/dist/ (a clean build
+# output with no secrets), so mounting StaticFiles there is safe, but the
+# SPA fallback route below stays an explicit allowlist of known client
+# routes rather than a wildcard "serve index.html for anything unmatched" —
+# that would make paths like /data.db or /backend/app.py return 200
+# (index.html) instead of 404, which is a worse information-hygiene
+# posture than what Phase 0 established.
+WEB_DIST = ROOT / "web" / "dist"
+app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="web-assets")
+
+_WEB_ROOT_FILES = {"favicon.svg", "icons.svg"}
+
+_FRONTEND_ROUTES = {
+    "/", "/home", "/screen", "/team", "/dispatch", "/workers", "/work-relations",
+    "/agents", "/insurance", "/policy", "/claims", "/insurers", "/exports",
+    "/report", "/billing", "/promotion", "/operators", "/message", "/settings", "/login",
 }
 
 
-def _serve_web_asset(filename: str) -> FileResponse:
-    return FileResponse(ROOT / filename, media_type=_WEB_ASSET_MEDIA_TYPES[filename])
-
-
-@app.get("/", include_in_schema=False)
-def serve_frontend_root():
-    return _serve_web_asset("index.html")
-
-
-@app.get("/index.html", include_in_schema=False)
-def serve_frontend_index():
-    return _serve_web_asset("index.html")
-
-
-@app.get("/script.js", include_in_schema=False)
-def serve_frontend_script():
-    return _serve_web_asset("script.js")
-
-
-@app.get("/styles.css", include_in_schema=False)
-def serve_frontend_styles():
-    return _serve_web_asset("styles.css")
+@app.get("/{path:path}", include_in_schema=False)
+def serve_frontend(path: str):
+    if path in _WEB_ROOT_FILES:
+        return FileResponse(WEB_DIST / path)
+    if f"/{path}" in _FRONTEND_ROUTES:
+        return FileResponse(WEB_DIST / "index.html", media_type="text/html")
+    raise HTTPException(404)
 
 
 # Uploaded position videos / claim documents are no longer served through a

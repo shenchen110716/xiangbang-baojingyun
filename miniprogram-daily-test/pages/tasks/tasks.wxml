@@ -1,0 +1,22 @@
+<view class="page">
+  <view class="title">我的待办</view>
+  <view class="subtitle">点击左侧方框完成任务，长按操作区可删除</view>
+
+  <scroll-view class="chips" scroll-x="true">
+    <text wx:for="{{filters}}" wx:key="key" class="chip {{filter===item.key?'active':''}}" data-key="{{item.key}}" bindtap="selectFilter">{{item.label}}</text>
+  </scroll-view>
+
+  <view wx:for="{{visibleTasks}}" wx:key="id" class="card row top">
+    <view class="check {{item.done?'done':''}}" data-id="{{item.id}}" bindtap="toggle">{{item.done?'✓':''}}</view>
+    <view class="grow">
+      <view class="row between"><text class="task-title {{item.done?'done':''}} grow">{{item.title}}</text><text class="tag tag-{{item.priority}}">{{item.priority==='high'?'紧急':item.priority==='medium'?'普通':'稍后'}}</text></view>
+      <view class="meta">{{item.category}} · 计划 {{item.dueDate}}</view>
+      <view wx:if="{{item.note}}" class="meta">{{item.note}}</view>
+      <view class="divider"></view>
+      <view class="row between"><text class="muted">{{item.done?'已完成':'待处理'}}</text><text class="section-link" data-id="{{item.id}}" bindtap="remove">删除</text></view>
+    </view>
+  </view>
+
+  <view wx:if="{{!visibleTasks.length}}" class="empty"><view class="empty-icon">✓</view><view>当前分类没有任务</view></view>
+  <view class="fab" bindtap="create">＋</view>
+</view>

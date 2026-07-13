@@ -127,6 +127,8 @@ export interface InsuredPerson extends Partial<PricingSnapshot> {
   status: 'pending' | 'active' | 'stopped'
   policy_id: number | null
   created_at: string
+  effective_at?: string | null
+  terminated_at?: string | null
 }
 
 export interface PolicyMemberHistory {

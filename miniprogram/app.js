@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE = 'http://127.0.0.1:8001/api';
+const DEFAULT_API_BASE = 'http://127.0.0.1:8080/api';
 
 App({
   globalData: {

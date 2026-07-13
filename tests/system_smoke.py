@@ -23,14 +23,17 @@ def run():
         from backend.models import AgentCommission, Policy, PolicyMember, User, WorkPosition
         from backend.schemas import (
             ActualEmployerIn, ActualEmployerUpdate, AgentIn,
+            ClaimDocumentIn, ClaimIn, ClaimStatusIn,
             CommissionIn, CommissionUpdate, EnterpriseIn, InvoiceIn,
             InvoiceUpdate, OperatorIn, PaymentCallbackIn, PaymentIn,
             PasswordChangeIn, PersonIn, PlanIn, PositionIn,
         )
         from backend.services import commission_dict
+        from backend.services.claims import CLAIM_REQUIRED_TYPES
         from backend.routers.agents import add_agent, add_agent_commission, update_agent_commission
         from backend.routers.auth import change_password
         from backend.routers.audit_logs import audit_logs
+        from backend.routers.claims import add_claim, add_claim_document, claim_status
         from backend.routers.dashboard import dashboard, screen_products
         from backend.routers.enrollment import enrollment_email
         from backend.routers.enterprises import add_enterprise
@@ -115,6 +118,16 @@ def run():
             unpositioned = add_person(PersonIn(enterprise_id=enterprise_id, name="待定岗位员工", id_number="340123199001019998"), user, session)
             insured_status(unpositioned["id"], "active", user, session)
             assert session.query(PolicyMember).filter_by(person_id=unpositioned["id"]).count() == 0
+
+            # claim_status("submitted") must count already-uploaded required
+            # documents without crashing (regression: a stray `x.status` in the
+            # ClaimDocument query referenced the set-comprehension loop var
+            # before it was bound, so every real submission 500'd).
+            claim = add_claim(ClaimIn(enterprise_id=enterprise_id, person_id=person["id"], description="冒烟测试报案", accident_at="2026-01-01 09:00", accident_place="车间"), user, session)
+            for doc_type in CLAIM_REQUIRED_TYPES:
+                add_claim_document(claim["id"], ClaimDocumentIn(name=f"{doc_type}.pdf", doc_type=doc_type), user, session)
+            submitted = claim_status(claim["id"], ClaimStatusIn(status="submitted"), user, session)
+            assert submitted["status"] == "submitted"
 
             mail = enrollment_email(enterprise_id, plan["id"], "enrollment", "", user, session)
             assert mail["people_count"] == 1 and mail["filename"].endswith('.csv')

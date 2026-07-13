@@ -620,7 +620,7 @@ class InsurerAdapter:
 
 ### 阶段 0：立即止血（1–2 天）
 
-- ✅ 静态目录收敛到前端构建目录。（仅显式暴露 index.html/script.js/styles.css，移除 `StaticFiles(directory=ROOT)` 全量挂载）
+- ✅ 静态目录收敛到前端构建目录。（Phase 0 时先仅显式暴露 index.html/script.js/styles.css 三个文件；Web 管理后台 Vue3 重构完成后，已改为 `StaticFiles` 挂载 `web/dist/assets`，SPA 回退路由仍是已知前端路由的显式白名单，未知路径一律 404，不是通配 fallback）
 - ✅ 理赔材料和岗位视频改为鉴权下载，临时关闭匿名 URL。（`core/file_tokens.py` 短时签名下载链接，替代匿名 `/uploads` 挂载）
 - ✅ 禁用企业直接充值接口。（`/api/enterprises/{id}/recharge` 收紧为仅管理员）
 - ✅ 支付真实模式保持关闭，直到验签和账本完成。（`INTEGRATION_MODE` 默认 `mock`，`render.yaml` 亦显式设置，确认无需改动）
@@ -661,10 +661,10 @@ class InsurerAdapter:
 
 ### 阶段 4：前端收敛与正式发布（2–3 周）
 
-- 重构 Web 工程，删除重复全局函数和静态模拟数据。
-- 对接 `/api/v1` 类型化客户端。
-- 完成小程序固定域名、脱敏和私有文件上传。
-- 执行数据迁移演练、容量测试、备份恢复和灰度发布。
+- ✅ 重构 Web 工程，删除重复全局函数和静态模拟数据。（Vue3 + TypeScript + Element Plus 重写，替换原 240KB 单文件 `script.js`；18 个重复声明的死函数未迁移，经营大屏的 CSS 假图表换成真实 ECharts；顺手修复了从未接上前端的 `plan-tiers` 职业类别定价管理界面，以及 `claims.py` 状态机提交材料时的一个变量作用域 bug——之前每次真实提交理赔材料都会 500）
+- ⏳ 对接 `/api/v1` 类型化客户端。（当前 API 仍是 `/api` 无版本前缀；Vue 端已有类型化 axios 客户端，但后端尚未做 `/api/v1` 迁移）
+- ⏸️ 完成小程序固定域名、脱敏和私有文件上传。
+- ⏸️ 执行数据迁移演练、容量测试、备份恢复和灰度发布。
 
 交付门槛：三端关键链路通过自动化验收，完成回滚演练和上线审批。
 

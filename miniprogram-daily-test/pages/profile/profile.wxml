@@ -1,0 +1,22 @@
+<view class="page">
+  <view class="hero row">
+    <view class="avatar">响</view>
+    <view class="grow"><view class="hero-title">测试体验账号</view><view class="hero-sub">响帮帮日常 · 本地演示环境</view><view class="test-badge">版本 {{version}}</view></view>
+  </view>
+
+  <view class="section grid-3">
+    <view class="stat"><text class="stat-value">{{taskCount}}</text><text class="stat-label">本地任务</text></view>
+    <view class="stat"><text class="stat-value">{{logCount}}</text><text class="stat-label">工作记录</text></view>
+    <view class="stat"><text class="stat-value">0</text><text class="stat-label">云端数据</text></view>
+  </view>
+
+  <view class="card section">
+    <view class="menu-item" bindtap="about"><view class="menu-icon">测</view><text class="grow">测试版说明</text><text class="chevron">›</text></view>
+    <view class="menu-item" bindtap="reset"><view class="menu-icon">复</view><text class="grow">恢复演示数据</text><text class="chevron">›</text></view>
+  </view>
+
+  <view class="card section">
+    <view class="task-title">数据安全说明</view>
+    <view class="meta">本测试版不调用网络接口，任务和记录只保存在微信本地缓存。请勿录入真实身份证、银行卡、理赔或客户敏感信息。</view>
+  </view>
+</view>

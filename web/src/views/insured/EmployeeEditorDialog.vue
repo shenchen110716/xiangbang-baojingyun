@@ -12,7 +12,15 @@ const emit = defineEmits<{ saved: [] }>()
 
 const enterprises = ref<Enterprise[]>([])
 const positions = ref<WorkPosition[]>([])
-const form = reactive({ enterprise_id: null as number | null, position_id: null as number | null, name: '', id_number: '', phone: '' })
+const form = reactive({
+  enterprise_id: null as number | null,
+  position_id: null as number | null,
+  name: '',
+  id_number: '',
+  phone: '',
+  effective_at: null as string | null,
+  terminated_at: null as string | null,
+})
 const saving = ref(false)
 
 watch(visible, async (isVisible) => {
@@ -27,9 +35,11 @@ watch(visible, async (isVisible) => {
       name: props.person.name,
       id_number: props.person.id_number,
       phone: props.person.phone,
+      effective_at: props.person.effective_at ? props.person.effective_at.slice(0, 10) : null,
+      terminated_at: props.person.terminated_at ? props.person.terminated_at.slice(0, 10) : null,
     })
   } else {
-    Object.assign(form, { enterprise_id: null, position_id: null, name: '', id_number: '', phone: '' })
+    Object.assign(form, { enterprise_id: null, position_id: null, name: '', id_number: '', phone: '', effective_at: null, terminated_at: null })
   }
 })
 
@@ -51,9 +61,14 @@ async function submit() {
     if (props.person) {
       const payload: Partial<InsuredPerson> = { name: form.name, id_number: form.id_number, phone: form.phone }
       if (form.position_id !== props.person.position_id) payload.position_id = form.position_id
+      if (form.effective_at !== (props.person.effective_at ? props.person.effective_at.slice(0, 10) : null)) payload.effective_at = form.effective_at
+      if (form.terminated_at !== (props.person.terminated_at ? props.person.terminated_at.slice(0, 10) : null)) payload.terminated_at = form.terminated_at
       await updateInsured(props.person.id, payload)
     } else {
-      await createInsured({ enterprise_id: form.enterprise_id!, position_id: form.position_id, name: form.name, id_number: form.id_number, phone: form.phone })
+      await createInsured({
+        enterprise_id: form.enterprise_id!, position_id: form.position_id, name: form.name, id_number: form.id_number, phone: form.phone,
+        effective_at: form.effective_at, terminated_at: form.terminated_at,
+      })
     }
     ElMessage.success('保存成功')
     visible.value = false
@@ -83,6 +98,14 @@ async function submit() {
       <el-form-item label="被保险人姓名" required><el-input v-model="form.name" /></el-form-item>
       <el-form-item label="身份证号" required><el-input v-model="form.id_number" /></el-form-item>
       <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
+      <el-form-item label="参保时间">
+        <el-date-picker v-model="form.effective_at" type="date" value-format="YYYY-MM-DD" placeholder="不填则不改变参保时间" style="width: 100%" />
+        <small class="hint">留空则不修改；填写后员工将变为「在保」状态</small>
+      </el-form-item>
+      <el-form-item label="停保时间">
+        <el-date-picker v-model="form.terminated_at" type="date" value-format="YYYY-MM-DD" placeholder="不填则不改变停保时间" style="width: 100%" />
+        <small class="hint">留空则不修改；填写后员工将变为「已停保」状态</small>
+      </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="visible = false">取消</el-button>

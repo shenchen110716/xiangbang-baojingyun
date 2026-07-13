@@ -12,6 +12,16 @@
       <view class="row between"><text class="strong">{{selectedPosition.actual_employer_name}}</text><text class="tag tag-success">{{selectedPosition.occupation_class}}</text></view>
       <view class="list-meta">岗位：{{selectedPosition.name}}｜审核状态：已通过</view>
     </view>
+    <label class="field">
+      <view class="field-label">参保时间</view>
+      <picker mode="date" value="{{form.effective_at}}" data-key="effective_at" bindchange="dateChange"><view class="picker">{{form.effective_at||'不填则不修改'}}</view></picker>
+      <view class="list-meta">填写后员工将变为「在保」状态</view>
+    </label>
+    <label class="field">
+      <view class="field-label">停保时间</view>
+      <picker mode="date" value="{{form.terminated_at}}" data-key="terminated_at" bindchange="dateChange"><view class="picker">{{form.terminated_at||'不填则不修改'}}</view></picker>
+      <view class="list-meta">填写后员工将变为「已停保」状态</view>
+    </label>
     <button class="primary" style="margin-top:28rpx" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{id?'保存员工信息':'提交参保审核'}}</button>
   </view>
 </view>

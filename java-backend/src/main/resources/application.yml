@@ -1,0 +1,61 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: xiangbangbang-baojing
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+  jackson:
+    default-property-inclusion: non_null
+    # The Vue admin frontend (web/) and miniprogram were both built against
+    # the Python/Pydantic backend's snake_case JSON contract (enterprise_id,
+    # insurance_base_price, created_at, ...). Rather than touch either
+    # frontend, Jackson is configured to convert Java camelCase fields to/from
+    # snake_case JSON globally, so every DTO "just matches" without
+    # per-field @JsonProperty annotations.
+    property-naming-strategy: SNAKE_CASE
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+app:
+  jwt-secret: ${JWT_SECRET:dev-only-insecure-secret-change-me}
+  admin-password: ${ADMIN_PASSWORD:admin123}
+  enterprise-password: ${ENTERPRISE_PASSWORD:enterprise123}
+  integration-mode: ${INTEGRATION_MODE:mock}
+  environment: ${ENVIRONMENT:development}
+  uploads-dir: ${UPLOADS_DIR:./uploads}
+  web-dist-dir: ${WEB_DIST_DIR:../web/dist}
+  cors-origins: ${CORS_ORIGINS:*}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:h2:file:./data/baojing;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  flyway:
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: ${DATABASE_URL}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    locations: classpath:db/migration
+    baseline-on-migrate: true

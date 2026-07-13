@@ -1,0 +1,13 @@
+<view class="page">
+  <view class="title">新建任务</view>
+  <view class="subtitle">测试数据只保存在当前设备，不会上传服务器</view>
+
+  <view class="card section">
+    <label class="field"><view class="field-label">任务名称</view><input class="input" value="{{form.title}}" data-key="title" bindinput="input" maxlength="60" placeholder="例如：跟进今日参保回执" /></label>
+    <label class="field"><view class="field-label">工作分类</view><picker range="{{categories}}" value="{{categoryIndex}}" bindchange="categoryChange"><view class="picker">{{categories[categoryIndex]}}</view></picker></label>
+    <label class="field"><view class="field-label">优先级</view><picker range="{{priorities}}" range-key="label" value="{{priorityIndex}}" bindchange="priorityChange"><view class="picker">{{priorities[priorityIndex].label}}</view></picker></label>
+    <label class="field"><view class="field-label">计划日期</view><picker mode="date" value="{{form.dueDate}}" bindchange="dateChange"><view class="picker">{{form.dueDate}}</view></picker></label>
+    <label class="field"><view class="field-label">补充说明</view><textarea class="textarea" value="{{form.note}}" data-key="note" bindinput="input" maxlength="200" placeholder="填写处理要求、联系人或注意事项" /></label>
+    <button class="primary" loading="{{saving}}" disabled="{{saving}}" bindtap="save">保存任务</button>
+  </view>
+</view>

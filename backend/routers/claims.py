@@ -84,7 +84,7 @@ def claim_status(item_id:int,data:ClaimStatusIn,user:User=Depends(current_user),
     if data.status not in CLAIM_TRANSITIONS.get(item.status,set()): raise HTTPException(409,f'案件不能从 {item.status} 变更为 {data.status}')
     if user.role=='enterprise' and data.status!='submitted': raise HTTPException(403,'该节点需由平台理赔人员处理')
     if data.status=='submitted':
-        uploaded={x.doc_type for x in session.scalars(select(ClaimDocument).where(ClaimDocument.claim_id==item.id,x.status.in_(['uploaded','accepted'])))};missing=CLAIM_REQUIRED_TYPES-uploaded
+        uploaded={x.doc_type for x in session.scalars(select(ClaimDocument).where(ClaimDocument.claim_id==item.id,ClaimDocument.status.in_(['uploaded','accepted'])))};missing=CLAIM_REQUIRED_TYPES-uploaded
         if missing: raise HTTPException(409,f'材料未齐全，还缺少 {len(missing)} 项')
     if data.status=='insurer_review' and not (data.insurer_report_no or item.insurer_report_no): raise HTTPException(409,'请先登记保司报案号')
     if data.status=='approved' and data.approved_amount is None: raise HTTPException(409,'核赔通过时必须登记核赔金额')

@@ -9,22 +9,14 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: xiangbang-baojingyun-db
-          property: connectionString
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: ADMIN_PASSWORD
-        generateValue: true
+        sync: false
       - key: ENTERPRISE_PASSWORD
-        generateValue: true
+        sync: false
       - key: CORS_ORIGINS
         value: "*"
       - key: INTEGRATION_MODE
         value: mock
-
-databases:
-  - name: xiangbang-baojingyun-db
-    plan: free
-    databaseName: xiangbang_baojingyun
-    user: xiangbang

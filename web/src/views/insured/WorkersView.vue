@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listInsured, setInsuredStatus } from '@/api/insured'
 import type { InsuredPerson } from '@/api/types'
+import { formatDateTime } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
@@ -96,8 +97,11 @@ async function runBulkAction() {
 }
 
 function exportCsv() {
-  const header = ['姓名', '身份证号', '手机号', '投保单位', '实际工作单位', '岗位', '职业类别', '产品方案', '保单号', '状态']
-  const rows = filtered.value.map((p) => [p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, p.occupation_class, p.plan_name, p.policy_no, statusText[p.status]])
+  const header = ['姓名', '身份证号', '手机号', '投保单位', '实际工作单位', '岗位', '职业类别', '产品方案', '保单号', '状态', '添加时间', '生效时间', '停保时间']
+  const rows = filtered.value.map((p) => [
+    p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, p.occupation_class, p.plan_name, p.policy_no, statusText[p.status],
+    formatDateTime(p.created_at), p.effective_at ? formatDateTime(p.effective_at) : '', p.terminated_at ? formatDateTime(p.terminated_at) : '',
+  ])
   const csv = '﻿' + [header, ...rows].map((r) => r.map((v) => `"${(v || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv' })
   const link = document.createElement('a')
@@ -141,12 +145,13 @@ function exportCsv() {
       </div>
       <el-table :data="filtered" size="small" @selection-change="(rows: InsuredPerson[]) => (selected = rows)">
         <el-table-column type="selection" width="42" />
-        <el-table-column label="被保险人" min-width="140">
+        <el-table-column label="被保险人" min-width="120">
           <template #default="{ row }">
             <div>{{ row.name }}</div>
-            <small class="muted">{{ row.id_number }} · {{ row.phone }}</small>
+            <small class="muted">{{ row.id_number }}</small>
           </template>
         </el-table-column>
+        <el-table-column prop="phone" label="手机号" width="120" />
         <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
         <el-table-column prop="actual_employer_name" label="实际工作单位" min-width="130" />
         <el-table-column label="岗位/类别" min-width="120">
@@ -160,6 +165,15 @@ function exportCsv() {
         </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="statusType[row.status]">{{ statusText[row.status] }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="添加时间" width="150">
+          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="生效时间" width="150">
+          <template #default="{ row }">{{ row.effective_at ? formatDateTime(row.effective_at) : '—' }}</template>
+        </el-table-column>
+        <el-table-column label="停保时间" width="150">
+          <template #default="{ row }">{{ row.terminated_at ? formatDateTime(row.terminated_at) : '—' }}</template>
         </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">

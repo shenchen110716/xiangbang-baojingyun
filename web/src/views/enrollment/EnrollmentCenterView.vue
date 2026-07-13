@@ -4,12 +4,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import * as enrollmentApi from '@/api/enrollment'
 import { listEnterprises } from '@/api/enterprises'
 import { listPositions } from '@/api/positions'
-import { importInsuredFile, importTemplateUrl } from '@/api/insured'
-import type { Enterprise, EnrollmentEmailLog, EnrollmentSummaryRow, WorkPosition } from '@/api/types'
+import { importInsuredFile, importTemplateUrl, listInsured } from '@/api/insured'
+import type { Enterprise, EnrollmentEmailLog, EnrollmentSummaryRow, InsuredPerson, WorkPosition } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { downloadAuthenticated } from '@/utils/download'
 import { formatDateTime } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
+import FilterBar from '@/components/FilterBar.vue'
 
 const auth = useAuthStore()
 const loading = ref(true)
@@ -17,6 +18,7 @@ const enterprises = ref<Enterprise[]>([])
 const positions = ref<WorkPosition[]>([])
 const summary = ref<EnrollmentSummaryRow[]>([])
 const emails = ref<EnrollmentEmailLog[]>([])
+const people = ref<InsuredPerson[]>([])
 const today = new Date().toISOString().slice(0, 10)
 const enrollDate = ref(today)
 
@@ -25,21 +27,52 @@ const approvedPositions = computed(() => positions.value.filter((x) => x.status 
 async function load() {
   loading.value = true
   try {
-    const [enterpriseList, positionList, summaryRows, emailRows] = await Promise.all([
+    const [enterpriseList, positionList, summaryRows, emailRows, peopleRows] = await Promise.all([
       listEnterprises(),
       listPositions(),
       enrollmentApi.getEnrollmentSummary(enrollDate.value),
       enrollmentApi.listEnrollmentEmails(),
+      listInsured(),
     ])
     enterprises.value = enterpriseList
     positions.value = positionList
     summary.value = summaryRows
     emails.value = emailRows
+    people.value = peopleRows
   } finally {
     loading.value = false
   }
 }
 onMounted(load)
+
+// ---- 参停保人员名单 ----
+const peopleSearch = ref('')
+const peopleStatusFilter = ref('')
+const statusText: Record<string, string> = { active: '在保', pending: '待审核', stopped: '已停保' }
+const statusType: Record<string, string> = { active: 'success', pending: 'warning', stopped: 'danger' }
+const filteredPeople = computed(() => {
+  let rows = people.value
+  if (peopleStatusFilter.value) rows = rows.filter((x) => x.status === peopleStatusFilter.value)
+  if (peopleSearch.value) {
+    const q = peopleSearch.value.toLowerCase()
+    rows = rows.filter((x) => [x.name, x.id_number, x.phone, x.enterprise_name].some((v) => (v || '').toLowerCase().includes(q)))
+  }
+  return rows
+})
+function exportPeopleCsv() {
+  const header = ['姓名', '身份证号', '手机号', '投保单位', '实际工作单位', '岗位', '状态', '添加时间', '生效时间', '停保时间']
+  const rows = filteredPeople.value.map((p) => [
+    p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, statusText[p.status],
+    formatDateTime(p.created_at), p.effective_at ? formatDateTime(p.effective_at) : '', p.terminated_at ? formatDateTime(p.terminated_at) : '',
+  ])
+  const csv = '﻿' + [header, ...rows].map((r) => r.map((v) => `"${(v || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = `响帮帮保经云-参停保人员-${Date.now()}.csv`
+  link.click()
+  URL.revokeObjectURL(link.href)
+}
 
 async function reloadSummary() {
   summary.value = await enrollmentApi.getEnrollmentSummary(enrollDate.value)
@@ -147,8 +180,50 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
           <el-button type="primary" :loading="importing" @click="submitImport">上传并执行</el-button>
           <el-button @click="downloadTemplate">下载模板</el-button>
         </el-form-item>
+        <p class="hint-text wide">
+          模板包含「生效日期」「停保日期」两列（格式 yyyy-MM-dd，可留空）：批量参保时填写生效日期会直接激活参保（不再停留在待审核）；批量停保时填写停保日期会用该日期而不是当前时间登记停保。
+        </p>
         <p v-if="importError" class="error-text wide">{{ importError }}</p>
       </el-form>
+    </PageCard>
+
+    <PageCard title="参停保人员名单" :count="filteredPeople.length" hint="添加时间/生效时间/停保时间来自该员工的参保激活与停保记录">
+      <template #actions>
+        <el-button @click="exportPeopleCsv">导出名单</el-button>
+      </template>
+      <div class="filter-row">
+        <FilterBar v-model:search="peopleSearch">
+          <el-select v-model="peopleStatusFilter" placeholder="全部状态" clearable style="width: 130px">
+            <el-option label="待审核" value="pending" />
+            <el-option label="在保" value="active" />
+            <el-option label="已停保" value="stopped" />
+          </el-select>
+        </FilterBar>
+      </div>
+      <el-table :data="filteredPeople" size="small">
+        <el-table-column label="被保险人" min-width="120">
+          <template #default="{ row }">
+            <div>{{ row.name }}</div>
+            <small class="muted">{{ row.id_number }}</small>
+          </template>
+        </el-table-column>
+        <el-table-column prop="phone" label="手机号" width="120" />
+        <el-table-column prop="enterprise_name" label="投保单位" min-width="120" />
+        <el-table-column prop="actual_employer_name" label="实际工作单位" min-width="120" />
+        <el-table-column prop="position_name" label="岗位" min-width="110" />
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }"><el-tag size="small" :type="statusType[row.status]">{{ statusText[row.status] }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="添加时间" width="150">
+          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="生效时间" width="150">
+          <template #default="{ row }">{{ row.effective_at ? formatDateTime(row.effective_at) : '—' }}</template>
+        </el-table-column>
+        <el-table-column label="停保时间" width="150">
+          <template #default="{ row }">{{ row.terminated_at ? formatDateTime(row.terminated_at) : '—' }}</template>
+        </el-table-column>
+      </el-table>
     </PageCard>
 
     <PageCard title="产品参停保与邮件" :count="summary.length">
@@ -242,8 +317,16 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
 .muted {
   color: var(--el-text-color-placeholder);
 }
+.filter-row {
+  padding: 0 20px 14px;
+}
 .error-text {
   color: var(--el-color-danger);
+  font-size: 12px;
+  margin: -8px 0 4px;
+}
+.hint-text {
+  color: var(--el-text-color-secondary);
   font-size: 12px;
   margin: -8px 0 4px;
 }

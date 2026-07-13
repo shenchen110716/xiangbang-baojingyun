@@ -16,14 +16,15 @@ python3 -m uvicorn backend.app:app --host 127.0.0.1 --port 8001 --reload
 
 ## 云端部署
 
-项目已包含 `Dockerfile` 和 `render.yaml`，可在 Render Blueprint 中一次创建 Web Service 和 PostgreSQL：
+项目已包含 `Dockerfile` 和 `render.yaml`，测试环境推荐使用 Render 免费 Web Service + Neon 免费 PostgreSQL：
 
-1. 将源码推送到私有 GitHub 仓库，不要上传 `.env` 或本地 `data.db`。
-2. 在 Render 选择 **New > Blueprint**，连接该仓库并应用根目录下的 `render.yaml`。
-3. 部署完成后，在服务的 Environment 中查看自动生成的 `ADMIN_PASSWORD` 和 `ENTERPRISE_PASSWORD`。
-4. 打开 Render 分配的 HTTPS 域名；`/api/health` 返回 `ok: true` 即表示发布成功。
+1. 将源码推送到私有 GitHub 仓库，不要上传 `.env`、本地 `data.db` 或 `uploads/`。
+2. 在 Neon 创建 PostgreSQL 项目，复制 Direct（非 pooled）连接字符串。当前容器启动时会运行 Alembic，因此迁移连接应使用 Direct 地址。
+3. 在 Render 选择 **New > Blueprint**，连接该仓库并应用根目录下的 `render.yaml`。
+4. 按提示输入 Neon `DATABASE_URL`、强 `ADMIN_PASSWORD` 和强 `ENTERPRISE_PASSWORD`；这些值只存储在 Render 密钥配置中。
+5. 打开 Render 分配的 HTTPS 域名；`/api/health` 返回 `ok: true` 即表示发布成功。
 
-云端默认使用 PostgreSQL 保存业务数据。理赔附件目录需在长期运营前接入持久化磁盘或对象存储。
+云端使用 PostgreSQL 保存业务数据。Render 免费 Web Service 的本地文件系统不持久化，理赔附件和岗位视频只适合演示；长期运营前必须接入私有对象存储。
 
 ## API
 

@@ -1,0 +1,21 @@
+<view class="page">
+  <view class="title">工作记录</view>
+  <view class="subtitle">简短记录进展，方便下班前回顾今日成果</view>
+
+  <view class="card section">
+    <label class="field"><view class="field-label">今日进展</view><textarea class="textarea" value="{{content}}" bindinput="input" maxlength="300" placeholder="例如：完成客户资料复核，等待保司回执" /></label>
+    <label class="field"><view class="field-label">当前状态</view><picker range="{{moods}}" value="{{moodIndex}}" bindchange="moodChange"><view class="picker">{{moods[moodIndex]}}</view></picker></label>
+    <button class="primary" bindtap="add">保存记录</button>
+  </view>
+
+  <view class="section">
+    <view class="section-head"><text class="section-title">最近记录</text><text class="muted">{{logs.length}} 条</text></view>
+    <view class="timeline">
+      <view wx:for="{{logs}}" wx:key="id" class="timeline-item card">
+        <view class="row between"><text class="tag">{{item.mood}}</text><text class="muted">{{item.createdAt}}</text></view>
+        <view class="log-content section">{{item.content}}</view>
+      </view>
+    </view>
+    <view wx:if="{{!logs.length}}" class="empty">还没有工作记录</view>
+  </view>
+</view>

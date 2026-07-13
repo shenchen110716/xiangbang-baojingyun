@@ -1,0 +1,38 @@
+<view class="page">
+  <view class="hero">
+    <view class="eyebrow">XIANGBANG DAILY</view>
+    <view class="hero-title">{{greeting}}，今天也稳稳推进</view>
+    <view class="hero-sub">{{dateText}} · 把重要的事情一件件完成</view>
+    <view class="test-badge">● 本地演示模式</view>
+  </view>
+
+  <view class="section">
+    <view class="section-head"><text class="section-title">今日概览</text><text class="section-link">完成 {{progress}}%</text></view>
+    <view class="grid-3">
+      <view class="stat"><text class="stat-value">{{total}}</text><text class="stat-label">全部任务</text></view>
+      <view class="stat"><text class="stat-value">{{pending}}</text><text class="stat-label">待处理</text></view>
+      <view class="stat"><text class="stat-value">{{done}}</text><text class="stat-label">已完成</text></view>
+    </view>
+    <view class="progress"><view class="progress-in" style="width:{{progress}}%"></view></view>
+  </view>
+
+  <view class="section">
+    <view class="section-head"><text class="section-title">优先待办</text><text class="section-link" bindtap="openTasks">查看全部 →</text></view>
+    <view wx:for="{{previewTasks}}" wx:key="id" class="card row top" data-id="{{item.id}}" bindtap="toggle">
+      <view class="check">✓</view>
+      <view class="grow">
+        <view class="row between"><text class="task-title grow">{{item.title}}</text><text class="tag tag-{{item.priority}}">{{item.priority==='high'?'紧急':item.priority==='medium'?'普通':'稍后'}}</text></view>
+        <view class="meta">{{item.category}} · {{item.dueDate}}</view>
+      </view>
+    </view>
+    <view wx:if="{{!previewTasks.length}}" class="card"><view class="empty">今天的任务都完成了 🎉</view></view>
+  </view>
+
+  <view class="section">
+    <view class="section-head"><text class="section-title">快捷操作</text></view>
+    <view class="quick-grid">
+      <view class="quick" bindtap="createTask"><view class="quick-icon">＋</view><text class="quick-title">新建任务</text><text class="quick-sub">记录新的待办</text></view>
+      <view class="quick" bindtap="openLogs"><view class="quick-icon">记</view><text class="quick-title">工作记录</text><text class="quick-sub">写下今日进展</text></view>
+    </view>
+  </view>
+</view>

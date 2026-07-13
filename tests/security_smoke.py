@@ -86,12 +86,23 @@ def run():
             admin = call_json("POST", "/api/auth/login", body={"username": "admin", "password": "admin123", "portal": "admin"})[1]["access_token"]
 
             # --- source/db/config exposure ---
-            for path in ["/backend/app.py", "/data.db", "/requirements.txt", "/.env.example", "/backend/core/config.py"]:
+            # The Vue SPA fallback (serve_frontend in backend/app.py) is an
+            # explicit allowlist of known client routes, not a wildcard —
+            # unmatched paths (source files, but also just plain typos) must
+            # still 404, not silently serve index.html.
+            for path in ["/backend/app.py", "/data.db", "/requirements.txt", "/.env.example", "/backend/core/config.py", "/does-not-exist", "/assets/does-not-exist.js"]:
                 status, _ = call("GET", path)
                 assert status == 404, f"{path} should be blocked, got {status}"
-            for path in ["/", "/index.html", "/script.js", "/styles.css"]:
+            for path in ["/", "/claims", "/billing", "/login"]:
                 status, _ = call("GET", path)
-                assert status == 200, f"{path} should serve, got {status}"
+                assert status == 200, f"{path} should serve the SPA shell, got {status}"
+
+            # a real hashed asset referenced by the built index.html must be servable
+            index_html = (ROOT / "web" / "dist" / "index.html").read_text()
+            asset_match = re.search(r'src="(/assets/[^"]+\.js)"', index_html)
+            assert asset_match, "could not find a JS asset reference in web/dist/index.html — did `npm run build` run in web/?"
+            status, _ = call("GET", asset_match.group(1))
+            assert status == 200, f"{asset_match.group(1)} should serve, got {status}"
 
             # --- cross-tenant isolation ---
             ent_a = call_json("POST", "/api/enterprises", admin, {"name": "租户A"})[1]
