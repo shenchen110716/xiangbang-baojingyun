@@ -2,6 +2,7 @@ services:
   - type: web
     name: xiangbang-baojingyun
     runtime: docker
+    region: singapore
     plan: free
     healthCheckPath: /api/health
     autoDeployTrigger: commit
