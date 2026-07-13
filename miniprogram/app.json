@@ -5,6 +5,8 @@
     "pages/employees/employees",
     "pages/claims/claims",
     "pages/profile/profile",
+    "pages/operators/operators",
+    "pages/operator-edit/operator-edit",
     "pages/employers/employers",
     "pages/employer-edit/employer-edit",
     "pages/positions/positions",

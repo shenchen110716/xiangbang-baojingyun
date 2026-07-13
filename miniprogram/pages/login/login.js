@@ -9,8 +9,9 @@ Page({
     loading: false,
     error: ''
   },
-  onLoad() {
+  onLoad(options) {
     this.setData({ apiBase: app.globalData.apiBase });
+    if (options.switch === '1') this.setData({ username: '', password: '', error: '请输入要切换的操作员账号和密码' });
     if (app.globalData.token) {
       app.loadProfile().then(() => wx.switchTab({ url: '/pages/home/home' })).catch(() => {});
     }

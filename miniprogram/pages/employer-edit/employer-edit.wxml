@@ -1,9 +1,9 @@
-<view class="page"><view class="title">新增实际用工单位</view><view class="subtitle">用于建立劳务派遣/业务外包的实际用工关系</view>
+<view class="page"><view class="title">新增实际工作单位</view><view class="subtitle">岗位和参保员工将关联到该实际工作单位</view>
   <view class="card section">
-    <label class="field"><view class="field-label required">单位名称</view><input class="input" data-key="name" bindinput="input" placeholder="请输入企业全称" /></label>
-    <label class="field"><view class="field-label">统一社会信用代码</view><input class="input" data-key="credit_code" bindinput="input" placeholder="请输入18位信用代码" /></label>
-    <label class="field"><view class="field-label">联系人</view><input class="input" data-key="contact" bindinput="input" placeholder="业务联系人" /></label>
-    <label class="field"><view class="field-label">联系电话</view><input class="input" type="number" data-key="phone" bindinput="input" placeholder="联系电话" /></label>
-    <button class="primary" loading="{{saving}}" disabled="{{saving}}" bindtap="save">保存用工单位</button>
+    <label class="field"><view class="field-label required">单位名称</view><input class="input" value="{{form.name}}" data-key="name" bindinput="input" placeholder="请输入企业全称" /></label>
+    <label class="field"><view class="field-label">统一社会信用代码</view><input class="input" value="{{form.credit_code}}" data-key="credit_code" bindinput="input" placeholder="请输入18位信用代码" /></label>
+    <label class="field"><view class="field-label">联系人</view><input class="input" value="{{form.contact}}" data-key="contact" bindinput="input" placeholder="业务联系人" /></label>
+    <label class="field"><view class="field-label">联系电话</view><input class="input" value="{{form.phone}}" type="number" data-key="phone" bindinput="input" placeholder="联系电话" /></label>
+    <button class="primary" loading="{{saving}}" disabled="{{saving}}" bindtap="save">保存工作单位</button>
   </view>
 </view>

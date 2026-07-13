@@ -1,10 +1,10 @@
 <view class="page safe-bottom">
-  <view class="title">实际用工单位</view><view class="subtitle">管理合作企业、岗位和参保关系</view>
+  <view class="title">工作单位管理</view><view class="subtitle">添加本企业员工的实际工作单位</view>
   <view wx:if="{{loading}}" class="loading">正在加载…</view>
   <view wx:for="{{items}}" wx:key="id" class="card section">
     <view class="row top"><view class="avatar">企</view><view class="grow"><view class="row between"><text class="list-title">{{item.name}}</text><text class="tag {{item.status==='active'?'tag-success':'tag-gray'}}">{{item.status_label}}</text></view><view class="list-meta">信用代码：{{item.credit_code||'未填写'}}</view><view class="list-meta">联系人：{{item.contact||'—'}} {{item.phone||''}}</view></view></view>
-    <view class="divider"></view><button class="{{item.status==='active'?'danger-btn':'secondary'}}" data-id="{{item.id}}" bindtap="toggle">{{item.status==='active'?'暂停合作':'恢复合作'}}</button>
+    <view class="divider"></view><view class="toolbar"><button class="secondary" data-id="{{item.id}}" bindtap="edit">编辑</button><button class="{{item.status==='active'?'danger-btn':'secondary'}}" data-id="{{item.id}}" bindtap="toggle">{{item.status==='active'?'暂停合作':'恢复合作'}}</button><button class="danger-btn" data-id="{{item.id}}" bindtap="remove">删除</button></view>
   </view>
-  <view wx:if="{{!loading&&!items.length}}" class="empty"><view class="empty-icon">企</view><view>暂无实际用工单位</view></view>
+  <view wx:if="{{!loading&&!items.length}}" class="empty"><view class="empty-icon">企</view><view>暂无实际工作单位</view></view>
   <view class="fab" bindtap="add">+</view>
 </view>

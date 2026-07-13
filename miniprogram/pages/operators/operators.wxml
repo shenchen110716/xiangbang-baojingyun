@@ -1,0 +1,12 @@
+<view class="page safe-bottom">
+  <view class="title">操作员管理</view><view class="subtitle">为同一单位创建独立登录账号</view>
+  <view wx:if="{{!canManage&&!loading}}" class="card notice">当前账号可查看操作员，新增、启停和重置密码需由单位主管操作。</view>
+  <view wx:if="{{loading}}" class="loading">正在加载…</view>
+  <view wx:for="{{items}}" wx:key="id" class="card section">
+    <view class="row between"><view><view class="list-title">{{item.name}}</view><view class="list-meta">账号 {{item.username}}</view></view><text class="tag {{item.active?'tag-success':'tag-gray'}}">{{item.active?'正常':'已停用'}}</text></view>
+    <view class="divider"></view><view class="row between"><text class="muted">{{item.is_owner?'单位主管':'操作员'}}</text><text>{{item.phone||'未填写手机号'}}</text></view>
+    <view wx:if="{{canManage}}" class="row" style="margin-top:22rpx"><button class="mini-btn" data-id="{{item.id}}" bindtap="reset">重置密码</button><button wx:if="{{!item.is_owner}}" class="mini-btn" data-id="{{item.id}}" bindtap="toggle">{{item.active?'停用':'启用'}}</button></view>
+  </view>
+  <view wx:if="{{!loading&&!items.length}}" class="empty">暂无操作员</view>
+  <view wx:if="{{canManage}}" class="fab" bindtap="add">+</view>
+</view>

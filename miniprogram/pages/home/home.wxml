@@ -6,7 +6,7 @@
   </view>
 
   <view class="grid-2 section">
-    <view class="stat"><text class="stat-label">参保员工</text><text class="stat-value">{{dashboard.people||0}}<text class="stat-unit">人</text></text></view>
+    <view class="stat"><text class="stat-label">参保员工</text><text class="stat-value">{{dashboard.active_people||0}}<text class="stat-unit">人</text></text></view>
     <view class="stat"><text class="stat-label">待审核</text><text class="stat-value">{{dashboard.pending_people||0}}<text class="stat-unit">人</text></text></view>
     <view class="stat"><text class="stat-label">保费余额</text><text class="stat-value">¥{{dashboard.premium_balance||0}}</text></view>
     <view class="stat"><text class="stat-label">理赔处理中</text><text class="stat-value">{{dashboard.claims_open||0}}<text class="stat-unit">件</text></text></view>

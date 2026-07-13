@@ -8,17 +8,20 @@
   </view>
   <view class="grid-2 section"><view class="stat"><text class="stat-label">保费余额</text><text class="stat-value">¥{{dashboard.premium_balance||0}}</text></view><view class="stat"><text class="stat-label">使用费余额</text><text class="stat-value">¥{{dashboard.usage_balance||0}}</text></view></view>
   <view class="card section">
-    <view class="menu-item" data-url="/pages/employers/employers" bindtap="go"><view class="menu-icon">企</view><text class="grow">实际用工单位</text><text class="chevron">›</text></view>
+    <view class="menu-item" data-url="/pages/employers/employers" bindtap="go"><view class="menu-icon">企</view><text class="grow">工作单位管理</text><text class="chevron">›</text></view>
     <view class="menu-item" data-url="/pages/positions/positions" bindtap="go"><view class="menu-icon">岗</view><text class="grow">投保岗位与视频</text><text class="chevron">›</text></view>
     <view class="menu-item" data-url="/pages/products/products" bindtap="go"><view class="menu-icon">保</view><text class="grow">已分配参保产品</text><text class="chevron">›</text></view>
     <view class="menu-item" data-url="/pages/policies/policies" bindtap="go"><view class="menu-icon">单</view><text class="grow">保单管理</text><text class="chevron">›</text></view>
     <view class="menu-item" data-url="/pages/billing/billing" bindtap="go"><view class="menu-icon">¥</view><text class="grow">资金账户</text><text class="chevron">›</text></view>
   </view>
   <view class="card">
+    <view class="menu-item" data-url="/pages/operators/operators" bindtap="go"><view class="menu-icon">员</view><text class="grow">操作员管理</text><text class="chevron">›</text></view>
     <view class="menu-item" data-url="/pages/messages/messages" bindtap="go"><view class="menu-icon">信</view><text class="grow">消息与待办</text><text wx:if="{{messageCount}}" class="badge">{{messageCount}}</text><text class="chevron">›</text></view>
     <view class="menu-item" data-url="/pages/reports/reports" bindtap="go"><view class="menu-icon">报</view><text class="grow">经营报表</text><text class="chevron">›</text></view>
     <view class="menu-item" data-url="/pages/settings/settings" bindtap="go"><view class="menu-icon">设</view><text class="grow">系统设置</text><text class="chevron">›</text></view>
   </view>
+  <button class="secondary" bindtap="switchUser">切换登录用户</button>
+  <button class="secondary" bindtap="changePassword">修改登录密码</button>
   <button class="danger-btn" bindtap="logout">退出当前账号</button>
-  <view class="small" style="text-align:center;margin-top:24rpx">响帮帮保经云用户端 v3.1</view>
+  <view class="small" style="text-align:center;margin-top:24rpx">响帮帮保经云用户端 v3.5</view>
 </view>
