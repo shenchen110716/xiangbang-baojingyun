@@ -28,8 +28,8 @@ class MockProvider:
         return ProviderResult(True, self.name, f"MOCK-{int(datetime.now(timezone.utc).timestamp())}", {"accepted": len(payload.get("people", [])), "mode": "mock"}, "模拟停保成功")
     def send_sms(self, phone: str, template: str, params: dict) -> ProviderResult:
         return ProviderResult(True, self.name, "MOCK-SMS", {"phone": phone, "template": template}, "模拟短信已记录")
-    def send_email(self, to: str, subject: str, body: str) -> ProviderResult:
-        return ProviderResult(True, self.name, "MOCK-EMAIL", {"to": to, "subject": subject}, "模拟邮件已记录")
+    def send_email(self, to: str, subject: str, body: str, attachments: list[dict] | None = None) -> ProviderResult:
+        return ProviderResult(True, self.name, "MOCK-EMAIL", {"to": to, "subject": subject, "attachments": [item.get("filename","") for item in (attachments or [])]}, "模拟邮件及名单附件已记录")
     def create_payment(self, amount: float, order_no: str) -> ProviderResult:
         return ProviderResult(True, self.name, order_no, {"amount": amount, "pay_url": f"/mock-pay/{order_no}"}, "模拟支付单已创建")
 
@@ -45,7 +45,7 @@ class HttpProvider(MockProvider):
     def submit_enrollment(self,payload): return self._post(payload,'ENR-'+str(int(datetime.now(timezone.utc).timestamp())))
     def submit_termination(self,payload): return self._post(payload,'TER-'+str(int(datetime.now(timezone.utc).timestamp())))
     def send_sms(self,phone,template,params): return self._post({'phone':phone,'template':template,'params':params},'SMS-'+str(int(datetime.now(timezone.utc).timestamp())))
-    def send_email(self,to,subject,body): return self._post({'to':to,'subject':subject,'body':body},'MAIL-'+str(int(datetime.now(timezone.utc).timestamp())))
+    def send_email(self,to,subject,body,attachments=None): return self._post({'to':to,'subject':subject,'body':body,'attachments':attachments or []},'MAIL-'+str(int(datetime.now(timezone.utc).timestamp())))
     def create_payment(self,amount,order_no): return self._post({'amount':amount,'order_no':order_no},order_no)
 
 def provider_mode() -> str: return os.getenv("INTEGRATION_MODE", "mock")
