@@ -1,0 +1,31 @@
+/* Brand palette carried forward from the legacy styles.css :root block,
+   remapped onto Element Plus's CSS custom properties. */
+:root {
+  --el-color-primary: #5b6ff3;
+  --el-color-success: #27b688;
+  --el-color-warning: #f39b50;
+  --el-color-danger: #ef6e76;
+  --el-text-color-primary: #20283f;
+  --el-text-color-regular: #20283f;
+  --el-text-color-secondary: #8991a5;
+  --el-border-color-lighter: #e9ecf3;
+  --el-fill-color-light: #f6f7fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Manrope', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+}
+
+.page-placeholder {
+  background: #fff;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 9px;
+  padding: 60px 0;
+}

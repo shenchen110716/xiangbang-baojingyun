@@ -1,0 +1,429 @@
+export type Role = 'admin' | 'enterprise'
+
+export interface User {
+  id: number
+  username: string
+  name: string
+  role: Role
+  enterprise_id: number | null
+  phone: string
+  is_owner: boolean
+  active: boolean
+}
+
+export interface Enterprise {
+  id: number
+  name: string
+  kind: string
+  credit_code: string
+  contact: string
+  phone: string
+  status: string
+  agent_id: number | null
+  agent_name?: string
+  premium_balance: number
+  usage_balance: number
+  usage_fee_daily: number
+  alert_days: number
+  created_at: string
+}
+
+export interface ActualEmployer {
+  id: number
+  enterprise_id: number
+  name: string
+  credit_code: string
+  contact: string
+  phone: string
+  status: 'active' | 'paused'
+  created_at: string
+}
+
+export interface WorkPosition {
+  id: number
+  enterprise_id: number
+  actual_employer_id: number | null
+  actual_employer: string
+  actual_employer_name?: string
+  name: string
+  occupation_class: string
+  plan_id: number | null
+  status: 'pending' | 'approved' | 'rejected' | 'supplement'
+  video_count?: number
+  latest_video_status?: string
+  review_note?: string
+  created_at: string
+}
+
+export interface PositionVideo {
+  id: number
+  position_id: number
+  name: string
+  url: string
+  status: string
+  review_note: string
+  created_at: string
+}
+
+export interface PricingSnapshot {
+  insurance_base_price: number
+  total_commission_rate: number
+  total_commission_amount: number
+  policy_floor_price: number
+  insurer_settlement_price: number
+  profit_amount: number
+  minimum_sale_price: number
+  commission_mode: 'rebate' | 'price'
+  agent_commission_rate: number
+  agent_commission_amount: number
+  sale_price: number
+  platform_margin_amount: number
+}
+
+export interface InsurancePlan extends PricingSnapshot {
+  id: number
+  insurer: string
+  insurer_email: string
+  name: string
+  coverage: string
+  occupation_classes: string
+  price: number
+  commission_rate: number
+  profit_amount: number
+  payment_mode: string
+  billing_mode: 'monthly' | 'daily'
+  effective_mode: 'next_day' | 'immediate'
+  status: 'active' | 'paused'
+  created_at: string
+}
+
+export interface PlanTier {
+  id: number
+  plan_id: number
+  occupation_class: string
+  price: number
+  coverage: string
+  status: string
+  created_at: string
+}
+
+export interface InsuredPerson extends Partial<PricingSnapshot> {
+  id: number
+  enterprise_id: number
+  enterprise_name?: string
+  name: string
+  phone: string
+  id_number: string
+  occupation: string
+  occupation_class: string
+  position_id: number | null
+  position_name?: string
+  actual_employer_name?: string
+  plan_id?: number | null
+  plan_name?: string
+  insurer?: string
+  policy_no?: string
+  policy_status?: string
+  status: 'pending' | 'active' | 'stopped'
+  policy_id: number | null
+  created_at: string
+}
+
+export interface PolicyMemberHistory {
+  id: number
+  policy_id: number
+  person_id: number
+  rate_snapshot_json: string
+  effective_at: string
+  terminated_at: string | null
+  endorsement_no: string
+  status: string
+  created_at: string
+  policy_no: string
+  insurer: string
+  plan_name: string
+}
+
+export interface Policy extends Partial<PricingSnapshot> {
+  id: number
+  policy_no: string
+  enterprise_id: number
+  enterprise_name: string
+  plan_id: number
+  plan_name: string
+  insurer: string
+  premium: number
+  premium_original?: number
+  calculated_premium?: number
+  status: string
+  start_date: string
+  end_date: string
+  insured_count: number
+  billing_mode: string
+  effective_mode: string
+  insurance_base_total?: number
+  policy_floor_total?: number
+  minimum_sale_total?: number
+  sale_total?: number
+  total_commission_total?: number
+  agent_commission_total?: number
+  created_at: string
+}
+
+export interface Claim {
+  id: number
+  enterprise_id: number
+  enterprise_name: string
+  person_id: number
+  person_name: string
+  id_number: string
+  position_name: string
+  actual_employer_name: string
+  policy_no: string
+  plan_name: string
+  insurer: string
+  claim_no: string
+  description: string
+  status: string
+  amount: number
+  accident_at: string
+  accident_place: string
+  accident_type: string
+  hospital: string
+  diagnosis: string
+  medical_cost: number
+  contact_name: string
+  contact_phone: string
+  insurer_report_no: string
+  current_handler: string
+  deadline: string
+  approved_amount: number
+  paid_at: string
+  rejection_reason: string
+  review_note: string
+  sla_deadline: string
+  risk_level: 'normal' | 'attention' | 'high'
+  document_count: number
+  missing_count: number
+  missing_types: string[]
+  complete_percent: number
+  deadline_days: number | null
+  deadline_overdue: boolean
+  sla_overdue: boolean
+  calculated_risk: string
+  created_at: string
+}
+
+export interface ClaimDocument {
+  id: number
+  claim_id: number
+  name: string
+  url: string
+  doc_type: string
+  status: string
+  review_note: string
+  created_at: string
+}
+
+export interface ClaimTimelineItem {
+  id: number
+  claim_id: number
+  node: string
+  action: string
+  note: string
+  operator: string
+  created_at: string
+}
+
+export interface ChecklistItem {
+  doc_type: string
+  name: string
+  required: boolean
+  uploaded: boolean
+  status: string
+  review_note: string
+}
+
+export interface AgentCommission extends Partial<PricingSnapshot> {
+  id: number
+  agent_id: number
+  agent_name: string
+  enterprise_id: number
+  enterprise_name: string
+  plan_id: number
+  plan_name: string
+  insurer: string
+  rate: number
+  mode: 'rebate' | 'price' | 'markup'
+  markup_amount: number
+  sale_price: number
+  status: string
+  insured_count?: number
+  agent_commission_unit?: number
+  agent_commission_total?: number
+  created_at: string
+}
+
+export interface Agent {
+  id: number
+  username: string
+  name: string
+  phone: string
+  role: string
+  active: boolean
+  status: string
+  enterprise_count: number
+  product_count: number
+  insured_count: number
+  total_commission: number
+  created_at: string
+}
+
+export interface Operator {
+  id: number
+  username: string
+  name: string
+  phone: string
+  role: string
+  enterprise_id: number | null
+  enterprise_name: string
+  is_owner: boolean
+  active: boolean
+  created_at: string
+}
+
+export interface Invoice {
+  id: number
+  enterprise_id: number
+  enterprise_name: string
+  account: 'premium' | 'usage'
+  amount: number
+  title: string
+  tax_no: string
+  email: string
+  status: 'pending' | 'approved' | 'issued' | 'rejected'
+  created_at: string
+}
+
+export interface BillingRow {
+  id: number
+  enterprise_name: string
+  account: string
+  balance: number
+  status: string
+  daily_rate: number
+  estimated_daily: number
+  monthly_estimate?: number
+}
+
+export interface LedgerEntry {
+  id: number
+  enterprise_id: number
+  account: string
+  direction: 'credit' | 'debit'
+  amount: number
+  business_type: string
+  business_id: string
+  operator: string
+  occurred_at: string
+}
+
+export interface LedgerResponse {
+  entries: LedgerEntry[]
+  reconciliation: Array<{ account: string; cached_balance: number; ledger_balance: number; diff: number }>
+}
+
+export interface AuditLogItem {
+  id: number
+  user_id: number
+  operator: string
+  action: string
+  object_type: string
+  object_id: string
+  detail: string
+  created_at: string
+}
+
+export interface DashboardData {
+  portal: 'admin' | 'enterprise'
+  enterprises: number
+  people: number
+  active_people: number
+  active_policies: number
+  pending_enterprises: number
+  pending_people: number
+  claims_open: number
+  premium_balance: number
+  usage_balance: number
+  balance_alerts: Array<{
+    enterprise_id: number
+    enterprise_name: string
+    account: string
+    balance: number
+    daily_burn: number
+    days_left: number
+    alert_days: number
+    level: 'critical' | 'warning'
+  }>
+}
+
+export interface ScreenProduct {
+  plan_id: number
+  insurer: string
+  product: string
+  insured_count: number
+  enterprise_count: number
+  premium_total: number
+  policy_count: number
+}
+
+export interface MessageItem {
+  id: string
+  type: 'warning' | 'todo' | 'danger' | 'success'
+  title: string
+  content: string
+  created_at: string
+  path: string
+}
+
+export interface EnrollmentSummaryRow {
+  plan_id: number
+  insurer: string
+  insurer_email: string
+  product: string
+  insured_count: number
+  new_count: number
+  stop_count: number
+}
+
+export interface EnrollmentEmailLog {
+  id: number
+  enterprise_id: number
+  enterprise_name: string
+  plan_id: number
+  plan_name: string
+  insurer: string
+  kind: string
+  recipient: string
+  filename: string
+  people_count: number
+  request_id: string
+  status: string
+  created_at: string
+}
+
+export interface ReportRow {
+  id: string
+  name: string
+  period: string
+  value: number
+  detail: string
+}
+
+export interface ProviderStatus {
+  mode: 'mock' | 'real'
+  insurer_api: boolean
+  sms: boolean
+  email: boolean
+  payment: boolean
+}
