@@ -11,6 +11,7 @@ from ..core.security import current_user
 from ..models import Enterprise, PaymentRecord, User
 from ..providers import payment_provider
 from ..schemas import PaymentCallbackIn, PaymentIn
+from ..services import post_ledger_entry
 
 router = APIRouter(prefix="/api", tags=["payments"])
 
@@ -33,6 +34,7 @@ def payment_callback(data:PaymentCallbackIn,session:Session=Depends(db)):
         ent=session.get(Enterprise,row.enterprise_id)
         if row.account=="premium": ent.premium_balance += row.amount
         else: ent.usage_balance += row.amount
+        post_ledger_entry(session, ent, row.account, "credit", row.amount, "payment", row.order_no, idempotency_key=row.order_no)
     session.commit();return {"ok":True,"order_no":row.order_no,"status":row.status,"idempotent":False}
 
 @router.get("/payments/reconcile", dependencies=[Depends(require_role("admin", detail="仅总后台可对账"))])

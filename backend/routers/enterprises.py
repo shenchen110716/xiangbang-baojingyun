@@ -8,9 +8,9 @@ from ..core.audit import audit
 from ..core.db import db
 from ..core.rbac import require_role
 from ..core.security import current_user, pwd
-from ..models import AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, User, WorkPosition
+from ..models import AgentCommission, Enterprise, InsurancePlan, InsuredPerson, LedgerEntry, Policy, User, WorkPosition
 from ..schemas import AgentIn, EnterpriseIn, EnterpriseUpdate, RechargeIn
-from ..services import pricing_snapshot, serialize
+from ..services import ledger_dict, post_ledger_entry, pricing_snapshot, reconcile_enterprise_ledger, serialize
 
 router = APIRouter(prefix="/api", tags=["enterprises"])
 
@@ -74,10 +74,19 @@ def recharge_enterprise(item_id: int, data: RechargeIn, user: User = Depends(cur
     # into any frontend) replaces it.
     item = session.get(Enterprise, item_id)
     if not item: raise HTTPException(404, "投保单位不存在")
+    if data.account not in {"premium", "usage"}: raise HTTPException(400, "账户类型不合法")
     if data.account == "premium": item.premium_balance += data.amount
-    elif data.account == "usage": item.usage_balance += data.amount
-    else: raise HTTPException(400, "账户类型不合法")
+    else: item.usage_balance += data.amount
+    post_ledger_entry(session, item, data.account, "credit", data.amount, "manual_recharge", str(item_id), user)
     session.commit(); audit(session, user, "recharge", "enterprise", str(item_id), f"{data.account}:{data.amount}"); return serialize(item)
+
+@router.get("/enterprises/{item_id}/ledger")
+def enterprise_ledger(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):
+    item = session.get(Enterprise, item_id)
+    if not item: raise HTTPException(404, "投保单位不存在")
+    if user.role == "enterprise" and user.enterprise_id != item_id: raise HTTPException(403, "无权查看该单位账本")
+    rows = session.scalars(select(LedgerEntry).where(LedgerEntry.enterprise_id == item_id).order_by(LedgerEntry.id.desc())).all()
+    return {"entries": [ledger_dict(x, session) for x in rows], "reconciliation": reconcile_enterprise_ledger(session, item)}
 
 @router.get("/enterprises/{item_id}/admins")
 def enterprise_admins(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):
