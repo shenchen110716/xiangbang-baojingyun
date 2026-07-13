@@ -80,224 +80,10 @@ from .routers.enterprises import add_enterprise  # noqa: F401
 from .routers.dashboard import dashboard, screen_products  # noqa: F401
 from .routers.positions import add_actual_employer, update_actual_employer, delete_actual_employer, add_position  # noqa: F401
 
-@app.get("/api/reports")
-def reports(user: User = Depends(current_user), session: Session = Depends(db)):
-    enterprise_id = user.enterprise_id if user.role == "enterprise" else None
-    policy_rows = session.scalars(select(Policy).where(Policy.enterprise_id == enterprise_id) if enterprise_id else select(Policy)).all();policies=[policy_dict(x,session) for x in policy_rows]
-    people = session.query(InsuredPerson).filter(InsuredPerson.enterprise_id == enterprise_id).count() if enterprise_id else session.query(InsuredPerson).count()
-    claims = session.query(Claim).filter(Claim.enterprise_id == enterprise_id).count() if enterprise_id else session.query(Claim).count()
-    now=date.today(); days=calendar.monthrange(now.year,now.month)[1]
-    def prorated(policy):
-        try:
-            start=datetime.strptime(policy['start_date'],'%Y-%m-%d').date() if policy['start_date'] else now.replace(day=1)
-            end=datetime.strptime(policy['end_date'],'%Y-%m-%d').date() if policy['end_date'] else now.replace(day=days)
-            active=max(0,(min(end,now.replace(day=days))-max(start,now.replace(day=1))).days+1)
-            return float(policy['premium'] or 0)*active/days
-        except Exception: return float(policy['premium'] or 0)
-    premium = sum(prorated(x) for x in policies)
-    settlement=sum(float(x.get('policy_floor_total',0)) for x in policies);commission=sum(float(x.get('total_commission_total',0)) for x in policies)
-    return [{"id":"premium","name":"销售保费汇总","period":f"{now.year}-{now.month:02d}按实际天数","value":premium,"detail":f"{len(policies)} 张保单，统一按销售价格计算"},{"id":"settlement","name":"保司结算底价","period":"当前","value":settlement,"detail":"保险原价 ×（1-总返佣比例）"},{"id":"commission","name":"总返佣金额","period":"当前","value":commission,"detail":"保险原价 × 总返佣比例"},{"id":"people","name":"参保人员报表","period":"当前","value":people,"detail":"在册参保人员"},{"id":"claims","name":"理赔统计报表","period":"累计","value":claims,"detail":"理赔案件"}]
-
-@app.get("/api/billing")
-def billing(user: User = Depends(current_user), session: Session = Depends(db)):
-    stmt = select(Enterprise).where(Enterprise.id == user.enterprise_id) if user.role == "enterprise" and user.enterprise_id else select(Enterprise)
-    rows=[]
-    for x in session.scalars(stmt):
-        people = session.query(InsuredPerson).filter(InsuredPerson.enterprise_id==x.id, InsuredPerson.status.in_(['active','pending'])).count()
-        days = calendar.monthrange(date.today().year,date.today().month)[1]
-        daily_usage = people * float(x.usage_fee_daily or 0.1)
-        rows.append({"id":x.id,"enterprise_name":x.name,"account":"保费账户","balance":x.premium_balance,"status":"正常","daily_rate":0,"estimated_daily":0})
-        rows.append({"id":x.id,"enterprise_name":x.name,"account":"平台使用费账户","balance":x.usage_balance,"status":"正常","daily_rate":x.usage_fee_daily or 0.1,"estimated_daily":daily_usage,"monthly_estimate":daily_usage*days})
-    return rows
-
-@app.get("/api/policies")
-def policies(user: User = Depends(current_user), session: Session = Depends(db)):
-    stmt=select(Policy).order_by(Policy.id.desc())
-    if user.role=="enterprise" and user.enterprise_id: stmt=stmt.where(Policy.enterprise_id==user.enterprise_id)
-    return [policy_dict(x,session) for x in session.scalars(stmt)]
-
-@app.get("/api/policies/{item_id}/export")
-def export_policy(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
-    policy=session.get(Policy,item_id)
-    if not policy: raise HTTPException(404,'保单不存在')
-    if user.role=='enterprise' and user.enterprise_id!=policy.enterprise_id: raise HTTPException(403,'无权导出该保单')
-    enterprise=session.get(Enterprise,policy.enterprise_id);plan=session.get(InsurancePlan,policy.plan_id)
-    import io,openpyxl
-    relation=session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id==policy.enterprise_id,AgentCommission.plan_id==policy.plan_id,AgentCommission.status=='active').order_by(AgentCommission.id.desc()))
-    book=openpyxl.Workbook();sheet=book.active;sheet.title='保单人员明细';sheet.append(['保单号','投保单位','实际用工单位','岗位','职业类别','被保险人','身份证号','保险公司','保险方案','保险原价','总返佣比例','总返佣金额','保司结算底价','平台利润','销售最低价','实际销售价','业务员佣金','开始日期','结束日期','保单状态'])
-    for person in session.scalars(select(InsuredPerson).where(InsuredPerson.policy_id==policy.id).order_by(InsuredPerson.id.asc())):
-        position=session.get(WorkPosition,person.position_id) if person.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None
-        pricing=pricing_snapshot(plan,relation,plan_price_for_class(session,plan,person.occupation_class)) if plan else {}
-        sheet.append([policy.policy_no,enterprise.name if enterprise else '',employer.name if employer else (position.actual_employer if position else ''),position.name if position else person.occupation,person.occupation_class,person.name,person.id_number,plan.insurer if plan else '',plan.name if plan else '',pricing.get('insurance_base_price',0),pricing.get('total_commission_rate',0),pricing.get('total_commission_amount',0),pricing.get('policy_floor_price',0),pricing.get('profit_amount',0),pricing.get('minimum_sale_price',0),pricing.get('sale_price',0),pricing.get('agent_commission_amount',0),policy.start_date,policy.end_date,policy.status])
-    for column in sheet.columns: sheet.column_dimensions[column[0].column_letter].width=min(32,max(12,max(len(str(cell.value or '')) for cell in column)+2))
-    output=io.BytesIO();book.save(output);output.seek(0)
-    return StreamingResponse(output,media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename=policy-{policy.policy_no}.xlsx'})
-
 from .routers.plans import add_plan  # noqa: F401
-
-@app.get("/api/insured")
-def insured(q: str = "", user: User = Depends(current_user), session: Session = Depends(db)):
-    stmt = select(InsuredPerson).order_by(InsuredPerson.id.desc())
-    if user.role=='enterprise' and user.enterprise_id: stmt=stmt.where(InsuredPerson.enterprise_id==user.enterprise_id)
-    if q: stmt = stmt.where(or_(InsuredPerson.name.contains(q), InsuredPerson.phone.contains(q)))
-    result=[]
-    for x in session.scalars(stmt):
-        item=serialize(x);enterprise=session.get(Enterprise,x.enterprise_id);position=session.get(WorkPosition,x.position_id) if x.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None;plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None;policy=session.get(Policy,x.policy_id) if x.policy_id else None
-        relation=session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id==x.enterprise_id,AgentCommission.plan_id==plan.id,AgentCommission.status=='active').order_by(AgentCommission.id.desc())) if plan else None
-        item.update(enterprise_name=enterprise.name if enterprise else '',position_name=position.name if position else x.occupation,actual_employer_name=employer.name if employer else (position.actual_employer if position else ''),plan_id=plan.id if plan else None,plan_name=plan.name if plan else '',insurer=plan.insurer if plan else '',policy_no=policy.policy_no if policy else '',policy_status=policy.status if policy else '',**(pricing_snapshot(plan,relation,plan_price_for_class(session,plan,x.occupation_class)) if plan else {}))
-        result.append(item)
-    return result
-
-@app.post("/api/insured")
-def add_person(data: PersonIn, user: User = Depends(current_user), session: Session = Depends(db)):
-    if not session.get(Enterprise, data.enterprise_id): raise HTTPException(404, "企业不存在")
-    if user.role=="enterprise" and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,"无权操作该单位")
-    if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==data.enterprise_id,InsuredPerson.id_number==data.id_number).limit(1)): raise HTTPException(409,'该身份证号已存在')
-    payload=data.model_dump()
-    if data.position_id:
-        position=session.get(WorkPosition,data.position_id)
-        if not position or position.enterprise_id!=data.enterprise_id or position.status!='approved': raise HTTPException(400,"只能选择本单位已审核通过的有效岗位")
-        payload['occupation']=position.name; payload['occupation_class']=position.occupation_class
-    item = InsuredPerson(**payload); session.add(item); session.commit(); session.refresh(item); audit(session, user, "create", "insured_person", str(item.id)); return serialize(item)
-
-@app.patch("/api/insured/{item_id}")
-def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),session:Session=Depends(db)):
-    item=session.get(InsuredPerson,item_id)
-    if not item: raise HTTPException(404,'参保员工不存在')
-    if user.role=='enterprise' and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,'无权操作该员工')
-    values=data.model_dump(exclude_unset=True)
-    if 'id_number' in values and values['id_number']!=item.id_number and session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==item.enterprise_id,InsuredPerson.id_number==values['id_number'],InsuredPerson.id!=item.id).limit(1)): raise HTTPException(409,'该身份证号已存在')
-    if 'position_id' in values:
-        position=session.get(WorkPosition,values['position_id'])
-        if not position or position.enterprise_id!=item.enterprise_id or position.status!='approved': raise HTTPException(400,'只能选择本单位已审核通过的有效岗位')
-        item.position_id=position.id;item.occupation=position.name;item.occupation_class=position.occupation_class
-    for key in ('name','phone','id_number'):
-        if key in values and values[key] is not None: setattr(item,key,values[key])
-    session.commit();audit(session,user,'update','insured_person',str(item.id));return serialize(item)
-
-@app.patch("/api/insured/{item_id}/status")
-def insured_status(item_id:int,status_value:Literal["active","stopped","pending"]=Query(...,alias="status"),user:User=Depends(current_user),session:Session=Depends(db)):
-    item=session.get(InsuredPerson,item_id)
-    if not item: raise HTTPException(404,"参保员工不存在")
-    if user.role=="enterprise" and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,"无权操作该员工")
-    item.status=status_value;session.commit();audit(session,user,"status_change","insured_person",str(item.id),status_value);return serialize(item)
-
-@app.get("/api/insured/import-template")
-def insured_import_template(user:User=Depends(current_user)):
-    content='姓名,身份证号,手机号\n张三,340123199001011234,13800000000\n'
-    return StreamingResponse(iter([content.encode('utf-8-sig')]),media_type='text/csv',headers={'Content-Disposition':'attachment; filename=insured-import-template.csv'})
-
-@app.post("/api/insured/bulk")
-def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Session=Depends(db)):
-    if user.role=='enterprise' and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,'无权操作该单位')
-    position=session.get(WorkPosition,data.position_id)
-    if not position or position.enterprise_id!=data.enterprise_id or position.status!='approved': raise HTTPException(400,'只能选择本单位已审核通过的岗位')
-    errors=[];created=[];seen=set()
-    for index,row in enumerate(data.rows,start=2):
-        identity=row.id_number.strip();name=row.name.strip()
-        if not name or not identity: errors.append({'row':index,'message':'姓名和身份证号必填'});continue
-        if identity in seen or session.scalar(select(InsuredPerson.id).where(InsuredPerson.id_number==identity).limit(1)): errors.append({'row':index,'message':'身份证号重复'});continue
-        seen.add(identity);item=InsuredPerson(enterprise_id=data.enterprise_id,position_id=position.id,name=name,id_number=identity,phone=row.phone.strip(),occupation=position.name,occupation_class=position.occupation_class,status='pending');session.add(item);created.append(item)
-    if errors: session.rollback();return {'ok':False,'created':0,'errors':errors}
-    session.commit()
-    for item in created: session.refresh(item)
-    audit(session,user,'bulk_create','insured_person',','.join(str(x.id) for x in created),f'count={len(created)}')
-    return {'ok':True,'created':len(created),'errors':[],'ids':[x.id for x in created]}
-
-@app.post("/api/insured/import-file")
-async def import_insured_file(kind:Literal['enrollment','termination']=Form(...),enterprise_id:int=Form(...),position_id:int=Form(0),file:UploadFile=File(...),user:User=Depends(current_user),session:Session=Depends(db)):
-    if user.role=='enterprise' and user.enterprise_id!=enterprise_id: raise HTTPException(403,'无权操作该单位')
-    if not session.get(Enterprise,enterprise_id): raise HTTPException(404,'投保单位不存在')
-    position=None
-    if kind=='enrollment':
-        position=session.get(WorkPosition,position_id)
-        if not position or position.enterprise_id!=enterprise_id or position.status!='approved': raise HTTPException(400,'批量参保必须选择本单位已审核通过的岗位')
-    content=await file.read();name=(file.filename or '').lower();raw=[]
-    try:
-        if name.endswith('.xlsx'):
-            import io,openpyxl
-            sheet=openpyxl.load_workbook(io.BytesIO(content),read_only=True,data_only=True).active
-            raw=[[str(v or '').strip() for v in row] for row in sheet.iter_rows(values_only=True)]
-        elif name.endswith('.csv'):
-            import io,csv
-            raw=[[str(v).strip() for v in row] for row in csv.reader(io.StringIO(content.decode('utf-8-sig')))]
-        else: raise HTTPException(400,'仅支持 CSV 或 XLSX 电子表格')
-    except HTTPException: raise
-    except Exception as exc: raise HTTPException(400,f'电子表格解析失败：{exc}')
-    if len(raw)<2: raise HTTPException(400,'电子表格没有可导入的数据')
-    headers={x.replace(' ',''):i for i,x in enumerate(raw[0])};name_col=headers.get('姓名');id_col=headers.get('身份证号');phone_col=headers.get('手机号')
-    if id_col is None or (kind=='enrollment' and name_col is None): raise HTTPException(400,'模板必须包含姓名、身份证号；停保模板至少包含身份证号')
-    errors=[];pending=[];seen=set()
-    for row_no,row in enumerate(raw[1:],start=2):
-        identity=row[id_col].strip() if id_col<len(row) else '';person_name=row[name_col].strip() if name_col is not None and name_col<len(row) else '';phone=row[phone_col].strip() if phone_col is not None and phone_col<len(row) else ''
-        if not identity: errors.append({'row':row_no,'message':'身份证号必填'});continue
-        if identity in seen: errors.append({'row':row_no,'message':'表格内身份证号重复'});continue
-        seen.add(identity)
-        existing=session.scalar(select(InsuredPerson).where(InsuredPerson.enterprise_id==enterprise_id,InsuredPerson.id_number==identity))
-        if kind=='enrollment':
-            if not person_name: errors.append({'row':row_no,'message':'姓名必填'});continue
-            if existing and existing.status!='stopped': errors.append({'row':row_no,'message':'该员工已在保或待审核'});continue
-            pending.append(('create',person_name,identity,phone,existing))
-        else:
-            if not existing: errors.append({'row':row_no,'message':'未找到该单位参保员工'});continue
-            if existing.status=='stopped': errors.append({'row':row_no,'message':'该员工已停保'});continue
-            pending.append(('stop',person_name,identity,phone,existing))
-    if errors: return {'ok':False,'kind':kind,'success':0,'errors':errors}
-    affected=[]
-    for action,person_name,identity,phone,existing in pending:
-        if action=='create':
-            if existing:
-                existing.name=person_name;existing.phone=phone;existing.position_id=position.id;existing.occupation=position.name;existing.occupation_class=position.occupation_class;existing.status='pending';item=existing
-            else:
-                item=InsuredPerson(enterprise_id=enterprise_id,position_id=position.id,name=person_name,id_number=identity,phone=phone,occupation=position.name,occupation_class=position.occupation_class,status='pending');session.add(item)
-        else: existing.status='stopped';item=existing
-        affected.append(item)
-    session.commit();audit(session,user,'bulk_enrollment' if kind=='enrollment' else 'bulk_termination','insured_person','',f'count={len(affected)};file={file.filename}')
-    return {'ok':True,'kind':kind,'success':len(affected),'errors':[]}
-
-@app.get("/api/enrollment/export")
-def enrollment_export(kind:Literal["enrollment","termination"],date_value:str=Query(default="",alias="date"),plan_id:Optional[int]=None,user:User=Depends(current_user),session:Session=Depends(db)):
-    target_date=date_value or datetime.now().strftime('%Y-%m-%d')
-    stmt=select(InsuredPerson).order_by(InsuredPerson.id.asc())
-    if user.role=="enterprise" and user.enterprise_id: stmt=stmt.where(InsuredPerson.enterprise_id==user.enterprise_id)
-    if plan_id:
-        stmt=stmt.join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(WorkPosition.plan_id==plan_id)
-    if kind=="termination": stmt=stmt.where(InsuredPerson.status=="stopped")
-    else: stmt=stmt.where(InsuredPerson.created_at.like(f"{target_date}%"),InsuredPerson.status.in_(["active","pending"]))
-    rows=[]
-    for p in session.scalars(stmt):
-        ent=session.get(Enterprise,p.enterprise_id);position=session.get(WorkPosition,p.position_id) if p.position_id else None;plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None;relation=session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id==p.enterprise_id,AgentCommission.plan_id==plan.id,AgentCommission.status=='active').order_by(AgentCommission.id.desc())) if plan else None;pricing=pricing_snapshot(plan,relation,plan_price_for_class(session,plan,p.occupation_class)) if plan else {}
-        rows.append([ent.name if ent else "",position.actual_employer if position else "",position.name if position else p.occupation,p.name,p.id_number,p.occupation_class,pricing.get('insurance_base_price',0),pricing.get('policy_floor_price',0),pricing.get('profit_amount',0),pricing.get('minimum_sale_price',0),pricing.get('sale_price',0),pricing.get('total_commission_amount',0),pricing.get('agent_commission_amount',0),p.status,p.created_at.strftime('%Y-%m-%d') if p.created_at else target_date])
-    out=io.StringIO();csv.writer(out).writerows([["投保单位","实际工作单位","岗位","姓名","身份证号","职业类别","保险原价","保司结算底价","平台利润","销售最低价","实际销售价","总返佣金额","业务员佣金","状态","日期"],*rows]);out.seek(0)
-    return StreamingResponse(iter([out.getvalue().encode('utf-8-sig')]),media_type='text/csv',headers={'Content-Disposition':f'attachment; filename={kind}-{target_date}.csv'})
-
-@app.get("/api/enrollment/summary")
-def enrollment_summary(date_value:str=Query(default="",alias="date"),user:User=Depends(current_user),session:Session=Depends(db)):
-    target=date_value or datetime.now().strftime('%Y-%m-%d');result=[]
-    for plan in session.scalars(select(InsurancePlan).order_by(InsurancePlan.id.desc())):
-        stmt=select(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(WorkPosition.plan_id==plan.id)
-        if user.role=='enterprise': stmt=stmt.where(InsuredPerson.enterprise_id==user.enterprise_id)
-        people=list(session.scalars(stmt));new_count=sum(1 for x in people if str(x.created_at or '')[:10]==target and x.status!='stopped');stop_count=sum(1 for x in people if str(x.created_at or '')[:10]==target and x.status=='stopped')
-        result.append({'plan_id':plan.id,'insurer':plan.insurer,'insurer_email':plan.insurer_email,'product':plan.name,'insured_count':len([x for x in people if x.status!='stopped']),'new_count':new_count,'stop_count':stop_count})
-    return result
-
-@app.get("/api/messages")
-def messages(user:User=Depends(current_user),session:Session=Depends(db)):
-    enterprise_ids=[user.enterprise_id] if user.role=='enterprise' and user.enterprise_id else [x for x in session.scalars(select(Enterprise.id))]
-    now=datetime.now(timezone.utc);rows=[]
-    for enterprise_id in enterprise_ids:
-        enterprise=session.get(Enterprise,enterprise_id)
-        if not enterprise: continue
-        active_count=session.query(InsuredPerson).filter(InsuredPerson.enterprise_id==enterprise_id,InsuredPerson.status.in_(['active','pending'])).count();usage_daily=active_count*float(enterprise.usage_fee_daily or 0.1)
-        if usage_daily>0 and enterprise.usage_balance/usage_daily<=int(enterprise.alert_days or 3): rows.append({'id':f'balance-{enterprise_id}','type':'warning','title':'使用费账户余额预警','content':f'{enterprise.name}余额预计可用 {enterprise.usage_balance/usage_daily:.1f} 天','created_at':now.isoformat(),'path':'/pages/billing/billing'})
-        pending=session.query(InsuredPerson).filter(InsuredPerson.enterprise_id==enterprise_id,InsuredPerson.status=='pending').count()
-        if pending: rows.append({'id':f'pending-{enterprise_id}','type':'todo','title':'员工待审核','content':f'{pending} 名员工正在等待参保审核','created_at':now.isoformat(),'path':'/pages/employees/employees'})
-        supplements=session.query(Claim).filter(Claim.enterprise_id==enterprise_id,Claim.status=='supplement').count()
-        if supplements: rows.append({'id':f'claim-{enterprise_id}','type':'danger','title':'理赔材料待补充','content':f'{supplements} 件理赔需要补充材料','created_at':now.isoformat(),'path':'/pages/claims/claims'})
-        pending_positions=session.query(WorkPosition).filter(WorkPosition.enterprise_id==enterprise_id,WorkPosition.status.in_(['pending','supplement'])).count()
-        if pending_positions: rows.append({'id':f'position-{enterprise_id}','type':'todo','title':'岗位定类进度','content':f'{pending_positions} 个岗位待审核或补充材料','created_at':now.isoformat(),'path':'/pages/positions/positions'})
-    if not rows: rows.append({'id':'welcome','type':'success','title':'当前没有待办','content':'所有参保、账户和理赔业务运行正常','created_at':now.isoformat(),'path':'/pages/home/home'})
-    return rows
+from .routers.reports import billing  # noqa: F401
+from .routers.insured import add_person  # noqa: F401
+from .routers.enrollment import enrollment_email  # noqa: F401
 
 CLAIM_REQUIRED_DOCS=[('id_card','被保险人身份证明'),('labor_relation','劳动关系证明'),('diagnosis','医疗诊断证明'),('medical_record','病历或出院记录'),('invoice','医疗发票和费用清单'),('accident_proof','事故经过及证明'),('bank_card','收款银行卡信息')]
 CLAIM_REQUIRED_TYPES={key for key,_ in CLAIM_REQUIRED_DOCS}
@@ -458,52 +244,8 @@ def claim_checklist(item_id:int,user:User=Depends(current_user),session:Session=
         if document.doc_type not in latest: latest[document.doc_type]=document
     return [{'doc_type':key,'name':name,'required':True,'uploaded':key in valid,'status':latest[key].status if key in latest else 'missing','review_note':latest[key].review_note if key in latest else ''} for key,name in CLAIM_REQUIRED_DOCS]
 
-@app.post("/api/notifications/send")
-def send_notification(data:NotificationIn,user:User=Depends(current_user),session:Session=Depends(db)):
-    result=sms_provider().send_sms(data.recipient,data.template,{"content":data.content}) if data.kind=="sms" else email_provider().send_email(data.recipient,data.subject,data.content)
-    audit(session,user,"send",data.kind,data.recipient,result.message);return {"ok":result.ok,"provider":result.provider,"request_id":result.request_id,"message":result.message}
-
 from .routers.payments import create_payment, payment_callback  # noqa: F401
 from .routers.invoices import create_invoice, update_invoice  # noqa: F401
-
-@app.post("/api/enrollment/send")
-def enrollment_send(enterprise_id:int, plan_id:int, kind:Literal["enrollment","termination"]="enrollment", user:User=Depends(current_user), session:Session=Depends(db)):
-    if user.role=="enterprise" and user.enterprise_id!=enterprise_id: raise HTTPException(403,"无权发送该单位名单")
-    ent=session.get(Enterprise,enterprise_id);plan=session.get(InsurancePlan,plan_id)
-    if not ent or not plan: raise HTTPException(404,"投保单位或方案不存在")
-    stmt=select(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(InsuredPerson.enterprise_id==enterprise_id,WorkPosition.plan_id==plan_id)
-    stmt=stmt.where(InsuredPerson.status=='stopped') if kind=='termination' else stmt.where(InsuredPerson.status.in_(['active','pending']))
-    people=[serialize(x) for x in session.scalars(stmt)]
-    payload={"enterprise":{"id":ent.id,"name":ent.name},"plan":serialize(plan),"people":people,"sent_at":datetime.now(timezone.utc).isoformat()}
-    result=insurer_provider(plan.insurer).submit_enrollment(payload) if kind=="enrollment" else insurer_provider(plan.insurer).submit_termination(payload)
-    audit(session,user,"send",kind,str(enterprise_id),result.request_id);return {"ok":result.ok,"kind":kind,"request_id":result.request_id,"accepted":result.data.get("accepted",0),"message":result.message}
-
-@app.post("/api/enrollment/email")
-def enrollment_email(enterprise_id:int,plan_id:int,kind:Literal['enrollment','termination']='enrollment',date_value:str=Query(default="",alias="date"),user:User=Depends(current_user),session:Session=Depends(db)):
-    if user.role=='enterprise' and user.enterprise_id!=enterprise_id: raise HTTPException(403,'无权发送该单位名单')
-    ent=session.get(Enterprise,enterprise_id);plan=session.get(InsurancePlan,plan_id)
-    if not ent or not plan: raise HTTPException(404,'投保单位或产品不存在')
-    if not plan.insurer_email: raise HTTPException(400,'该保险公司方案尚未配置接收邮箱')
-    target_date=date_value or datetime.now().strftime('%Y-%m-%d');stmt=select(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(InsuredPerson.enterprise_id==enterprise_id,WorkPosition.plan_id==plan_id)
-    if kind=='termination': stmt=stmt.where(InsuredPerson.status=='stopped')
-    else: stmt=stmt.where(InsuredPerson.created_at.like(f'{target_date}%'),InsuredPerson.status.in_(['active','pending']))
-    rows=[]
-    for person in session.scalars(stmt):
-        position=session.get(WorkPosition,person.position_id) if person.position_id else None;relation=session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id==enterprise_id,AgentCommission.plan_id==plan_id,AgentCommission.status=='active').order_by(AgentCommission.id.desc()));pricing=pricing_snapshot(plan,relation,plan_price_for_class(session,plan,person.occupation_class))
-        rows.append([ent.name,position.actual_employer if position else '',position.name if position else person.occupation,person.name,person.id_number,person.occupation_class,pricing['insurance_base_price'],pricing['policy_floor_price'],pricing['profit_amount'],pricing['minimum_sale_price'],pricing['sale_price'],pricing['total_commission_amount'],pricing['agent_commission_amount'],person.status,target_date])
-    output=io.StringIO();csv.writer(output).writerows([['投保单位','实际工作单位','岗位','姓名','身份证号','职业类别','保险原价','保司结算底价','平台利润','销售最低价','实际销售价','总返佣金额','业务员佣金','状态','日期'],*rows]);filename=f'{kind}-{target_date}.csv';encoded=base64.b64encode(output.getvalue().encode('utf-8-sig')).decode()
-    subject=f'{plan.insurer} {plan.name} {"新参" if kind=="enrollment" else "停保"}名单 {target_date}';body=f'投保单位：{ent.name}\n业务类型：{"新参" if kind=="enrollment" else "停保"}\n人数：{len(rows)}\n请查收附件名单。'
-    result=email_provider().send_email(plan.insurer_email,subject,body,[{'filename':filename,'content_base64':encoded,'content_type':'text/csv'}]);record=EnrollmentEmail(enterprise_id=enterprise_id,plan_id=plan_id,kind=kind,recipient=plan.insurer_email,filename=filename,people_count=len(rows),request_id=result.request_id,status='sent' if result.ok else 'failed');session.add(record);session.commit()
-    audit(session,user,'send_email',kind,str(enterprise_id),f'{result.request_id};count={len(rows)};to={plan.insurer_email}');return {'ok':result.ok,'email':plan.insurer_email,'request_id':result.request_id,'message':result.message,'people_count':len(rows),'filename':filename,'kind':kind}
-
-@app.get('/api/enrollment/emails')
-def enrollment_emails(user:User=Depends(current_user),session:Session=Depends(db)):
-    stmt=select(EnrollmentEmail).order_by(EnrollmentEmail.id.desc())
-    if user.role=='enterprise': stmt=stmt.where(EnrollmentEmail.enterprise_id==user.enterprise_id)
-    result=[]
-    for item in session.scalars(stmt):
-        ent=session.get(Enterprise,item.enterprise_id);plan=session.get(InsurancePlan,item.plan_id);result.append({**serialize(item),'enterprise_name':ent.name if ent else '','plan_name':plan.name if plan else '','insurer':plan.insurer if plan else ''})
-    return result
 
 from .routers.health import router as health_router
 from .routers.auth import router as auth_router
@@ -519,6 +261,11 @@ from .routers.enterprises import router as enterprises_router
 
 from .routers.positions import router as positions_router
 from .routers.plans import router as plans_router
+from .routers.reports import router as reports_router
+from .routers.insured import router as insured_router
+from .routers.enrollment import router as enrollment_router
+from .routers.messages import router as messages_router
+from .routers.notifications import router as notifications_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
@@ -532,5 +279,10 @@ app.include_router(dashboard_router)
 app.include_router(enterprises_router)
 app.include_router(positions_router)
 app.include_router(plans_router)
+app.include_router(reports_router)
+app.include_router(insured_router)
+app.include_router(enrollment_router)
+app.include_router(messages_router)
+app.include_router(notifications_router)
 
 app.mount("/", StaticFiles(directory=ROOT, html=True), name="frontend")
