@@ -177,6 +177,9 @@ def run():
             accrued_days = 30
             assert accrued["accrued_total_commission"] == 20 * accrued_days
             assert accrued["accrued_agent_commission"] == 20 * accrued_days
+            usage_row = next(row for row in billing(user, session) if row["account"] == "平台使用费账户")
+            assert usage_row["total_person_days"] == 30 and usage_row["total_accrued"] == 3
+            assert usage_row["month_person_days"] == 0 and usage_row["month_accrued"] == 0
 
             # a person with no position/plan yet must activate without error and
             # simply skip Policy/PolicyMember creation (same permissiveness as today)

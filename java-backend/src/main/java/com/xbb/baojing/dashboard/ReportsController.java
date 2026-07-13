@@ -39,7 +39,9 @@ import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -92,11 +94,19 @@ public class ReportsController {
         ReportRow premiumRow = new ReportRow("premium", "销售保费汇总", period, PricingService.amount(premium), policies.size() + " 张保单，按日折算并累计至当前日期");
         ReportRow peopleRow = new ReportRow("people", "参保人员报表", "当前", peopleCount, "在册参保人员");
         ReportRow claimsRow = new ReportRow("claims", "理赔统计报表", "累计", claimsCount, "理赔案件");
-        if ("enterprise".equals(user.getRole())) return List.of(premiumRow, peopleRow, claimsRow);
+        List<Enterprise> usageEnterprises = scoped != null ? List.of(enterpriseMapper.findById(scoped)) : enterpriseMapper.search(null, null, null);
+        double usageFee = 0;
+        for (Enterprise enterprise : usageEnterprises) {
+            if (enterprise == null) continue;
+            UsageSummary usage = usageSummary(enterprise.getId(), monthStart, today);
+            usageFee += usage.personDays() * (enterprise.getUsageFeeDaily() > 0 ? enterprise.getUsageFeeDaily() : 0.1);
+        }
+        ReportRow usageRow = new ReportRow("usage_fee", "平台使用费", period, PricingService.amount(usageFee), "每人日费率 × 本月有效参保人天");
+        if ("enterprise".equals(user.getRole())) return List.of(premiumRow, usageRow, peopleRow, claimsRow);
         return List.of(premiumRow,
                 new ReportRow("settlement", "保司结算底价", period, PricingService.amount(settlement), "结算底价按日折算并累计至当前日期"),
                 new ReportRow("commission", "总返佣金额", period, PricingService.amount(commission), "返佣单价按日折算并累计至当前日期"),
-                peopleRow, claimsRow);
+                usageRow, peopleRow, claimsRow);
     }
 
     public record PremiumDetailRow(int memberId, int personId, String personName, String idNumber,
@@ -256,8 +266,43 @@ public class ReportsController {
         }
     }
 
+    private record UsageSummary(long personDays, long activePeople) {}
+
+    private UsageSummary usageSummary(int enterpriseId, LocalDate requestedStart, LocalDate requestedEnd) {
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
+        LocalDate cutoff = requestedEnd != null && requestedEnd.isBefore(today) ? requestedEnd : today;
+        Map<Integer, List<LocalDate[]>> intervals = new HashMap<>();
+        for (PolicyMember member : policyMemberMapper.findAll()) {
+            Policy policy = policyMapper.findById(member.getPolicyId());
+            if (policy == null || policy.getEnterpriseId() != enterpriseId || member.getEffectiveAt().isAfter(now)) continue;
+            LocalDate start = requestedStart != null && requestedStart.isAfter(member.getEffectiveAt().toLocalDate()) ? requestedStart : member.getEffectiveAt().toLocalDate();
+            LocalDate end = cutoff;
+            if (member.getTerminatedAt() != null) {
+                LocalDate terminated = member.getTerminatedAt().toLocalDate();
+                if (LocalTime.MIDNIGHT.equals(member.getTerminatedAt().toLocalTime())) terminated = terminated.minusDays(1);
+                if (terminated.isBefore(end)) end = terminated;
+            }
+            if (!start.isAfter(end)) intervals.computeIfAbsent(member.getPersonId(), ignored -> new ArrayList<>()).add(new LocalDate[]{start, end});
+        }
+        long personDays = 0, activePeople = 0;
+        for (List<LocalDate[]> personIntervals : intervals.values()) {
+            personIntervals.sort(java.util.Comparator.comparing(values -> values[0]));
+            List<LocalDate[]> merged = new ArrayList<>();
+            for (LocalDate[] interval : personIntervals) {
+                if (merged.isEmpty() || interval[0].isAfter(merged.get(merged.size() - 1)[1].plusDays(1))) merged.add(interval.clone());
+                else if (interval[1].isAfter(merged.get(merged.size() - 1)[1])) merged.get(merged.size() - 1)[1] = interval[1];
+            }
+            personDays += merged.stream().mapToLong(values -> ChronoUnit.DAYS.between(values[0], values[1]) + 1).sum();
+            if (merged.stream().anyMatch(values -> !today.isBefore(values[0]) && !today.isAfter(values[1]))) activePeople++;
+        }
+        return new UsageSummary(personDays, activePeople);
+    }
+
     public record BillingRow(int id, String enterpriseName, String account, double balance, String status,
-                              double dailyRate, double estimatedDaily, Double monthlyEstimate) {}
+                              double dailyRate, double estimatedDaily, Double monthlyEstimate,
+                              long activePeople, long monthPersonDays, double monthAccrued,
+                              long totalPersonDays, double totalAccrued, String asOfDate) {}
 
     @GetMapping("/billing")
     public List<BillingRow> billing(User user) {
@@ -265,14 +310,17 @@ public class ReportsController {
                 ? List.of(enterpriseMapper.findById(user.getEnterpriseId()))
                 : enterpriseMapper.search(null, null, null);
         List<BillingRow> rows = new ArrayList<>();
-        int days = YearMonth.now().lengthOfMonth();
         for (Enterprise e : enterprises) {
-            long activeCount = personMapper.search(e.getId(), null).stream()
-                    .filter(p -> java.util.Set.of("active", "pending").contains(p.getStatus())).count();
-            double dailyUsage = activeCount * (e.getUsageFeeDaily() > 0 ? e.getUsageFeeDaily() : 0.1);
-            rows.add(new BillingRow(e.getId(), e.getName(), "保费账户", e.getPremiumBalance(), "正常", 0, 0, null));
+            LocalDate today = LocalDate.now();
+            double rate = e.getUsageFeeDaily() > 0 ? e.getUsageFeeDaily() : 0.1;
+            UsageSummary month = usageSummary(e.getId(), today.withDayOfMonth(1), today);
+            UsageSummary lifetime = usageSummary(e.getId(), null, today);
+            double dailyUsage = month.activePeople() * rate;
+            rows.add(new BillingRow(e.getId(), e.getName(), "保费账户", e.getPremiumBalance(), "正常", 0, 0, 0.0, 0, 0, 0, 0, 0, today.toString()));
             rows.add(new BillingRow(e.getId(), e.getName(), "平台使用费账户", e.getUsageBalance(), "正常",
-                    e.getUsageFeeDaily() > 0 ? e.getUsageFeeDaily() : 0.1, dailyUsage, dailyUsage * days));
+                    rate, PricingService.amount(dailyUsage), PricingService.amount(month.personDays() * rate),
+                    month.activePeople(), month.personDays(), PricingService.amount(month.personDays() * rate),
+                    lifetime.personDays(), PricingService.amount(lifetime.personDays() * rate), today.toString()));
         }
         return rows;
     }

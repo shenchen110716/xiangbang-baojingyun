@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.business_time import business_today
 from ..core.db import db
 from ..core.security import current_user
 from ..models import Claim, Enterprise, InsurancePlan, InsuredPerson, Policy, User, WorkPosition
-from ..services import amount, policy_dict, pricing_snapshot
+from ..services import amount, policy_dict, pricing_snapshot, usage_person_days
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
@@ -18,7 +19,7 @@ def dashboard(user: User = Depends(current_user), session: Session = Depends(db)
     active_people=[x for x in people if x.status in {'active','pending'}]
     alerts=[]
     for ent in enterprises:
-        enterprise_active_count=session.query(InsuredPerson).filter(InsuredPerson.enterprise_id==ent.id,InsuredPerson.status.in_(['active','pending'])).count()
+        today=business_today(); enterprise_active_count=usage_person_days(session,ent.id,today,today)['active_people']
         daily_usage=enterprise_active_count*float(ent.usage_fee_daily or 0.1)
         daily_premium=sum(float(policy_dict(p,session)['premium'] or 0)/(1 if policy_dict(p,session)['billing_mode']=='daily' else 30) for p in session.scalars(select(Policy).where(Policy.enterprise_id==ent.id,Policy.status=='active')))
         for account,balance,daily in [('premium',ent.premium_balance,daily_premium),('usage',ent.usage_balance,daily_usage)]:

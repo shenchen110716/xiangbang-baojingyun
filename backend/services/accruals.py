@@ -1,8 +1,11 @@
 import calendar
 from datetime import date, datetime, time, timedelta
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from ..core.business_time import as_business_time, business_now, business_today
-from ..models import PolicyMember
+from ..models import Policy, PolicyMember
 
 
 def period_amount(unit_price: float, billing_mode: str, start: date, end: date) -> float:
@@ -47,3 +50,45 @@ def billable_date_range(
     coverage_end = last_billable_date(member.terminated_at)
     period_end = min(cutoff, coverage_end) if coverage_end is not None else cutoff
     return None if period_start > period_end else (period_start, period_end)
+
+
+def usage_person_days(
+    session: Session,
+    enterprise_id: int,
+    requested_start: date | None = None,
+    requested_end: date | None = None,
+) -> dict:
+    """Count unique valid coverage days per person, merging overlapping periods."""
+    today = business_today()
+    end = min(requested_end or today, today)
+    intervals: dict[int, list[tuple[date, date]]] = {}
+    members = session.scalars(
+        select(PolicyMember)
+        .join(Policy, Policy.id == PolicyMember.policy_id)
+        .where(Policy.enterprise_id == enterprise_id)
+        .order_by(PolicyMember.person_id.asc(), PolicyMember.effective_at.asc())
+    )
+    for member in members:
+        start = requested_start or member.effective_at.date()
+        billable = billable_date_range(member, start, end)
+        if billable is not None:
+            intervals.setdefault(member.person_id, []).append(billable)
+
+    total_days = 0
+    active_people = 0
+    for person_intervals in intervals.values():
+        merged: list[list[date]] = []
+        for start, finish in person_intervals:
+            if not merged or start > merged[-1][1] + timedelta(days=1):
+                merged.append([start, finish])
+            elif finish > merged[-1][1]:
+                merged[-1][1] = finish
+        total_days += sum((finish - start).days + 1 for start, finish in merged)
+        if any(start <= today <= finish for start, finish in merged):
+            active_people += 1
+    return {
+        "person_days": total_days,
+        "active_people": active_people,
+        "start_date": requested_start.isoformat() if requested_start else None,
+        "end_date": end.isoformat(),
+    }

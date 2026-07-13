@@ -320,6 +320,12 @@ export interface BillingRow {
   daily_rate: number
   estimated_daily: number
   monthly_estimate?: number
+  active_people: number
+  month_person_days: number
+  month_accrued: number
+  total_person_days: number
+  total_accrued: number
+  as_of_date: string
 }
 
 export interface LedgerEntry {

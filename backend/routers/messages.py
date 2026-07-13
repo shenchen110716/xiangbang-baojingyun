@@ -4,9 +4,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.business_time import business_today
 from ..core.db import db
 from ..core.security import current_user
 from ..models import Claim, Enterprise, InsuredPerson, User, WorkPosition
+from ..services import usage_person_days
 
 router = APIRouter(prefix="/api", tags=["messages"])
 
@@ -18,7 +20,7 @@ def messages(user:User=Depends(current_user),session:Session=Depends(db)):
     for enterprise_id in enterprise_ids:
         enterprise=session.get(Enterprise,enterprise_id)
         if not enterprise: continue
-        active_count=session.query(InsuredPerson).filter(InsuredPerson.enterprise_id==enterprise_id,InsuredPerson.status.in_(['active','pending'])).count();usage_daily=active_count*float(enterprise.usage_fee_daily or 0.1)
+        today=business_today();active_count=usage_person_days(session,enterprise_id,today,today)['active_people'];usage_daily=active_count*float(enterprise.usage_fee_daily or 0.1)
         if usage_daily>0 and enterprise.usage_balance/usage_daily<=int(enterprise.alert_days or 3): rows.append({'id':f'balance-{enterprise_id}','type':'warning','title':'使用费账户余额预警','content':f'{enterprise.name}余额预计可用 {enterprise.usage_balance/usage_daily:.1f} 天','created_at':now.isoformat(),'path':'/pages/billing/billing'})
         pending=session.query(InsuredPerson).filter(InsuredPerson.enterprise_id==enterprise_id,InsuredPerson.status=='pending').count()
         if pending: rows.append({'id':f'pending-{enterprise_id}','type':'todo','title':'员工待审核','content':f'{pending} 名员工正在等待参保审核','created_at':now.isoformat(),'path':'/pages/employees/employees'})

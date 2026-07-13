@@ -32,6 +32,8 @@ onMounted(load)
 
 const totalPremium = computed(() => accounts.value.filter((x) => x.account === '保费账户').reduce((s, x) => s + x.balance, 0))
 const totalUsage = computed(() => accounts.value.filter((x) => x.account === '平台使用费账户').reduce((s, x) => s + x.balance, 0))
+const monthUsageAccrued = computed(() => accounts.value.filter((x) => x.account === '平台使用费账户').reduce((s, x) => s + x.month_accrued, 0))
+const totalUsageAccrued = computed(() => accounts.value.filter((x) => x.account === '平台使用费账户').reduce((s, x) => s + x.total_accrued, 0))
 const pendingInvoices = computed(() => invoices.value.filter((x) => x.status === 'pending').length)
 
 // ---- recharge ----
@@ -103,10 +105,12 @@ async function setInvoiceStatus(item: Invoice, status: string) {
     <div class="stat-grid">
       <StatTile label="保费账户余额合计" :value="money(totalPremium)" />
       <StatTile label="使用费账户余额合计" :value="money(totalUsage)" />
+      <StatTile label="本月累计平台使用费" :value="money(monthUsageAccrued)" />
+      <StatTile label="历史累计平台使用费" :value="money(totalUsageAccrued)" />
       <StatTile label="待审核发票" :value="pendingInvoices" hint-type="warning" />
     </div>
 
-    <PageCard title="账户余额" :count="accounts.length" hint="保费账户、使用费账户、充值与发票申请闭环">
+    <PageCard title="账户余额" :count="accounts.length" hint="平台使用费 = 每人日费率 × 实际有效参保人天，累计截止今天">
       <template #actions>
         <el-button type="primary" @click="openInvoiceCreate">＋ 申请发票</el-button>
       </template>
@@ -114,9 +118,12 @@ async function setInvoiceStatus(item: Invoice, status: string) {
         <el-table-column prop="enterprise_name" label="投保单位" min-width="150" />
         <el-table-column prop="account" label="账户" width="140" />
         <el-table-column label="余额" width="110"><template #default="{ row }">{{ money(row.balance) }}</template></el-table-column>
-        <el-table-column label="预计日消耗" width="110">
-          <template #default="{ row }">{{ row.account === '平台使用费账户' ? money(row.estimated_daily) : '—' }}</template>
+        <el-table-column label="计费单价 / 今日" width="155">
+          <template #default="{ row }"><template v-if="row.account === '平台使用费账户'"><div>{{ money(row.daily_rate) }} / 人 / 天</div><small class="muted">{{ row.active_people }} 人 · {{ money(row.estimated_daily) }}</small></template><span v-else>—</span></template>
         </el-table-column>
+        <el-table-column label="本月有效人天" width="115"><template #default="{ row }">{{ row.account === '平台使用费账户' ? `${row.month_person_days} 人天` : '—' }}</template></el-table-column>
+        <el-table-column label="本月累计" width="110"><template #default="{ row }">{{ row.account === '平台使用费账户' ? money(row.month_accrued) : '—' }}</template></el-table-column>
+        <el-table-column label="历史累计" width="110"><template #default="{ row }">{{ row.account === '平台使用费账户' ? money(row.total_accrued) : '—' }}</template></el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button v-if="auth.isAdmin()" link type="primary" size="small" @click="openRecharge(row)">充值</el-button>

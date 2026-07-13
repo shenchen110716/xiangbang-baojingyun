@@ -1,4 +1,3 @@
-import calendar
 import io
 import json
 from datetime import date
@@ -16,7 +15,7 @@ from ..models import (
     ActualEmployer, AgentCommission, Claim, Enterprise, InsurancePlan,
     InsuredPerson, Policy, PolicyMember, User, WorkPosition,
 )
-from ..services import amount, billable_date_range, period_amount, plan_price_for_class, policy_dict, pricing_snapshot
+from ..services import amount, billable_date_range, period_amount, plan_price_for_class, policy_dict, pricing_snapshot, usage_person_days
 
 router = APIRouter(prefix="/api", tags=["reports"])
 
@@ -158,8 +157,11 @@ def reports(user: User = Depends(current_user), session: Session = Depends(db)):
     premium_row={"id":"premium","name":"销售保费汇总","period":period_label,"value":premium,"detail":f"{len(policies)} 张保单，按日折算并累计至当前日期"}
     people_row={"id":"people","name":"参保人员报表","period":"当前","value":people,"detail":"在册参保人员"}
     claims_row={"id":"claims","name":"理赔统计报表","period":"累计","value":claims,"detail":"理赔案件"}
-    if user.role == "enterprise": return [premium_row,people_row,claims_row]
-    return [premium_row,{"id":"settlement","name":"保司结算底价","period":period_label,"value":settlement,"detail":"结算底价按日折算并累计至当前日期"},{"id":"commission","name":"总返佣金额","period":period_label,"value":commission,"detail":"返佣单价按日折算并累计至当前日期"},people_row,claims_row]
+    usage_enterprises = [session.get(Enterprise, enterprise_id)] if enterprise_id else session.scalars(select(Enterprise)).all()
+    usage_fee = amount(sum(usage_person_days(session, item.id, now.replace(day=1), now)["person_days"] * float(item.usage_fee_daily or 0.1) for item in usage_enterprises if item))
+    usage_row={"id":"usage_fee","name":"平台使用费","period":period_label,"value":usage_fee,"detail":"每人日费率 × 本月有效参保人天"}
+    if user.role == "enterprise": return [premium_row,usage_row,people_row,claims_row]
+    return [premium_row,{"id":"settlement","name":"保司结算底价","period":period_label,"value":settlement,"detail":"结算底价按日折算并累计至当前日期"},{"id":"commission","name":"总返佣金额","period":period_label,"value":commission,"detail":"返佣单价按日折算并累计至当前日期"},usage_row,people_row,claims_row]
 
 
 @router.get("/reports/premium-details")
@@ -195,11 +197,12 @@ def billing(user: User = Depends(current_user), session: Session = Depends(db)):
     stmt = select(Enterprise).where(Enterprise.id == user.enterprise_id) if user.role == "enterprise" and user.enterprise_id else select(Enterprise)
     rows=[]
     for x in session.scalars(stmt):
-        people = session.query(InsuredPerson).filter(InsuredPerson.enterprise_id==x.id, InsuredPerson.status.in_(['active','pending'])).count()
-        today = business_today(); days = calendar.monthrange(today.year,today.month)[1]
-        daily_usage = people * float(x.usage_fee_daily or 0.1)
-        rows.append({"id":x.id,"enterprise_name":x.name,"account":"保费账户","balance":x.premium_balance,"status":"正常","daily_rate":0,"estimated_daily":0})
-        rows.append({"id":x.id,"enterprise_name":x.name,"account":"平台使用费账户","balance":x.usage_balance,"status":"正常","daily_rate":x.usage_fee_daily or 0.1,"estimated_daily":daily_usage,"monthly_estimate":daily_usage*days})
+        today = business_today(); rate = float(x.usage_fee_daily or 0.1)
+        month = usage_person_days(session, x.id, today.replace(day=1), today)
+        lifetime = usage_person_days(session, x.id, requested_end=today)
+        common={"active_people":month["active_people"],"month_person_days":month["person_days"],"month_accrued":amount(month["person_days"]*rate),"total_person_days":lifetime["person_days"],"total_accrued":amount(lifetime["person_days"]*rate),"as_of_date":today.isoformat()}
+        rows.append({"id":x.id,"enterprise_name":x.name,"account":"保费账户","balance":x.premium_balance,"status":"正常","daily_rate":0,"estimated_daily":0,"monthly_estimate":0,**{key:0 if key != "as_of_date" else today.isoformat() for key in common}})
+        rows.append({"id":x.id,"enterprise_name":x.name,"account":"平台使用费账户","balance":x.usage_balance,"status":"正常","daily_rate":rate,"estimated_daily":amount(month["active_people"]*rate),"monthly_estimate":amount(month["person_days"]*rate),**common})
     return rows
 
 @router.get("/policies")

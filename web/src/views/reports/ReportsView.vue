@@ -13,7 +13,7 @@ import PageCard from '@/components/PageCard.vue'
 const auth = useAuthStore()
 const loading = ref(true)
 const rows = ref<ReportRow[]>([])
-const currencyIds = new Set(['premium', 'settlement', 'commission'])
+const currencyIds = new Set(['premium', 'settlement', 'commission', 'usage_fee'])
 const visibleRows = computed(() => auth.isEnterprise() ? rows.value.filter((row) => !['settlement', 'commission'].includes(row.id)) : rows.value)
 
 const today = new Date()
@@ -119,7 +119,7 @@ async function exportPremiumDetails() {
       </div>
     </div>
 
-    <PageCard title="报表中心" :count="visibleRows.length" :hint="auth.isEnterprise() ? '销售保费、参保人员和理赔数据统一统计' : '销售保费、保司结算和返佣金额统一统计'">
+    <PageCard title="报表中心" :count="visibleRows.length" :hint="auth.isEnterprise() ? '销售保费、平台使用费、参保人员和理赔数据统一统计' : '销售保费、保司结算、返佣和平台使用费统一统计'">
       <template #actions>
         <el-button type="primary" @click="exportCsv">导出报表</el-button>
       </template>
