@@ -22,7 +22,7 @@ def login(data: LoginIn, session: Session = Depends(db)):
     if not user.active: raise HTTPException(403, "该账号已停用，请联系单位主管")
     if data.portal == "admin" and user.role != "admin": raise HTTPException(403, "该账号不是总后台账号")
     if data.portal == "enterprise" and user.role != "enterprise": raise HTTPException(403, "该账号不是参保单位账号")
-    token = jwt.encode({"sub": str(user.id), "exp": datetime.now(timezone.utc) + timedelta(hours=12)}, SECRET_KEY, algorithm=ALGORITHM)
+    token = jwt.encode({"sub": str(user.id), "sv": user.session_version, "exp": datetime.now(timezone.utc) + timedelta(hours=12)}, SECRET_KEY, algorithm=ALGORITHM)
     return TokenOut(access_token=token)
 
 @router.get("/auth/me", response_model=UserOut)
@@ -32,4 +32,4 @@ def me(user: User = Depends(current_user)): return user
 def change_password(data:PasswordChangeIn,user:User=Depends(current_user),session:Session=Depends(db)):
     if not pwd.verify(data.current_password,user.password_hash): raise HTTPException(400,'当前密码不正确')
     if data.current_password==data.new_password: raise HTTPException(400,'新密码不能与当前密码相同')
-    user.password_hash=pwd.hash(data.new_password);session.commit();audit(session,user,'password_change','user',str(user.id));return {'ok':True}
+    user.password_hash=pwd.hash(data.new_password);user.session_version+=1;session.commit();audit(session,user,'password_change','user',str(user.id));return {'ok':True}

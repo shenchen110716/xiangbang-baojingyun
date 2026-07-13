@@ -43,6 +43,8 @@ def update_operator(item_id:int,data:OperatorUpdate,user:User=Depends(current_us
     values=data.model_dump(exclude_unset=True)
     if values.get("name") is not None: item.name=values["name"].strip()
     if values.get("phone") is not None: item.phone=values["phone"].strip()
-    if values.get("password"): item.password_hash=pwd.hash(values["password"])
-    if values.get("active") is not None: item.active=values["active"];item.status="active" if item.active else "inactive"
+    if values.get("password"): item.password_hash=pwd.hash(values["password"]);item.session_version+=1
+    if values.get("active") is not None:
+        item.active=values["active"];item.status="active" if item.active else "inactive"
+        if not item.active: item.session_version+=1
     session.commit();audit(session,user,"update","operator",str(item.id));return operator_dict(item,session)
