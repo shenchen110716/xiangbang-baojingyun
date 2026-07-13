@@ -2,9 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listEnterprises } from '@/api/enterprises'
+import { listAgents } from '@/api/agents'
 import { listPlans } from '@/api/plans'
 import { getPremiumDetails, getReports } from '@/api/reports'
-import type { Enterprise, PremiumDetailReport, ReportRow } from '@/api/types'
+import type { Agent, Enterprise, PremiumDetailReport, ReportRow } from '@/api/types'
 import { money } from '@/utils/format'
 import { downloadAuthenticated } from '@/utils/download'
 import { useAuthStore } from '@/stores/auth'
@@ -24,8 +25,10 @@ const selectedRange = ref<[string, string] | null>(null)
 const premiumLoading = ref(false)
 const premiumReport = ref<PremiumDetailReport | null>(null)
 const enterprises = ref<Enterprise[]>([])
+const agents = ref<Agent[]>([])
 const insurers = ref<string[]>([])
 const selectedEnterprise = ref<number | null>(null)
+const selectedAgent = ref<number | null>(null)
 const selectedInsurer = ref('')
 
 function monthRange(month: string): [string, string] {
@@ -47,6 +50,7 @@ async function loadPremiumDetails() {
     premiumReport.value = await getPremiumDetails(range[0], range[1], auth.isEnterprise() ? undefined : {
       enterprise_id: selectedEnterprise.value || undefined,
       insurer: selectedInsurer.value || undefined,
+      agent_id: selectedAgent.value || undefined,
     })
   } catch (error) {
     ElMessage.error((error as Error).message)
@@ -66,8 +70,9 @@ async function load() {
 
 async function loadPlatformFilters() {
   if (auth.isEnterprise()) return
-  const [enterpriseRows, plans] = await Promise.all([listEnterprises(), listPlans()])
+  const [enterpriseRows, plans, agentRows] = await Promise.all([listEnterprises(), listPlans(), listAgents()])
   enterprises.value = enterpriseRows
+  agents.value = agentRows
   insurers.value = [...new Set(plans.map((plan) => plan.insurer).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-CN'))
 }
 onMounted(async () => {
@@ -102,7 +107,8 @@ async function exportPremiumDetails() {
     const params = new URLSearchParams({ start_date: range[0], end_date: range[1] })
     if (!auth.isEnterprise() && selectedEnterprise.value) params.set('enterprise_id', String(selectedEnterprise.value))
     if (!auth.isEnterprise() && selectedInsurer.value) params.set('insurer', selectedInsurer.value)
-    const prefix = auth.isEnterprise() ? '销售保费明细' : '平台保费结算明细'
+    if (!auth.isEnterprise() && selectedAgent.value) params.set('agent_id', String(selectedAgent.value))
+    const prefix = auth.isEnterprise() ? '销售保费明细' : '平台保费结算佣金明细'
     await downloadAuthenticated(`/reports/premium-details/export?${params.toString()}`, `${prefix}-${range[0]}-${range[1]}.xlsx`)
   } catch (error) {
     ElMessage.error((error as Error).message)
@@ -131,11 +137,14 @@ async function exportPremiumDetails() {
       </el-table>
     </PageCard>
 
-    <PageCard :title="auth.isEnterprise() ? '销售保费总额及明细' : '平台保费、结算与返佣明细'" :count="premiumReport?.detail_count || 0" hint="只累计实际已发生费用；按月方案按自然月天数折算，查询结束时间晚于今天时自动截止今天">
+    <PageCard :title="auth.isEnterprise() ? '销售保费总额及明细' : '平台保费、结算与佣金统计'" :count="premiumReport?.detail_count || 0" :hint="auth.isEnterprise() ? '只累计实际已发生费用；按月方案按自然月天数折算' : '可按业务员与时间段统计佣金；导出文件严格使用当前查询条件'">
       <template #actions>
         <el-button :disabled="!premiumReport" @click="exportPremiumDetails">导出明细</el-button>
       </template>
       <div class="premium-filter">
+        <el-select v-if="!auth.isEnterprise()" v-model="selectedAgent" clearable filterable placeholder="全部业务员" style="width: 180px">
+          <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id" />
+        </el-select>
         <el-select v-if="!auth.isEnterprise()" v-model="selectedInsurer" clearable placeholder="全部保司" style="width: 210px">
           <el-option v-for="insurer in insurers" :key="insurer" :label="insurer" :value="insurer" />
         </el-select>
@@ -164,6 +173,7 @@ async function exportPremiumDetails() {
           <template #default="{ row }"><div>{{ row.person_name }}</div><small class="muted">{{ row.id_number }}</small></template>
         </el-table-column>
         <el-table-column v-if="!auth.isEnterprise()" prop="enterprise_name" label="投保单位" min-width="180" />
+        <el-table-column v-if="!auth.isEnterprise()" prop="agent_name" label="业务员" min-width="110"><template #default="{ row }">{{ row.agent_name || '未分配' }}</template></el-table-column>
         <el-table-column label="实际用工单位 / 岗位" min-width="180">
           <template #default="{ row }"><div>{{ row.actual_employer_name || '—' }}</div><small class="muted">{{ row.position_name }} · {{ row.occupation_class }}</small></template>
         </el-table-column>

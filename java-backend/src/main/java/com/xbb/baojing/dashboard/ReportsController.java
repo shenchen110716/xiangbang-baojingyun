@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.baojing.claim.ClaimMapper;
 import com.xbb.baojing.common.ApiException;
 import com.xbb.baojing.common.User;
+import com.xbb.baojing.common.UserMapper;
 import com.xbb.baojing.enterprise.ActualEmployer;
 import com.xbb.baojing.enterprise.ActualEmployerMapper;
 import com.xbb.baojing.enterprise.Enterprise;
@@ -55,13 +56,14 @@ public class ReportsController {
     private final InsurancePlanMapper planMapper;
     private final WorkPositionMapper positionMapper;
     private final ActualEmployerMapper actualEmployerMapper;
+    private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
 
     public ReportsController(PolicyMapper policyMapper, InsuredPersonMapper personMapper, ClaimMapper claimMapper,
                               EnterpriseMapper enterpriseMapper, PolicyPricingService policyPricingService,
                               PolicyMemberMapper policyMemberMapper, InsurancePlanMapper planMapper,
                               WorkPositionMapper positionMapper, ActualEmployerMapper actualEmployerMapper,
-                              ObjectMapper objectMapper) {
+                              UserMapper userMapper, ObjectMapper objectMapper) {
         this.policyMapper = policyMapper;
         this.personMapper = personMapper;
         this.claimMapper = claimMapper;
@@ -71,6 +73,7 @@ public class ReportsController {
         this.planMapper = planMapper;
         this.positionMapper = positionMapper;
         this.actualEmployerMapper = actualEmployerMapper;
+        this.userMapper = userMapper;
         this.objectMapper = objectMapper;
     }
 
@@ -86,7 +89,7 @@ public class ReportsController {
         YearMonth now = YearMonth.now();
         LocalDate monthStart = now.atDay(1);
         LocalDate today = LocalDate.now();
-        PremiumDetailReport currentDetail = premiumDetails(monthStart.toString(), today.toString(), null, "", user);
+        PremiumDetailReport currentDetail = premiumDetails(monthStart.toString(), today.toString(), null, "", null, user);
         double premium = currentDetail.totalPremium();
         double settlement = currentDetail.totalSettlement();
         double commission = currentDetail.totalCommission();
@@ -110,7 +113,8 @@ public class ReportsController {
     }
 
     public record PremiumDetailRow(int memberId, int personId, String personName, String idNumber,
-                                   String enterpriseName, String actualEmployerName, String positionName,
+                                   String enterpriseName, Integer agentId, String agentName,
+                                   String actualEmployerName, String positionName,
                                    String occupationClass, String policyNo, String insurer, String planName,
                                    String billingMode, double unitSalePrice, double unitPolicyFloorPrice,
                                    double unitTotalCommission, double unitAgentCommission, LocalDateTime coverageStart,
@@ -120,7 +124,8 @@ public class ReportsController {
 
     public record PremiumDetailReport(String startDate, String endDate, String asOfDate,
                                       double totalPremium, double totalSettlement, double totalCommission, double totalAgentCommission,
-                                      int detailCount, Integer enterpriseId, String insurer, List<PremiumDetailRow> rows) {}
+                                      int detailCount, Integer enterpriseId, String insurer, Integer agentId,
+                                      List<PremiumDetailRow> rows) {}
 
     private LocalDate[] parseRange(String startValue, String endValue) {
         try {
@@ -171,6 +176,7 @@ public class ReportsController {
                                               @RequestParam("end_date") String endValue,
                                               @RequestParam(name = "enterprise_id", required = false) Integer enterpriseId,
                                               @RequestParam(name = "insurer", required = false, defaultValue = "") String insurer,
+                                              @RequestParam(name = "agent_id", required = false) Integer agentId,
                                               User user) {
         LocalDate[] range = parseRange(startValue, endValue);
         LocalDate start = range[0], end = range[1], asOf = end.isBefore(LocalDate.now()) ? end : LocalDate.now();
@@ -178,7 +184,11 @@ public class ReportsController {
         Integer scopedEnterpriseId = enterpriseId;
         if ("enterprise".equals(user.getRole())) {
             if (enterpriseId != null && !enterpriseId.equals(user.getEnterpriseId())) throw ApiException.forbidden("无权查询其他投保单位");
+            if (agentId != null) throw ApiException.forbidden("企业端无权按业务员查询佣金");
             scopedEnterpriseId = user.getEnterpriseId();
+        } else if (agentId != null) {
+            User agent = userMapper.findById(agentId);
+            if (agent == null || !"salesperson".equals(agent.getRole())) throw ApiException.notFound("业务员不存在");
         }
         String insurerFilter = insurer == null ? "" : insurer.trim();
         boolean platformView = "admin".equals(user.getRole());
@@ -201,6 +211,9 @@ public class ReportsController {
             LocalDate periodEnd = terminated != null && terminated.isBefore(asOf) ? terminated : asOf;
             if (periodStart.isAfter(periodEnd)) continue;
             Enterprise enterprise = enterpriseMapper.findById(policy.getEnterpriseId());
+            Integer rowAgentId = enterprise != null ? enterprise.getAgentId() : null;
+            if (agentId != null && !agentId.equals(rowAgentId)) continue;
+            User rowAgent = rowAgentId != null ? userMapper.findById(rowAgentId) : null;
             WorkPosition position = person.getPositionId() != null ? positionMapper.findById(person.getPositionId()) : null;
             ActualEmployer employer = position != null && position.getActualEmployerId() != null ? actualEmployerMapper.findById(position.getActualEmployerId()) : null;
             String billingMode = plan != null ? plan.getBillingMode() : "monthly";
@@ -212,6 +225,7 @@ public class ReportsController {
             double agentCommission = PricingService.amount(periodPremium(prices.agentCommission(), billingMode, periodStart, periodEnd));
             rows.add(new PremiumDetailRow(member.getId(), person.getId(), person.getName(), person.getIdNumber(),
                     enterprise != null ? enterprise.getName() : "",
+                    platformView ? rowAgentId : null, platformView && rowAgent != null ? rowAgent.getName() : "",
                     employer != null ? employer.getName() : (position != null ? position.getActualEmployer() : ""),
                     position != null ? position.getName() : person.getOccupation(), person.getOccupationClass(),
                     policy.getPolicyNo(), plan != null ? plan.getInsurer() : "", plan != null ? plan.getName() : "",
@@ -225,7 +239,7 @@ public class ReportsController {
         double totalCommission = platformView ? PricingService.amount(rows.stream().mapToDouble(PremiumDetailRow::commissionAmount).sum()) : 0;
         double totalAgentCommission = platformView ? PricingService.amount(rows.stream().mapToDouble(PremiumDetailRow::agentCommissionAmount).sum()) : 0;
         return new PremiumDetailReport(start.toString(), end.toString(), asOf.toString(), totalPremium, totalSettlement, totalCommission, totalAgentCommission,
-                rows.size(), scopedEnterpriseId, insurerFilter, rows);
+                rows.size(), scopedEnterpriseId, insurerFilter, agentId, rows);
     }
 
     @GetMapping("/reports/premium-details/export")
@@ -233,19 +247,26 @@ public class ReportsController {
                                                         @RequestParam("end_date") String endValue,
                                                         @RequestParam(name = "enterprise_id", required = false) Integer enterpriseId,
                                                         @RequestParam(name = "insurer", required = false, defaultValue = "") String insurer,
+                                                        @RequestParam(name = "agent_id", required = false) Integer agentId,
                                                         User user) throws IOException {
-        PremiumDetailReport report = premiumDetails(startValue, endValue, enterpriseId, insurer, user);
+        PremiumDetailReport report = premiumDetails(startValue, endValue, enterpriseId, insurer, agentId, user);
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("销售保费明细");
             boolean platformExport = "admin".equals(user.getRole());
             List<String> columns = new ArrayList<>(List.of("统计开始", "统计结束", "被保险人", "身份证号", "投保单位", "实际用工单位", "岗位", "职业类别", "保单号", "保险公司", "保险方案", "计费方式", "实际销售价", "本期开始", "本期结束", "计费天数", "保费金额"));
-            if (platformExport) columns.addAll(List.of("保司结算底价", "保司结算金额", "总返佣单价", "总返佣金额", "业务员佣金单价", "业务员佣金金额"));
+            if (platformExport) {
+                columns.add(5, "业务员");
+                columns.addAll(List.of("保司结算底价", "保司结算金额", "总返佣单价", "总返佣金额", "业务员佣金单价", "业务员佣金金额"));
+            }
             Row header = sheet.createRow(0);
             for (int i = 0; i < columns.size(); i++) header.createCell(i).setCellValue(columns.get(i));
             int rowIndex = 1;
             for (PremiumDetailRow detail : report.rows()) {
                 List<Object> values = new ArrayList<>(java.util.Arrays.asList(report.startDate(), report.endDate(), detail.personName(), detail.idNumber(), detail.enterpriseName(), detail.actualEmployerName(), detail.positionName(), detail.occupationClass(), detail.policyNo(), detail.insurer(), detail.planName(), "daily".equals(detail.billingMode()) ? "按天" : "按月", detail.unitSalePrice(), detail.periodStart().toString(), detail.periodEnd().toString(), detail.activeDays(), detail.premiumAmount()));
-                if (platformExport) values.addAll(List.of(detail.unitPolicyFloorPrice(), detail.settlementAmount(), detail.unitTotalCommission(), detail.commissionAmount(), detail.unitAgentCommission(), detail.agentCommissionAmount()));
+                if (platformExport) {
+                    values.add(5, detail.agentName());
+                    values.addAll(List.of(detail.unitPolicyFloorPrice(), detail.settlementAmount(), detail.unitTotalCommission(), detail.commissionAmount(), detail.unitAgentCommission(), detail.agentCommissionAmount()));
+                }
                 Row row = sheet.createRow(rowIndex++);
                 for (int i = 0; i < values.size(); i++) {
                     Object value = values.get(i);

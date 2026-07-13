@@ -162,6 +162,16 @@ def run():
             assert platform_report["detail_count"] == 1
             assert platform_report["total_premium"] == 3300 and platform_report["total_settlement"] == 2400
             assert platform_report["total_commission"] == 600 and platform_report["total_agent_commission"] == 600
+            assert platform_report["rows"][0]["agent_id"] == agent["id"]
+            assert platform_report["rows"][0]["agent_name"] == "测试业务员"
+            filtered_commission = premium_details("2026-01-01", "2026-01-31", enterprise_id=None, insurer="", agent_id=agent["id"], user=admin, session=session)
+            assert filtered_commission["detail_count"] == 1
+            assert filtered_commission["total_commission"] == 600 and filtered_commission["total_agent_commission"] == 600
+            try:
+                premium_details("2026-01-01", "2026-01-31", enterprise_id=None, insurer="", agent_id=agent["id"] + 999, user=admin, session=session)
+                raise AssertionError("unknown salesperson filter must be rejected")
+            except HTTPException as error:
+                assert error.status_code == 404
             try:
                 premium_details("2026-01-01", "2026-01-31", enterprise_id=enterprise_id + 999, insurer="", user=user, session=session)
                 raise AssertionError("enterprise must not query another tenant's premium detail")

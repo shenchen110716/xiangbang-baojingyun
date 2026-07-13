@@ -62,14 +62,28 @@ def _member_prices(session: Session, member: PolicyMember, policy: Policy, perso
     )
 
 
-def _premium_detail_payload(start: date, end: date, user: User, session: Session, enterprise_id: int | None = None, insurer: str = "") -> dict:
+def _premium_detail_payload(
+    start: date,
+    end: date,
+    user: User,
+    session: Session,
+    enterprise_id: int | None = None,
+    insurer: str = "",
+    agent_id: int | None = None,
+) -> dict:
     rows = []
     if user.role == "enterprise":
         if enterprise_id is not None and enterprise_id != user.enterprise_id:
             raise HTTPException(403, "无权查询其他投保单位")
+        if agent_id is not None:
+            raise HTTPException(403, "企业端无权按业务员查询佣金")
         scoped_enterprise_id = user.enterprise_id
     else:
         scoped_enterprise_id = enterprise_id
+        if agent_id is not None:
+            agent = session.get(User, agent_id)
+            if not agent or agent.role != "salesperson":
+                raise HTTPException(404, "业务员不存在")
     insurer_filter = insurer.strip()
     members = session.scalars(select(PolicyMember).order_by(PolicyMember.effective_at.asc(), PolicyMember.id.asc())).all()
     for member in members:
@@ -87,6 +101,10 @@ def _premium_detail_payload(start: date, end: date, user: User, session: Session
             continue
         period_start, period_end = billable
         enterprise = session.get(Enterprise, policy.enterprise_id)
+        row_agent_id = enterprise.agent_id if enterprise else None
+        if agent_id is not None and row_agent_id != agent_id:
+            continue
+        row_agent = session.get(User, row_agent_id) if row_agent_id else None
         position = session.get(WorkPosition, person.position_id) if person.position_id else None
         employer = session.get(ActualEmployer, position.actual_employer_id) if position and position.actual_employer_id else None
         billing_mode = plan.billing_mode if plan else "monthly"
@@ -102,6 +120,8 @@ def _premium_detail_payload(start: date, end: date, user: User, session: Session
             "person_name": person.name,
             "id_number": person.id_number,
             "enterprise_name": enterprise.name if enterprise else "",
+            "agent_id": row_agent_id,
+            "agent_name": row_agent.name if row_agent else "",
             "actual_employer_name": employer.name if employer else (position.actual_employer if position else ""),
             "position_name": position.name if position else person.occupation,
             "occupation_class": person.occupation_class,
@@ -125,7 +145,7 @@ def _premium_detail_payload(start: date, end: date, user: User, session: Session
         })
     platform_view = user.role == "admin"
     response_rows = rows if platform_view else [
-        {key: value for key, value in row.items() if key not in {"unit_policy_floor_price", "settlement_amount", "unit_total_commission", "unit_agent_commission", "commission_amount", "agent_commission_amount"}}
+        {key: value for key, value in row.items() if key not in {"agent_id", "agent_name", "unit_policy_floor_price", "settlement_amount", "unit_total_commission", "unit_agent_commission", "commission_amount", "agent_commission_amount"}}
         for row in rows
     ]
     return {
@@ -139,6 +159,7 @@ def _premium_detail_payload(start: date, end: date, user: User, session: Session
         "detail_count": len(rows),
         "enterprise_id": scoped_enterprise_id,
         "insurer": insurer_filter,
+        "agent_id": agent_id,
         "rows": response_rows,
     }
 
@@ -165,23 +186,27 @@ def reports(user: User = Depends(current_user), session: Session = Depends(db)):
 
 
 @router.get("/reports/premium-details")
-def premium_details(start_date: str = Query(...), end_date: str = Query(...), enterprise_id: int | None = Query(default=None), insurer: str = Query(default=""), user: User = Depends(current_user), session: Session = Depends(db)):
+def premium_details(start_date: str = Query(...), end_date: str = Query(...), enterprise_id: int | None = Query(default=None), insurer: str = Query(default=""), agent_id: int | None = None, user: User = Depends(current_user), session: Session = Depends(db)):
     start, end = _parse_report_range(start_date, end_date)
-    return _premium_detail_payload(start, end, user, session, enterprise_id, insurer)
+    return _premium_detail_payload(start, end, user, session, enterprise_id, insurer, agent_id)
 
 
 @router.get("/reports/premium-details/export")
-def export_premium_details(start_date: str = Query(...), end_date: str = Query(...), enterprise_id: int | None = Query(default=None), insurer: str = Query(default=""), user: User = Depends(current_user), session: Session = Depends(db)):
+def export_premium_details(start_date: str = Query(...), end_date: str = Query(...), enterprise_id: int | None = Query(default=None), insurer: str = Query(default=""), agent_id: int | None = None, user: User = Depends(current_user), session: Session = Depends(db)):
     start, end = _parse_report_range(start_date, end_date)
-    payload = _premium_detail_payload(start, end, user, session, enterprise_id, insurer)
+    payload = _premium_detail_payload(start, end, user, session, enterprise_id, insurer, agent_id)
     book = openpyxl.Workbook(); sheet = book.active; sheet.title = "销售保费明细"
     platform_export = user.role == "admin"
     headers = ["统计开始", "统计结束", "被保险人", "身份证号", "投保单位", "实际用工单位", "岗位", "职业类别", "保单号", "保险公司", "保险方案", "计费方式", "实际销售价", "本期开始", "本期结束", "计费天数", "保费金额"]
-    if platform_export: headers += ["保司结算底价", "保司结算金额", "总返佣单价", "总返佣金额", "业务员佣金单价", "业务员佣金金额"]
+    if platform_export:
+        headers.insert(5, "业务员")
+        headers += ["保司结算底价", "保司结算金额", "总返佣单价", "总返佣金额", "业务员佣金单价", "业务员佣金金额"]
     sheet.append(headers)
     for row in payload["rows"]:
         values = [payload["start_date"], payload["end_date"], row["person_name"], row["id_number"], row["enterprise_name"], row["actual_employer_name"], row["position_name"], row["occupation_class"], row["policy_no"], row["insurer"], row["plan_name"], "按天" if row["billing_mode"] == "daily" else "按月", row["unit_sale_price"], row["period_start"], row["period_end"], row["active_days"], row["premium_amount"]]
-        if platform_export: values += [row["unit_policy_floor_price"], row["settlement_amount"], row["unit_total_commission"], row["commission_amount"], row["unit_agent_commission"], row["agent_commission_amount"]]
+        if platform_export:
+            values.insert(5, row["agent_name"])
+            values += [row["unit_policy_floor_price"], row["settlement_amount"], row["unit_total_commission"], row["commission_amount"], row["unit_agent_commission"], row["agent_commission_amount"]]
         sheet.append(values)
     sheet.append([]); sheet.append(["销售保费总额", payload["total_premium"]])
     if platform_export: sheet.append(["保司结算总额", payload["total_settlement"]])

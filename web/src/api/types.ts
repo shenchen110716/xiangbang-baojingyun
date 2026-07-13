@@ -438,6 +438,8 @@ export interface PremiumDetailRow {
   person_name: string
   id_number: string
   enterprise_name: string
+  agent_id: number | null
+  agent_name: string
   actual_employer_name: string
   position_name: string
   occupation_class: string
@@ -471,6 +473,7 @@ export interface PremiumDetailReport {
   detail_count: number
   enterprise_id: number | null
   insurer: string
+  agent_id: number | null
   rows: PremiumDetailRow[]
 }
 

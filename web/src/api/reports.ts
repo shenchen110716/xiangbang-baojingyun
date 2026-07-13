@@ -13,7 +13,7 @@ export function getReports() {
   return client.get<ReportRow[]>('/reports').then((r) => r.data)
 }
 
-export function getPremiumDetails(start_date: string, end_date: string, filters?: { enterprise_id?: number; insurer?: string }) {
+export function getPremiumDetails(start_date: string, end_date: string, filters?: { enterprise_id?: number; insurer?: string; agent_id?: number }) {
   return client.get<PremiumDetailReport>('/reports/premium-details', { params: { start_date, end_date, ...filters } }).then((r) => r.data)
 }
 
