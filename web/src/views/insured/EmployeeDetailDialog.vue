@@ -3,10 +3,12 @@ import { ref, watch } from 'vue'
 import type { InsuredPerson, PolicyMemberHistory } from '@/api/types'
 import { getPolicyMembers } from '@/api/insured'
 import { money, formatDateTime } from '@/utils/format'
+import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{ person: InsuredPerson | null }>()
 const visible = defineModel<boolean>({ default: false })
 const emit = defineEmits<{ edit: []; 'toggle-status': [] }>()
+const auth = useAuthStore()
 
 const history = ref<PolicyMemberHistory[]>([])
 const historyLoading = ref(false)
@@ -36,7 +38,10 @@ const statusText: Record<string, string> = { active: '在保', pending: '待审�
       <div class="row"><span>实际工作单位</span><b>{{ person.actual_employer_name || '—' }}</b></div>
       <div class="row"><span>岗位与类别</span><b>{{ person.position_name || person.occupation }} · {{ person.occupation_class }}</b></div>
       <div class="row"><span>保险产品</span><b>{{ person.insurer ? `${person.insurer} · ${person.plan_name}` : '未绑定产品' }}</b></div>
-      <template v-if="person.insurance_base_price !== undefined">
+      <template v-if="auth.isEnterprise() && person.sale_price !== undefined">
+        <div class="row"><span>实际销售价</span><b>{{ money(person.sale_price) }}</b></div>
+      </template>
+      <template v-else-if="person.insurance_base_price !== undefined">
         <div class="row"><span>保险原价</span><b>{{ money(person.insurance_base_price) }}</b></div>
         <div class="row"><span>保司结算底价</span><b>{{ money(person.policy_floor_price) }}</b></div>
         <div class="row"><span>平台利润</span><b>{{ money(person.profit_amount) }}</b></div>

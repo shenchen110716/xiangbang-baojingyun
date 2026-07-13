@@ -16,10 +16,7 @@
       <view class="section-title">保障信息</view><view class="divider"></view>
       <view class="row between"><text class="muted">保险公司</text><text>{{item.insurer||'待关联'}}</text></view>
       <view class="row between" style="margin-top:22rpx"><text class="muted">保险方案</text><text>{{item.plan_name||'待关联'}}</text></view>
-      <view class="row between" style="margin-top:22rpx"><text class="muted">保司结算底价</text><text>¥{{item.policy_floor_price||0}}</text></view>
-      <view class="row between" style="margin-top:22rpx"><text class="muted">销售最低价</text><text>¥{{item.minimum_sale_price||0}}</text></view>
       <view class="row between" style="margin-top:22rpx"><text class="muted">实际销售价</text><text class="strong">¥{{item.sale_price||0}}</text></view>
-      <view class="row between" style="margin-top:22rpx"><text class="muted">总返佣金额</text><text>¥{{item.total_commission_amount||0}}</text></view>
       <view class="row between" style="margin-top:22rpx"><text class="muted">保单号</text><text>{{item.policy_no||'待出单'}}</text></view>
     </view>
     <view class="card">
