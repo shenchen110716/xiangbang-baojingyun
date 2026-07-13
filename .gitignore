@@ -7,3 +7,6 @@ __pycache__/
 *.zip
 uploads/
 miniprogram/project.private.config.json
+.neon/
+miniprogram-preview.png
+miniprogram-preview-info.json
