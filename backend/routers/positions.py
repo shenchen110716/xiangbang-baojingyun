@@ -3,12 +3,14 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.audit import audit
 from ..core.config import ROOT
 from ..core.db import db
+from ..core.file_tokens import make_download_token, verify_download_token
 from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import ActualEmployer, Enterprise, InsurancePlan, InsuredPerson, PositionVideo, User, WorkPosition
@@ -19,6 +21,11 @@ from ..schemas import (
 from ..services import serialize
 
 router = APIRouter(prefix="/api", tags=["positions"])
+
+
+def _video_dict(item: PositionVideo) -> dict:
+    token, expires = make_download_token(f"position-video:{item.id}")
+    return {**serialize(item), "url": f"/api/positions/{item.position_id}/videos/{item.id}/download?token={token}&expires={expires}"}
 
 
 @router.get("/positions")
@@ -75,14 +82,14 @@ def position_videos(item_id:int,user:User=Depends(current_user),session:Session=
     pos=session.get(WorkPosition,item_id)
     if not pos: raise HTTPException(404,'岗位不存在')
     if user.role=='enterprise' and user.enterprise_id!=pos.enterprise_id: raise HTTPException(403,'无权查看')
-    return [serialize(x) for x in session.scalars(select(PositionVideo).where(PositionVideo.position_id==item_id).order_by(PositionVideo.id.desc()))]
+    return [_video_dict(x) for x in session.scalars(select(PositionVideo).where(PositionVideo.position_id==item_id).order_by(PositionVideo.id.desc()))]
 
 @router.post("/positions/{item_id}/videos")
 def add_position_video(item_id:int,data:PositionVideoIn,user:User=Depends(current_user),session:Session=Depends(db)):
     pos=session.get(WorkPosition,item_id)
     if not pos: raise HTTPException(404,'岗位不存在')
     if user.role=='enterprise' and user.enterprise_id!=pos.enterprise_id: raise HTTPException(403,'无权上传')
-    item=PositionVideo(position_id=item_id,**data.model_dump());session.add(item);pos.status='pending';pos.occupation_class='待定';pos.plan_id=None;session.commit();session.refresh(item);audit(session,user,'upload','position_video',str(item.id));return serialize(item)
+    item=PositionVideo(position_id=item_id,**data.model_dump());session.add(item);pos.status='pending';pos.occupation_class='待定';pos.plan_id=None;session.commit();session.refresh(item);audit(session,user,'upload','position_video',str(item.id));return _video_dict(item)
 
 @router.post("/positions/{item_id}/videos/upload")
 async def upload_position_video(item_id:int,file:UploadFile=File(...),user:User=Depends(current_user),session:Session=Depends(db)):
@@ -94,7 +101,23 @@ async def upload_position_video(item_id:int,file:UploadFile=File(...),user:User=
     content=await file.read()
     if len(content)>100*1024*1024: raise HTTPException(400,'岗位视频不能超过 100MB')
     folder=ROOT/'uploads'/'positions'/str(item_id);folder.mkdir(parents=True,exist_ok=True);stored=f'{secrets.token_hex(8)}{suffix}';(folder/stored).write_bytes(content)
-    item=PositionVideo(position_id=item_id,name=file.filename or stored,url=f'/uploads/positions/{item_id}/{stored}',status='pending');session.add(item);pos.status='pending';pos.occupation_class='待定';pos.plan_id=None;session.commit();session.refresh(item);audit(session,user,'upload','position_video',str(item.id));return serialize(item)
+    item=PositionVideo(position_id=item_id,name=file.filename or stored,url=f'/uploads/positions/{item_id}/{stored}',status='pending');session.add(item);pos.status='pending';pos.occupation_class='待定';pos.plan_id=None;session.commit();session.refresh(item);audit(session,user,'upload','position_video',str(item.id));return _video_dict(item)
+
+@router.get("/positions/{item_id}/videos/{video_id}/download")
+def download_position_video(item_id:int,video_id:int,token:str,expires:int,session:Session=Depends(db)):
+    # Short-lived signed link (see core/file_tokens.py) — intentionally not
+    # behind Depends(current_user): the token itself, minted only for an
+    # already-authenticated request to GET /positions/{id}/videos, is the
+    # credential, so plain <video src> / wx.downloadFile work unchanged.
+    if not verify_download_token(f"position-video:{video_id}", expires, token):
+        raise HTTPException(403, "下载链接无效或已过期")
+    video=session.get(PositionVideo,video_id)
+    if not video or video.position_id!=item_id: raise HTTPException(404,'岗位视频不存在')
+    if video.url.startswith("http://") or video.url.startswith("https://"):
+        return RedirectResponse(video.url)
+    path=ROOT/video.url.lstrip('/')
+    if not path.is_file(): raise HTTPException(404,'文件不存在')
+    return FileResponse(path)
 
 @router.patch("/position-videos/{item_id}/review", dependencies=[Depends(require_role("admin", detail="仅平台端可审核岗位视频"))])
 def review_position_video(item_id:int,data:PositionVideoReviewIn,user:User=Depends(current_user),session:Session=Depends(db)):

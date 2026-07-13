@@ -5,7 +5,6 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from .core.config import ROOT, DATABASE_URL
 from .core.db import Base, engine, SessionLocal
@@ -104,9 +103,10 @@ def serve_frontend_styles():
     return _serve_web_asset("styles.css")
 
 
-# Uploaded position videos / claim documents. Anonymous-but-unguessable for
-# now (random token filenames); replacing this with authenticated,
-# per-file-authorized download endpoints is the fast-follow tracked as a
-# separate Phase 0/1 item in SYSTEM-DESIGN-V4.md section 11.1.
+# Uploaded position videos / claim documents are no longer served through a
+# static mount at all — see download_position_video (routers/positions.py)
+# and download_claim_document (routers/claims.py) for the short-lived
+# signed-URL download endpoints that replaced it (SYSTEM-DESIGN-V4.md
+# section 11.1). The directory itself must still exist for upload handlers
+# to write into.
 (ROOT / "uploads").mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=ROOT / "uploads"), name="uploads")

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 from ..core.audit import audit
 from ..core.config import ROOT
 from ..core.db import db
+from ..core.file_tokens import make_download_token, verify_download_token
 from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import Claim, ClaimDocument, ClaimTimeline, InsuredPerson, Policy, User
@@ -22,6 +24,11 @@ from ..services.claims import (
 )
 
 router = APIRouter(prefix="/api", tags=["claims"])
+
+
+def _document_dict(item: ClaimDocument) -> dict:
+    token, expires = make_download_token(f"claim-document:{item.id}")
+    return {**serialize(item), "url": f"/api/claims/{item.claim_id}/documents/{item.id}/download?token={token}&expires={expires}"}
 
 
 @router.get("/claims")
@@ -97,14 +104,14 @@ def claim_documents(item_id:int,user:User=Depends(current_user),session:Session=
     item=session.get(Claim,item_id)
     if not item: raise HTTPException(404,"理赔案件不存在")
     if user.role=="enterprise" and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,"无权查看该案件")
-    return [serialize(x) for x in session.scalars(select(ClaimDocument).where(ClaimDocument.claim_id==item_id).order_by(ClaimDocument.id.desc()))]
+    return [_document_dict(x) for x in session.scalars(select(ClaimDocument).where(ClaimDocument.claim_id==item_id).order_by(ClaimDocument.id.desc()))]
 
 @router.post("/claims/{item_id}/documents")
 def add_claim_document(item_id:int,data:ClaimDocumentIn,user:User=Depends(current_user),session:Session=Depends(db)):
     item=session.get(Claim,item_id)
     if not item: raise HTTPException(404,"理赔案件不存在")
     prepare_claim_upload(item,user,session)
-    doc=ClaimDocument(claim_id=item_id,**data.model_dump());session.add(doc);session.flush();session.add(ClaimTimeline(claim_id=item_id,node=item.status,action=f'上传材料：{data.name}',note=data.doc_type,operator=user.name));session.commit();session.refresh(doc);audit(session,user,"upload","claim_document",str(doc.id));return serialize(doc)
+    doc=ClaimDocument(claim_id=item_id,**data.model_dump());session.add(doc);session.flush();session.add(ClaimTimeline(claim_id=item_id,node=item.status,action=f'上传材料：{data.name}',note=data.doc_type,operator=user.name));session.commit();session.refresh(doc);audit(session,user,"upload","claim_document",str(doc.id));return _document_dict(doc)
 
 @router.post("/claims/{item_id}/documents/upload")
 async def upload_claim_document(item_id:int,doc_type:str=Form('other'),file:UploadFile=File(...),user:User=Depends(current_user),session:Session=Depends(db)):
@@ -116,7 +123,21 @@ async def upload_claim_document(item_id:int,doc_type:str=Form('other'),file:Uplo
     content=await file.read()
     if len(content)>20*1024*1024: raise HTTPException(400,'单个材料不能超过20MB')
     folder=ROOT/'uploads'/'claims'/str(item_id);folder.mkdir(parents=True,exist_ok=True);stored=f'{secrets.token_hex(8)}{suffix}';(folder/stored).write_bytes(content);url=f'/uploads/claims/{item_id}/{stored}'
-    doc=ClaimDocument(claim_id=item_id,name=file.filename or stored,url=url,doc_type=doc_type);session.add(doc);session.flush();session.add(ClaimTimeline(claim_id=item_id,node=item.status,action=f'上传材料：{doc.name}',note=doc_type,operator=user.name));session.commit();session.refresh(doc);audit(session,user,'upload','claim_document',str(doc.id));return serialize(doc)
+    doc=ClaimDocument(claim_id=item_id,name=file.filename or stored,url=url,doc_type=doc_type);session.add(doc);session.flush();session.add(ClaimTimeline(claim_id=item_id,node=item.status,action=f'上传材料：{doc.name}',note=doc_type,operator=user.name));session.commit();session.refresh(doc);audit(session,user,'upload','claim_document',str(doc.id));return _document_dict(doc)
+
+@router.get("/claims/{item_id}/documents/{document_id}/download")
+def download_claim_document(item_id:int,document_id:int,token:str,expires:int,session:Session=Depends(db)):
+    # Short-lived signed link, same pattern as download_position_video in
+    # routers/positions.py — see core/file_tokens.py for the rationale.
+    if not verify_download_token(f"claim-document:{document_id}", expires, token):
+        raise HTTPException(403, "下载链接无效或已过期")
+    document=session.get(ClaimDocument,document_id)
+    if not document or document.claim_id!=item_id: raise HTTPException(404,'理赔材料不存在')
+    if document.url.startswith("http://") or document.url.startswith("https://"):
+        return RedirectResponse(document.url)
+    path=ROOT/document.url.lstrip('/')
+    if not path.is_file(): raise HTTPException(404,'文件不存在')
+    return FileResponse(path)
 
 @router.patch("/claims/{item_id}/documents/{document_id}", dependencies=[Depends(require_role("admin", detail="仅平台理赔人员可审核材料"))])
 def review_claim_document(item_id:int,document_id:int,data:ClaimDocumentReviewIn,user:User=Depends(current_user),session:Session=Depends(db)):
@@ -126,7 +147,7 @@ def review_claim_document(item_id:int,document_id:int,data:ClaimDocumentReviewIn
     if data.status=='rejected' and item.status not in {'paid','rejected','closed'}:
         item.status='supplement';item.current_handler='企业经办人';session.add(ClaimTimeline(claim_id=item.id,node='supplement',action=f'材料驳回：{document.name}',note=data.review_note,operator=user.name))
     else: session.add(ClaimTimeline(claim_id=item.id,node=item.status,action=f'材料审核：{document.name}',note=data.review_note or data.status,operator=user.name))
-    session.commit();audit(session,user,'review','claim_document',str(document.id),data.status);return serialize(document)
+    session.commit();audit(session,user,'review','claim_document',str(document.id),data.status);return _document_dict(document)
 
 @router.delete("/claims/{item_id}/documents/{document_id}")
 def delete_claim_document(item_id:int,document_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
