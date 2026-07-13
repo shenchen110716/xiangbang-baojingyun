@@ -95,7 +95,11 @@ def serve_frontend(path: str):
     if path in _WEB_ROOT_FILES:
         return FileResponse(WEB_DIST / path)
     if f"/{path}" in _FRONTEND_ROUTES:
-        return FileResponse(WEB_DIST / "index.html", media_type="text/html")
+        return FileResponse(
+            WEB_DIST / "index.html",
+            media_type="text/html",
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
     raise HTTPException(404)
 
 
