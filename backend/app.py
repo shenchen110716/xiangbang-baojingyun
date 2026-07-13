@@ -4,6 +4,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .core.config import ROOT, DATABASE_URL
@@ -68,4 +69,44 @@ app.include_router(messages_router)
 app.include_router(notifications_router)
 app.include_router(claims_router)
 
-app.mount("/", StaticFiles(directory=ROOT, html=True), name="frontend")
+# SYSTEM-DESIGN-V4.md Phase 0 stop-loss item #1: the project root (source
+# code, data.db, .env, requirements.txt, ...) must never be reachable over
+# HTTP. Explicitly allowlist only the three static web assets the SPA
+# needs, instead of mounting StaticFiles(directory=ROOT) for the whole tree.
+_WEB_ASSET_MEDIA_TYPES = {
+    "index.html": "text/html",
+    "script.js": "application/javascript",
+    "styles.css": "text/css",
+}
+
+
+def _serve_web_asset(filename: str) -> FileResponse:
+    return FileResponse(ROOT / filename, media_type=_WEB_ASSET_MEDIA_TYPES[filename])
+
+
+@app.get("/", include_in_schema=False)
+def serve_frontend_root():
+    return _serve_web_asset("index.html")
+
+
+@app.get("/index.html", include_in_schema=False)
+def serve_frontend_index():
+    return _serve_web_asset("index.html")
+
+
+@app.get("/script.js", include_in_schema=False)
+def serve_frontend_script():
+    return _serve_web_asset("script.js")
+
+
+@app.get("/styles.css", include_in_schema=False)
+def serve_frontend_styles():
+    return _serve_web_asset("styles.css")
+
+
+# Uploaded position videos / claim documents. Anonymous-but-unguessable for
+# now (random token filenames); replacing this with authenticated,
+# per-file-authorized download endpoints is the fast-follow tracked as a
+# separate Phase 0/1 item in SYSTEM-DESIGN-V4.md section 11.1.
+(ROOT / "uploads").mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=ROOT / "uploads"), name="uploads")

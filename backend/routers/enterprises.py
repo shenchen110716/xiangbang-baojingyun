@@ -64,12 +64,16 @@ def delete_enterprise(item_id: int, user: User = Depends(current_user), session:
     if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id == item_id).limit(1)) or session.scalar(select(Policy.id).where(Policy.enterprise_id == item_id).limit(1)): raise HTTPException(409, "该单位已有参保人员或保单，不能删除；请先停保并归档")
     session.delete(item); session.commit(); audit(session, user, "delete", "enterprise", str(item_id)); return {"ok": True}
 
-@router.post("/enterprises/{item_id}/recharge")
+@router.post("/enterprises/{item_id}/recharge", dependencies=[Depends(require_role("admin", detail="企业账户不支持自助充值，请联系平台完成充值审核"))])
 def recharge_enterprise(item_id: int, data: RechargeIn, user: User = Depends(current_user), session: Session = Depends(db)):
+    # SYSTEM-DESIGN-V4.md Phase 0 stop-loss item #2 ("禁用企业直接充值接口"):
+    # this endpoint used to let a logged-in enterprise user credit their own
+    # balance with zero payment verification. Restricted to admin-only as a
+    # manual ops tool until the real Payment Order + Ledger flow (already
+    # exposed via /api/payments + /api/payments/callback, but not yet wired
+    # into any frontend) replaces it.
     item = session.get(Enterprise, item_id)
     if not item: raise HTTPException(404, "投保单位不存在")
-    if user.role not in {"admin","enterprise"}: raise HTTPException(403,"无权为投保单位充值")
-    if user.role == "enterprise" and user.enterprise_id != item_id: raise HTTPException(403, "无权为该单位充值")
     if data.account == "premium": item.premium_balance += data.amount
     elif data.account == "usage": item.usage_balance += data.amount
     else: raise HTTPException(400, "账户类型不合法")
