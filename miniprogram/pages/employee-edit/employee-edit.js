@@ -53,7 +53,7 @@ Page({
     let request;
     if (this.data.id) {
       const data = { name: payload.name, id_number: payload.id_number, phone: payload.phone, position_id: payload.position_id };
-      // 参保时间/停保时间为空表示"不修改"；只有当值发生变化时才带上，避免用空值误清空后端记录
+      // 生效时间/停保时间为空表示"不修改"；只有当值发生变化时才带上，避免用空值误清空后端记录
       if (payload.effective_at && payload.effective_at !== this.data.originalEffectiveAt) data.effective_at = payload.effective_at;
       if (payload.terminated_at && payload.terminated_at !== this.data.originalTerminatedAt) data.terminated_at = payload.terminated_at;
       request = app.request(`/insured/${this.data.id}`, { method: 'PATCH', data });

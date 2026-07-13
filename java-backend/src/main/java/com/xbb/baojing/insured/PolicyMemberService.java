@@ -71,7 +71,7 @@ public class PolicyMemberService {
         return activate(person, LocalDateTime.now());
     }
 
-    /** Same as activate(), but records the given moment as 参保时间/effective_at
+    /** Same as activate(), but records the given moment as 生效时间/effective_at
      * instead of "now" — used for manual date correction (EmployeeEditorDialog)
      * and backdated bulk-import rows (EnrollmentController's 生效日期 column). */
     public Integer activate(InsuredPerson person, LocalDateTime effectiveAt) {
@@ -118,7 +118,7 @@ public class PolicyMemberService {
         }
     }
 
-    /** Ports the "manually correct 参保时间/停保时间 on an existing coverage
+    /** Ports the "manually correct 生效时间/停保时间 on an existing coverage
      * period" flow requested for the workers list edit dialog — distinct from
      * activate()/terminate() (which are driven by the person's status
      * transitioning), this directly rewrites the latest PolicyMember row's

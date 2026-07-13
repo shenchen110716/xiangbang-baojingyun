@@ -26,7 +26,7 @@ def run():
             ClaimDocumentIn, ClaimIn, ClaimStatusIn,
             CommissionIn, CommissionUpdate, EnterpriseIn, InvoiceIn,
             InvoiceUpdate, OperatorIn, PaymentCallbackIn, PaymentIn,
-            PasswordChangeIn, PersonIn, PlanIn, PositionIn,
+            PasswordChangeIn, PersonIn, PersonUpdate, PlanIn, PositionIn,
         )
         from backend.services import commission_dict
         from backend.services.claims import CLAIM_REQUIRED_TYPES
@@ -37,7 +37,7 @@ def run():
         from backend.routers.dashboard import dashboard, screen_products
         from backend.routers.enrollment import enrollment_email
         from backend.routers.enterprises import add_enterprise
-        from backend.routers.insured import add_person, insured_status
+        from backend.routers.insured import add_person, insured_status, update_person
         from backend.routers.invoices import create_invoice, update_invoice
         from backend.routers.operators import add_operator
         from backend.routers.payments import create_payment, payment_callback
@@ -81,12 +81,16 @@ def run():
             position = add_position(PositionIn(enterprise_id=enterprise_id, actual_employer_id=employer_id, actual_employer="实际工作单位 A", name="测试岗位", occupation_class="1-3类", plan_id=plan["id"]), admin, session)
             position_row = session.get(WorkPosition, position["id"]); position_row.status="approved"; session.commit()
             person = add_person(PersonIn(enterprise_id=enterprise_id, name="测试员工", id_number="340123199001019999", position_id=position["id"]), user, session)
+            added_at = person["created_at"]
+            person = update_person(person["id"], PersonUpdate(effective_at="2026-01-02"), user, session)
+            assert person["created_at"] == added_at
+            assert person["effective_at"].date().isoformat() == "2026-01-02"
+            assert person["status"] == "active"
             assert dashboard(user, session)["active_people"] == 1
             assert next(row for row in screen_products(user, session) if row["plan_id"] == plan["id"])["insured_count"] == 1
 
-            # PolicyMember bridge: activating a person must lazily create Policy +
-            # PolicyMember with a price snapshot (Policy/policy_id were previously
-            # dead code — nothing in the app ever created a Policy row).
+            # Entering a business effective date creates the PolicyMember bridge
+            # and must not overwrite the employee record's operation timestamp.
             insured_status(person["id"], "active", user, session)
             member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == person["id"]))
             assert member is not None and member.status == "active" and member.terminated_at is None

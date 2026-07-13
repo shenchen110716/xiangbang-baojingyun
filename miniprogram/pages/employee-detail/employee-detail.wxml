@@ -25,7 +25,7 @@
     <view class="card">
       <view class="row between"><text class="muted">联系手机</text><text>{{item.phone||'未填写'}}</text></view>
       <view class="row between" style="margin-top:22rpx"><text class="muted">添加时间</text><text>{{item.created_at}}</text></view>
-      <view class="row between" style="margin-top:22rpx"><text class="muted">参保时间</text><text>{{item.effective_at||'—'}}</text></view>
+      <view class="row between" style="margin-top:22rpx"><text class="muted">生效时间</text><text>{{item.effective_at||'—'}}</text></view>
       <view class="row between" style="margin-top:22rpx"><text class="muted">停保时间</text><text>{{item.terminated_at||'—'}}</text></view>
     </view>
     <view class="toolbar"><button class="secondary" bindtap="edit">编辑信息</button><button class="secondary" bindtap="claim">理赔报案</button></view>

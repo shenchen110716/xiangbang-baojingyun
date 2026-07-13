@@ -98,8 +98,8 @@ async function submit() {
       <el-form-item label="被保险人姓名" required><el-input v-model="form.name" /></el-form-item>
       <el-form-item label="身份证号" required><el-input v-model="form.id_number" /></el-form-item>
       <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
-      <el-form-item label="参保时间">
-        <el-date-picker v-model="form.effective_at" type="date" value-format="YYYY-MM-DD" placeholder="不填则不改变参保时间" style="width: 100%" />
+      <el-form-item label="生效时间">
+        <el-date-picker v-model="form.effective_at" type="date" value-format="YYYY-MM-DD" placeholder="不填则不改变生效时间" style="width: 100%" />
         <small class="hint">留空则不修改；填写后员工将变为「在保」状态</small>
       </el-form-item>
       <el-form-item label="停保时间">

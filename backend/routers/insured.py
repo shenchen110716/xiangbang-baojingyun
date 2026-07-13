@@ -1,5 +1,6 @@
 import csv
 import io
+from datetime import datetime, timezone
 from typing import Literal
 
 import openpyxl
@@ -13,9 +14,30 @@ from ..core.db import db
 from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
 from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
-from ..services import activate_person_policy, plan_price_for_class, pricing_snapshot, serialize, terminate_person_policy
+from ..services import activate_person_policy, correct_person_policy_dates, plan_price_for_class, pricing_snapshot, serialize, terminate_person_policy
 
 router = APIRouter(prefix="/api", tags=["insured"])
+
+
+def _parse_business_time(raw: str | None, label: str) -> datetime | None:
+    if raw is None or not raw.strip():
+        return None
+    try:
+        value = datetime.fromisoformat(raw.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(400, f"{label}时间格式不正确，应为 yyyy-MM-dd") from exc
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _coverage_dates(session: Session, person_id: int) -> tuple[datetime | None, datetime | None]:
+    member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == person_id).order_by(PolicyMember.id.desc()))
+    return (member.effective_at, member.terminated_at) if member else (None, None)
+
+
+def _person_payload(session: Session, item: InsuredPerson) -> dict:
+    payload = serialize(item)
+    payload["effective_at"], payload["terminated_at"] = _coverage_dates(session, item.id)
+    return payload
 
 
 @router.get("/insured")
@@ -25,7 +47,7 @@ def insured(q: str = "", user: User = Depends(current_user), session: Session = 
     if q: stmt = stmt.where(or_(InsuredPerson.name.contains(q), InsuredPerson.phone.contains(q)))
     result=[]
     for x in session.scalars(stmt):
-        item=serialize(x);enterprise=session.get(Enterprise,x.enterprise_id);position=session.get(WorkPosition,x.position_id) if x.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None;plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None;policy=session.get(Policy,x.policy_id) if x.policy_id else None
+        item=_person_payload(session,x);enterprise=session.get(Enterprise,x.enterprise_id);position=session.get(WorkPosition,x.position_id) if x.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None;plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None;policy=session.get(Policy,x.policy_id) if x.policy_id else None
         relation=session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id==x.enterprise_id,AgentCommission.plan_id==plan.id,AgentCommission.status=='active').order_by(AgentCommission.id.desc())) if plan else None
         item.update(enterprise_name=enterprise.name if enterprise else '',position_name=position.name if position else x.occupation,actual_employer_name=employer.name if employer else (position.actual_employer if position else ''),plan_id=plan.id if plan else None,plan_name=plan.name if plan else '',insurer=plan.insurer if plan else '',policy_no=policy.policy_no if policy else '',policy_status=policy.status if policy else '',**(pricing_snapshot(plan,relation,plan_price_for_class(session,plan,x.occupation_class)) if plan else {}))
         result.append(item)
@@ -36,12 +58,17 @@ def add_person(data: PersonIn, user: User = Depends(current_user), session: Sess
     if not session.get(Enterprise, data.enterprise_id): raise HTTPException(404, "企业不存在")
     if user.role=="enterprise" and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,"无权操作该单位")
     if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==data.enterprise_id,InsuredPerson.id_number==data.id_number).limit(1)): raise HTTPException(409,'该身份证号已存在')
-    payload=data.model_dump()
+    effective_at = _parse_business_time(data.effective_at, "生效")
+    terminated_at = _parse_business_time(data.terminated_at, "停保")
+    payload=data.model_dump(exclude={"effective_at", "terminated_at"})
     if data.position_id:
         position=session.get(WorkPosition,data.position_id)
         if not position or position.enterprise_id!=data.enterprise_id or position.status!='approved': raise HTTPException(400,"只能选择本单位已审核通过的有效岗位")
         payload['occupation']=position.name; payload['occupation_class']=position.occupation_class
-    item = InsuredPerson(**payload); session.add(item); session.commit(); session.refresh(item); audit(session, user, "create", "insured_person", str(item.id)); return serialize(item)
+    item = InsuredPerson(**payload); session.add(item); session.flush()
+    member = correct_person_policy_dates(session, item, effective_at, terminated_at)
+    if member is not None: item.status = "stopped" if member.terminated_at is not None else "active"
+    session.commit(); session.refresh(item); audit(session, user, "create", "insured_person", str(item.id)); return _person_payload(session, item)
 
 @router.patch("/insured/{item_id}")
 def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),session:Session=Depends(db)):
@@ -56,7 +83,12 @@ def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),
         item.position_id=position.id;item.occupation=position.name;item.occupation_class=position.occupation_class
     for key in ('name','phone','id_number'):
         if key in values and values[key] is not None: setattr(item,key,values[key])
-    session.commit();audit(session,user,'update','insured_person',str(item.id));return serialize(item)
+    effective_at = _parse_business_time(values.get('effective_at'), '生效') if 'effective_at' in values else None
+    terminated_at = _parse_business_time(values.get('terminated_at'), '停保') if 'terminated_at' in values else None
+    if effective_at is not None or terminated_at is not None:
+        member = correct_person_policy_dates(session, item, effective_at, terminated_at)
+        if member is not None: item.status = 'stopped' if member.terminated_at is not None else 'active'
+    session.commit();audit(session,user,'update','insured_person',str(item.id));return _person_payload(session,item)
 
 @router.patch("/insured/{item_id}/status")
 def insured_status(item_id:int,status_value:Literal["active","stopped","pending"]=Query(...,alias="status"),user:User=Depends(current_user),session:Session=Depends(db)):
@@ -66,7 +98,7 @@ def insured_status(item_id:int,status_value:Literal["active","stopped","pending"
     previous_status=item.status;item.status=status_value
     if status_value=="active" and previous_status!="active": activate_person_policy(session,item)
     elif previous_status=="active" and status_value!="active": terminate_person_policy(session,item)
-    session.commit();audit(session,user,"status_change","insured_person",str(item.id),status_value);return serialize(item)
+    session.commit();audit(session,user,"status_change","insured_person",str(item.id),status_value);return _person_payload(session,item)
 
 @router.get("/insured/{item_id}/policy-members")
 def insured_policy_members(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):

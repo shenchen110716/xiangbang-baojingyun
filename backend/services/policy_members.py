@@ -18,7 +18,7 @@ def _find_or_create_policy(session: Session, enterprise_id: int, plan_id: int) -
     return policy
 
 
-def activate_person_policy(session: Session, person: InsuredPerson) -> None:
+def activate_person_policy(session: Session, person: InsuredPerson, effective_at: datetime | None = None) -> PolicyMember | None:
     """Call when person.status transitions INTO 'active' from a non-active
     status. Silently no-ops (same permissiveness as today, where the
     status endpoint has no state-machine validation at all) if the person
@@ -26,19 +26,21 @@ def activate_person_policy(session: Session, person: InsuredPerson) -> None:
     reachable states in the current system (review_position doesn't
     require plan_id; re-uploading a video resets an approved position's
     plan_id back to None)."""
-    if not person.position_id: return
+    if not person.position_id: return None
     position = session.get(WorkPosition, person.position_id)
-    if not position or not position.plan_id: return
+    if not position or not position.plan_id: return None
     plan = session.get(InsurancePlan, position.plan_id)
-    if not plan: return
+    if not plan: return None
     policy = _find_or_create_policy(session, person.enterprise_id, plan.id)
     relation = session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id == person.enterprise_id, AgentCommission.plan_id == plan.id, AgentCommission.status == "active").order_by(AgentCommission.id.desc()))
     snapshot = pricing_snapshot(plan, relation, plan_price_for_class(session, plan, person.occupation_class))
-    session.add(PolicyMember(policy_id=policy.id, person_id=person.id, rate_snapshot_json=json.dumps(snapshot, ensure_ascii=False), effective_at=datetime.now(timezone.utc), status="active"))
+    member = PolicyMember(policy_id=policy.id, person_id=person.id, rate_snapshot_json=json.dumps(snapshot, ensure_ascii=False), effective_at=effective_at or datetime.now(timezone.utc), status="active")
+    session.add(member)
     person.policy_id = policy.id
+    return member
 
 
-def terminate_person_policy(session: Session, person: InsuredPerson) -> None:
+def terminate_person_policy(session: Session, person: InsuredPerson, terminated_at: datetime | None = None) -> PolicyMember | None:
     """Call when person.status transitions OUT of 'active'. Closes (never
     deletes/reuses) the person's currently-open coverage period; no-ops if
     none is found (e.g. activate_person_policy previously skipped them).
@@ -47,6 +49,29 @@ def terminate_person_policy(session: Session, person: InsuredPerson) -> None:
     instead of silently overwriting history (SYSTEM-DESIGN-V4.md 16.2)."""
     member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == person.id, PolicyMember.status == "active", PolicyMember.terminated_at.is_(None)).order_by(PolicyMember.id.desc()))
     if member:
-        member.terminated_at = datetime.now(timezone.utc)
+        member.terminated_at = terminated_at or datetime.now(timezone.utc)
         member.status = "terminated"
     person.policy_id = None
+    return member
+
+
+def correct_person_policy_dates(session: Session, person: InsuredPerson, effective_at: datetime | None, terminated_at: datetime | None) -> PolicyMember | None:
+    """Apply explicitly entered business dates without changing created_at.
+
+    The employee's created_at remains the system operation/import time. The
+    effective and termination timestamps belong to the latest coverage row.
+    """
+    member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == person.id).order_by(PolicyMember.id.desc()))
+    if member is None:
+        if effective_at is None:
+            return None
+        member = activate_person_policy(session, person, effective_at)
+        if member is None:
+            return None
+    if effective_at is not None:
+        member.effective_at = effective_at
+    if terminated_at is not None:
+        member.terminated_at = terminated_at
+    member.status = "terminated" if member.terminated_at is not None else "active"
+    person.policy_id = None if member.status == "terminated" else member.policy_id
+    return member

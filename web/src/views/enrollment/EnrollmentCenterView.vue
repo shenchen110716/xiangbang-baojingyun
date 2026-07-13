@@ -187,7 +187,7 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
       </el-form>
     </PageCard>
 
-    <PageCard title="参停保人员名单" :count="filteredPeople.length" hint="添加时间/生效时间/停保时间来自该员工的参保激活与停保记录">
+    <PageCard title="参停保人员名单" :count="filteredPeople.length" hint="添加时间为手工新增保存或批量导入完成时系统自动记录的时间；生效时间和停保时间来自保障记录">
       <template #actions>
         <el-button @click="exportPeopleCsv">导出名单</el-button>
       </template>

@@ -121,7 +121,7 @@ function exportCsv() {
       <StatTile label="已停保" :value="stoppedCount" hint-type="danger" />
     </div>
 
-    <PageCard title="参保员工列表" :count="filtered.length">
+    <PageCard title="参保员工列表" :count="filtered.length" hint="添加时间为手工新增保存或批量导入完成时系统自动记录的时间，与生效时间相互独立">
       <template #actions>
         <el-button @click="exportCsv">导出员工</el-button>
         <el-button type="primary" @click="openEditor(null)">＋ 新增参保员工</el-button>
