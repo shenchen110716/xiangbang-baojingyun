@@ -13,7 +13,7 @@ from ..core.db import db
 from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, User, WorkPosition
 from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
-from ..services import plan_price_for_class, pricing_snapshot, serialize
+from ..services import activate_person_policy, plan_price_for_class, pricing_snapshot, serialize, terminate_person_policy
 
 router = APIRouter(prefix="/api", tags=["insured"])
 
@@ -63,7 +63,10 @@ def insured_status(item_id:int,status_value:Literal["active","stopped","pending"
     item=session.get(InsuredPerson,item_id)
     if not item: raise HTTPException(404,"参保员工不存在")
     if user.role=="enterprise" and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,"无权操作该员工")
-    item.status=status_value;session.commit();audit(session,user,"status_change","insured_person",str(item.id),status_value);return serialize(item)
+    previous_status=item.status;item.status=status_value
+    if status_value=="active" and previous_status!="active": activate_person_policy(session,item)
+    elif previous_status=="active" and status_value!="active": terminate_person_policy(session,item)
+    session.commit();audit(session,user,"status_change","insured_person",str(item.id),status_value);return serialize(item)
 
 @router.get("/insured/import-template")
 def insured_import_template(user:User=Depends(current_user)):
@@ -131,7 +134,9 @@ async def import_insured_file(kind:Literal['enrollment','termination']=Form(...)
                 existing.name=person_name;existing.phone=phone;existing.position_id=position.id;existing.occupation=position.name;existing.occupation_class=position.occupation_class;existing.status='pending';item=existing
             else:
                 item=InsuredPerson(enterprise_id=enterprise_id,position_id=position.id,name=person_name,id_number=identity,phone=phone,occupation=position.name,occupation_class=position.occupation_class,status='pending');session.add(item)
-        else: existing.status='stopped';item=existing
+        else:
+            if existing.status=='active': terminate_person_policy(session,existing)
+            existing.status='stopped';item=existing
         affected.append(item)
     session.commit();audit(session,user,'bulk_enrollment' if kind=='enrollment' else 'bulk_termination','insured_person','',f'count={len(affected)};file={file.filename}')
     return {'ok':True,'kind':kind,'success':len(affected),'errors':[]}

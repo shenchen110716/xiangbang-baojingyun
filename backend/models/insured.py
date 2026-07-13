@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, ForeignKey, String
+from sqlalchemy import DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -32,4 +32,24 @@ class Policy(Base):
     status: Mapped[str] = mapped_column(String(30), default="active")
     start_date: Mapped[str] = mapped_column(String(20), default="")
     end_date: Mapped[str] = mapped_column(String(20), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class PolicyMember(Base):
+    # SYSTEM-DESIGN-V4.md v4.1 section 7.4 — carries the coverage-period
+    # semantics that were originally going to be a separate CoveragePeriod
+    # entity before that got merged into PolicyMember during the design
+    # brainstorm. tenant_id and enrollment_request_id from the doc's full
+    # shape are intentionally omitted: there's no Tenant table (LedgerEntry
+    # made the same call) and no EnrollmentRequest table this round (that's
+    # the full state-machine rewrite, deferred — see plan doc).
+    __tablename__ = "policy_members"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    policy_id: Mapped[int] = mapped_column(ForeignKey("policies.id"))
+    person_id: Mapped[int] = mapped_column(ForeignKey("insured_people.id"), index=True)
+    rate_snapshot_json: Mapped[str] = mapped_column(Text, default="")
+    effective_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    terminated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    endorsement_no: Mapped[str] = mapped_column(String(80), default="")
+    status: Mapped[str] = mapped_column(String(20), default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

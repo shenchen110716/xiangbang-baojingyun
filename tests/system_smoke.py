@@ -1,4 +1,5 @@
 """Isolated backend smoke test for critical permissions and money workflows."""
+import json
 import os
 import sys
 import tempfile
@@ -19,7 +20,7 @@ def run():
         from backend.app import startup
         from backend.core.db import SessionLocal
         from backend.core.security import pwd
-        from backend.models import AgentCommission, User, WorkPosition
+        from backend.models import AgentCommission, Policy, PolicyMember, User, WorkPosition
         from backend.schemas import (
             ActualEmployerIn, ActualEmployerUpdate, AgentIn,
             CommissionIn, CommissionUpdate, EnterpriseIn, InvoiceIn,
@@ -33,7 +34,7 @@ def run():
         from backend.routers.dashboard import dashboard, screen_products
         from backend.routers.enrollment import enrollment_email
         from backend.routers.enterprises import add_enterprise
-        from backend.routers.insured import add_person
+        from backend.routers.insured import add_person, insured_status
         from backend.routers.invoices import create_invoice, update_invoice
         from backend.routers.operators import add_operator
         from backend.routers.payments import create_payment, payment_callback
@@ -42,6 +43,8 @@ def run():
             add_actual_employer, add_position, delete_actual_employer, update_actual_employer,
         )
         from backend.routers.reports import billing
+        from backend.routers.reports import export_policy
+        from backend.routers.reports import policies as list_policies
 
         startup()
         with SessionLocal() as session:
@@ -77,6 +80,42 @@ def run():
             person = add_person(PersonIn(enterprise_id=enterprise_id, name="测试员工", id_number="340123199001019999", position_id=position["id"]), user, session)
             assert dashboard(user, session)["active_people"] == 1
             assert next(row for row in screen_products(user, session) if row["plan_id"] == plan["id"])["insured_count"] == 1
+
+            # PolicyMember bridge: activating a person must lazily create Policy +
+            # PolicyMember with a price snapshot (Policy/policy_id were previously
+            # dead code — nothing in the app ever created a Policy row).
+            insured_status(person["id"], "active", user, session)
+            member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == person["id"]))
+            assert member is not None and member.status == "active" and member.terminated_at is None
+            snapshot = json.loads(member.rate_snapshot_json)
+            assert snapshot["sale_price"] == 110
+            policy = session.get(Policy, member.policy_id)
+            assert policy.enterprise_id == enterprise_id and policy.plan_id == plan["id"]
+
+            rows = list_policies(user, session)
+            assert len(rows) == 1 and rows[0]["insured_count"] == 1 and rows[0]["premium"] > 0
+            export_policy(policy.id, user, session)  # must not raise
+
+            # redundant active->active PATCH must not create a second PolicyMember
+            count_before = session.query(PolicyMember).count()
+            insured_status(person["id"], "active", user, session)
+            assert session.query(PolicyMember).count() == count_before
+
+            # stop then re-enroll must produce TWO separate coverage periods, not
+            # overwrite the first one (SYSTEM-DESIGN-V4.md 16.2 "两个保障期间")
+            insured_status(person["id"], "stopped", user, session)
+            insured_status(person["id"], "active", user, session)
+            members = session.scalars(select(PolicyMember).where(PolicyMember.person_id == person["id"]).order_by(PolicyMember.id)).all()
+            assert len(members) == 2
+            assert members[0].status == "terminated" and members[0].terminated_at is not None
+            assert members[1].status == "active" and members[1].terminated_at is None
+
+            # a person with no position/plan yet must activate without error and
+            # simply skip Policy/PolicyMember creation (same permissiveness as today)
+            unpositioned = add_person(PersonIn(enterprise_id=enterprise_id, name="待定岗位员工", id_number="340123199001019998"), user, session)
+            insured_status(unpositioned["id"], "active", user, session)
+            assert session.query(PolicyMember).filter_by(person_id=unpositioned["id"]).count() == 0
+
             mail = enrollment_email(enterprise_id, plan["id"], "enrollment", "", user, session)
             assert mail["people_count"] == 1 and mail["filename"].endswith('.csv')
 

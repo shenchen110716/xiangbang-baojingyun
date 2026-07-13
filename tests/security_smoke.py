@@ -139,6 +139,24 @@ def run():
             assert len(payment_entries) == 1, f"duplicate callback must not double-post the ledger, found {len(payment_entries)}"
             assert ledger["reconciliation"] == [], f"ledger must reconcile with cached balances, got {ledger['reconciliation']}"
 
+            # --- PolicyMember bridge: activating a person over real HTTP must
+            # produce a real, non-empty GET /api/policies response. This is the
+            # one thing system_smoke.py's direct function calls cannot prove —
+            # they bypass FastAPI's request/response cycle entirely (same reason
+            # this whole file exists), so a wiring bug in the route/response
+            # model would slip through there but not here.
+            pm_plan = call_json("POST", "/api/plans", admin, {"insurer": "安全测试保司", "name": "安全测试方案", "price": 100, "commission_rate": .2, "profit_amount": 10})[1]
+            pm_pos = call_json("POST", "/api/positions", admin, {"enterprise_id": ent_a["id"], "actual_employer_id": emp["id"], "actual_employer": emp["name"], "name": "参保测试岗位", "occupation_class": "1-3类"})[1]
+            call_json("POST", f"/api/positions/{pm_pos['id']}/videos", admin, {"name": "v", "url": "http://example.com/x.mp4"})
+            call_json("PATCH", f"/api/positions/{pm_pos['id']}/review", admin, {"status": "approved", "occupation_class": "1-3类", "plan_id": pm_plan["id"]})
+            pm_person = call_json("POST", "/api/insured", admin, {"enterprise_id": ent_a["id"], "name": "参保测试员工", "id_number": "340123199001010099", "position_id": pm_pos["id"]})[1]
+            status, _ = call_json("PATCH", f"/api/insured/{pm_person['id']}/status?status=active", admin)
+            assert status == 200
+            status, policies_resp = call_json("GET", "/api/policies", admin)
+            assert status == 200 and len(policies_resp) >= 1, f"policies endpoint must return real data now, got {policies_resp}"
+            matching = [p for p in policies_resp if p["plan_id"] == pm_plan["id"]]
+            assert matching and matching[0]["insured_count"] >= 1, f"policy must count the newly-activated person, got {matching}"
+
             # --- session invalidation on password change ---
             status, _ = call_json("GET", "/api/auth/me", token_a)
             assert status == 200
