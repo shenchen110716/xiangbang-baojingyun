@@ -436,19 +436,24 @@ export interface PremiumDetailRow {
   plan_name: string
   billing_mode: 'monthly' | 'daily'
   unit_sale_price: number
+  unit_policy_floor_price: number
   coverage_start: string
   coverage_end: string | null
   period_start: string
   period_end: string
   active_days: number
   premium_amount: number
+  settlement_amount: number
 }
 
 export interface PremiumDetailReport {
   start_date: string
   end_date: string
   total_premium: number
+  total_settlement: number
   detail_count: number
+  enterprise_id: number | null
+  insurer: string
   rows: PremiumDetailRow[]
 }
 

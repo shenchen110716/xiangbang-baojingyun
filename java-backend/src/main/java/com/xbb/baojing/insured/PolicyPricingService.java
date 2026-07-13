@@ -42,10 +42,17 @@ public class PolicyPricingService {
     /** Historical report fallback for legacy PolicyMember rows that predate
      * rate_snapshot_json. New rows always use their frozen snapshot instead. */
     public double salePriceFor(Policy policy, InsuredPerson person) {
+        PricingSnapshot snapshot = pricingFor(policy, person);
+        return snapshot != null ? snapshot.getSalePrice() : policy.getPremium();
+    }
+
+    /** Returns both sales and insurer-settlement prices from one calculation,
+     * so period reports can prorate them with exactly the same billing rules. */
+    public PricingSnapshot pricingFor(Policy policy, InsuredPerson person) {
         InsurancePlan plan = planMapper.findById(policy.getPlanId());
-        if (plan == null) return policy.getPremium();
+        if (plan == null) return null;
         AgentCommission relation = commissionMapper.findActiveRelation(policy.getEnterpriseId(), policy.getPlanId());
-        return pricingService.snapshot(plan, relation, pricingService.planPriceForClass(plan, person.getOccupationClass())).getSalePrice();
+        return pricingService.snapshot(plan, relation, pricingService.planPriceForClass(plan, person.getOccupationClass()));
     }
 
     public record Totals(double salePrice, double policyFloor, double totalCommission) {}

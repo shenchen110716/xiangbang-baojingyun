@@ -118,10 +118,21 @@ def run():
             assert members[0].status == "terminated" and members[0].terminated_at is not None
             assert members[1].status == "active" and members[1].terminated_at is None
 
-            premium_report = premium_details("2026-01-01", "2026-01-31", user, session)
+            premium_report = premium_details("2026-01-01", "2026-01-31", enterprise_id=None, insurer="", user=user, session=session)
             assert premium_report["detail_count"] == 1
             assert premium_report["rows"][0]["active_days"] == 30
             assert premium_report["total_premium"] == 3300
+            assert premium_report["total_settlement"] == 0
+            assert "unit_policy_floor_price" not in premium_report["rows"][0]
+            assert premium_details("2026-01-01", "2026-01-31", enterprise_id=None, insurer="不存在的保司", user=user, session=session)["detail_count"] == 0
+            platform_report = premium_details("2026-01-01", "2026-01-31", enterprise_id=enterprise_id, insurer="测试保司", user=admin, session=session)
+            assert platform_report["detail_count"] == 1
+            assert platform_report["total_premium"] == 3300 and platform_report["total_settlement"] == 2400
+            try:
+                premium_details("2026-01-01", "2026-01-31", enterprise_id=enterprise_id + 999, insurer="", user=user, session=session)
+                raise AssertionError("enterprise must not query another tenant's premium detail")
+            except HTTPException as error:
+                assert error.status_code == 403
             assert round(_period_premium(31, "monthly", date(2026, 7, 14), date(2026, 7, 31)), 2) == 18
             assert round(_period_premium(31, "monthly", date(2026, 7, 14), date(2026, 8, 13)), 2) == 31
 

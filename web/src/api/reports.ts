@@ -13,8 +13,8 @@ export function getReports() {
   return client.get<ReportRow[]>('/reports').then((r) => r.data)
 }
 
-export function getPremiumDetails(start_date: string, end_date: string) {
-  return client.get<PremiumDetailReport>('/reports/premium-details', { params: { start_date, end_date } }).then((r) => r.data)
+export function getPremiumDetails(start_date: string, end_date: string, filters?: { enterprise_id?: number; insurer?: string }) {
+  return client.get<PremiumDetailReport>('/reports/premium-details', { params: { start_date, end_date, ...filters } }).then((r) => r.data)
 }
 
 export function getBilling() {

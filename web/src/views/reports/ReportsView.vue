@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { listEnterprises } from '@/api/enterprises'
+import { listPlans } from '@/api/plans'
 import { getPremiumDetails, getReports } from '@/api/reports'
-import type { PremiumDetailReport, ReportRow } from '@/api/types'
+import type { Enterprise, PremiumDetailReport, ReportRow } from '@/api/types'
 import { money } from '@/utils/format'
 import { downloadAuthenticated } from '@/utils/download'
 import { useAuthStore } from '@/stores/auth'
@@ -21,6 +23,10 @@ const selectedMonth = ref(defaultMonth)
 const selectedRange = ref<[string, string] | null>(null)
 const premiumLoading = ref(false)
 const premiumReport = ref<PremiumDetailReport | null>(null)
+const enterprises = ref<Enterprise[]>([])
+const insurers = ref<string[]>([])
+const selectedEnterprise = ref<number | null>(null)
+const selectedInsurer = ref('')
 
 function monthRange(month: string): [string, string] {
   const [year, monthNumber] = month.split('-').map(Number)
@@ -38,7 +44,10 @@ async function loadPremiumDetails() {
   if (!range) { ElMessage.warning('请选择统计时间段'); return }
   premiumLoading.value = true
   try {
-    premiumReport.value = await getPremiumDetails(range[0], range[1])
+    premiumReport.value = await getPremiumDetails(range[0], range[1], auth.isEnterprise() ? undefined : {
+      enterprise_id: selectedEnterprise.value || undefined,
+      insurer: selectedInsurer.value || undefined,
+    })
   } catch (error) {
     ElMessage.error((error as Error).message)
   } finally {
@@ -54,8 +63,19 @@ async function load() {
     loading.value = false
   }
 }
+
+async function loadPlatformFilters() {
+  if (auth.isEnterprise()) return
+  const [enterpriseRows, plans] = await Promise.all([listEnterprises(), listPlans()])
+  enterprises.value = enterpriseRows
+  insurers.value = [...new Set(plans.map((plan) => plan.insurer).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+}
 onMounted(async () => {
-  await Promise.all([load(), auth.isEnterprise() ? loadPremiumDetails() : Promise.resolve()])
+  try {
+    await Promise.all([load(), loadPlatformFilters(), loadPremiumDetails()])
+  } catch (error) {
+    ElMessage.error((error as Error).message)
+  }
 })
 
 function displayValue(row: ReportRow) {
@@ -80,7 +100,10 @@ async function exportPremiumDetails() {
   if (!range) { ElMessage.warning('请选择统计时间段'); return }
   try {
     const params = new URLSearchParams({ start_date: range[0], end_date: range[1] })
-    await downloadAuthenticated(`/reports/premium-details/export?${params.toString()}`, `销售保费明细-${range[0]}-${range[1]}.xlsx`)
+    if (!auth.isEnterprise() && selectedEnterprise.value) params.set('enterprise_id', String(selectedEnterprise.value))
+    if (!auth.isEnterprise() && selectedInsurer.value) params.set('insurer', selectedInsurer.value)
+    const prefix = auth.isEnterprise() ? '销售保费明细' : '平台保费结算明细'
+    await downloadAuthenticated(`/reports/premium-details/export?${params.toString()}`, `${prefix}-${range[0]}-${range[1]}.xlsx`)
   } catch (error) {
     ElMessage.error((error as Error).message)
   }
@@ -108,11 +131,17 @@ async function exportPremiumDetails() {
       </el-table>
     </PageCard>
 
-    <PageCard v-if="auth.isEnterprise()" title="销售保费总额及明细" :count="premiumReport?.detail_count || 0" hint="按保障生效和停保时间计算；按月方案按自然月实际保障天数折算">
+    <PageCard :title="auth.isEnterprise() ? '销售保费总额及明细' : '平台保费与保司结算明细'" :count="premiumReport?.detail_count || 0" hint="按保障生效和停保时间计算；按月方案按自然月实际保障天数折算">
       <template #actions>
         <el-button :disabled="!premiumReport" @click="exportPremiumDetails">导出明细</el-button>
       </template>
       <div class="premium-filter">
+        <el-select v-if="!auth.isEnterprise()" v-model="selectedInsurer" clearable placeholder="全部保司" style="width: 210px">
+          <el-option v-for="insurer in insurers" :key="insurer" :label="insurer" :value="insurer" />
+        </el-select>
+        <el-select v-if="!auth.isEnterprise()" v-model="selectedEnterprise" clearable filterable placeholder="全部投保单位" style="width: 240px">
+          <el-option v-for="enterprise in enterprises" :key="enterprise.id" :label="enterprise.name" :value="enterprise.id" />
+        </el-select>
         <el-radio-group v-model="periodMode">
           <el-radio-button value="month">按月</el-radio-button>
           <el-radio-button value="range">按时间段</el-radio-button>
@@ -123,12 +152,16 @@ async function exportPremiumDetails() {
       </div>
       <div v-if="premiumReport" class="premium-summary">
         <span>统计区间 {{ premiumReport.start_date }} 至 {{ premiumReport.end_date }}</span>
-        <b>保费总额：{{ money(premiumReport.total_premium) }}</b>
+        <div class="premium-totals">
+          <b>销售保费总额：{{ money(premiumReport.total_premium) }}</b>
+          <b v-if="!auth.isEnterprise()">保司结算总额：{{ money(premiumReport.total_settlement) }}</b>
+        </div>
       </div>
       <el-table v-loading="premiumLoading" :data="premiumReport?.rows || []" size="small" empty-text="该时间段暂无保费明细">
         <el-table-column label="被保险人" min-width="150">
           <template #default="{ row }"><div>{{ row.person_name }}</div><small class="muted">{{ row.id_number }}</small></template>
         </el-table-column>
+        <el-table-column v-if="!auth.isEnterprise()" prop="enterprise_name" label="投保单位" min-width="180" />
         <el-table-column label="实际用工单位 / 岗位" min-width="180">
           <template #default="{ row }"><div>{{ row.actual_employer_name || '—' }}</div><small class="muted">{{ row.position_name }} · {{ row.occupation_class }}</small></template>
         </el-table-column>
@@ -137,9 +170,11 @@ async function exportPremiumDetails() {
         </el-table-column>
         <el-table-column label="计费方式" width="90"><template #default="{ row }">{{ row.billing_mode === 'daily' ? '按天' : '按月' }}</template></el-table-column>
         <el-table-column label="实际销售价" width="120"><template #default="{ row }">{{ money(row.unit_sale_price) }}</template></el-table-column>
+        <el-table-column v-if="!auth.isEnterprise()" label="保司结算底价" width="130"><template #default="{ row }">{{ money(row.unit_policy_floor_price) }}</template></el-table-column>
         <el-table-column label="本期保障时间" min-width="185"><template #default="{ row }">{{ row.period_start }} 至 {{ row.period_end }}</template></el-table-column>
         <el-table-column prop="active_days" label="计费天数" width="90" />
         <el-table-column label="保费金额" width="120"><template #default="{ row }"><b>{{ money(row.premium_amount) }}</b></template></el-table-column>
+        <el-table-column v-if="!auth.isEnterprise()" label="保司结算金额" width="135"><template #default="{ row }"><b>{{ money(row.settlement_amount) }}</b></template></el-table-column>
       </el-table>
     </PageCard>
   </div>
@@ -194,5 +229,12 @@ async function exportPremiumDetails() {
 .premium-summary b {
   color: var(--el-color-primary);
   font-size: 18px;
+}
+.premium-totals {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 24px;
 }
 </style>

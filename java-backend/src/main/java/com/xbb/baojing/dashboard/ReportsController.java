@@ -84,20 +84,21 @@ public class ReportsController {
         LocalDate monthStart = now.atDay(1);
         LocalDate monthEnd = now.atEndOfMonth();
 
-        double settlement = 0, commission = 0;
+        double commission = 0;
         for (Policy p : policies) {
             var totals = policyPricingService.totals(p);
-            settlement += totals.policyFloor();
             commission += totals.totalCommission();
         }
-        double premium = premiumDetails(monthStart.toString(), monthEnd.toString(), user).totalPremium();
+        PremiumDetailReport currentDetail = premiumDetails(monthStart.toString(), monthEnd.toString(), null, "", user);
+        double premium = currentDetail.totalPremium();
+        double settlement = currentDetail.totalSettlement();
         String period = now.getYear() + "-" + String.format("%02d", now.getMonthValue()) + "按实际天数";
         ReportRow premiumRow = new ReportRow("premium", "销售保费汇总", period, PricingService.amount(premium), policies.size() + " 张保单，统一按销售价格计算");
         ReportRow peopleRow = new ReportRow("people", "参保人员报表", "当前", peopleCount, "在册参保人员");
         ReportRow claimsRow = new ReportRow("claims", "理赔统计报表", "累计", claimsCount, "理赔案件");
         if ("enterprise".equals(user.getRole())) return List.of(premiumRow, peopleRow, claimsRow);
         return List.of(premiumRow,
-                new ReportRow("settlement", "保司结算底价", "当前", PricingService.amount(settlement), "保险原价 ×（1-总返佣比例）"),
+                new ReportRow("settlement", "保司结算底价", period, PricingService.amount(settlement), "保司结算底价按实际保障天数折算"),
                 new ReportRow("commission", "总返佣金额", "当前", PricingService.amount(commission), "保险原价 × 总返佣比例"),
                 peopleRow, claimsRow);
     }
@@ -105,12 +106,12 @@ public class ReportsController {
     public record PremiumDetailRow(int memberId, int personId, String personName, String idNumber,
                                    String enterpriseName, String actualEmployerName, String positionName,
                                    String occupationClass, String policyNo, String insurer, String planName,
-                                   String billingMode, double unitSalePrice, LocalDateTime coverageStart,
+                                   String billingMode, double unitSalePrice, double unitPolicyFloorPrice, LocalDateTime coverageStart,
                                    LocalDateTime coverageEnd, LocalDate periodStart, LocalDate periodEnd,
-                                   long activeDays, double premiumAmount) {}
+                                   long activeDays, double premiumAmount, double settlementAmount) {}
 
-    public record PremiumDetailReport(String startDate, String endDate, double totalPremium,
-                                      int detailCount, List<PremiumDetailRow> rows) {}
+    public record PremiumDetailReport(String startDate, String endDate, double totalPremium, double totalSettlement,
+                                      int detailCount, Integer enterpriseId, String insurer, List<PremiumDetailRow> rows) {}
 
     private LocalDate[] parseRange(String startValue, String endValue) {
         try {
@@ -140,72 +141,101 @@ public class ReportsController {
         return total;
     }
 
-    private double memberSalePrice(PolicyMember member, Policy policy, InsuredPerson person) {
+    private record MemberPrices(double salePrice, double policyFloorPrice) {}
+
+    private MemberPrices memberPrices(PolicyMember member, Policy policy, InsuredPerson person) {
         try {
             var node = objectMapper.readTree(member.getRateSnapshotJson());
-            if (node.has("sale_price")) return node.get("sale_price").asDouble();
+            if (node.has("sale_price") && node.has("policy_floor_price")) {
+                return new MemberPrices(node.get("sale_price").asDouble(), node.get("policy_floor_price").asDouble());
+            }
         } catch (Exception ignored) {}
-        return policyPricingService.salePriceFor(policy, person);
+        var pricing = policyPricingService.pricingFor(policy, person);
+        return pricing != null
+                ? new MemberPrices(pricing.getSalePrice(), pricing.getPolicyFloorPrice())
+                : new MemberPrices(policy.getPremium(), 0);
     }
 
     @GetMapping("/reports/premium-details")
     public PremiumDetailReport premiumDetails(@RequestParam("start_date") String startValue,
-                                              @RequestParam("end_date") String endValue, User user) {
+                                              @RequestParam("end_date") String endValue,
+                                              @RequestParam(name = "enterprise_id", required = false) Integer enterpriseId,
+                                              @RequestParam(name = "insurer", required = false, defaultValue = "") String insurer,
+                                              User user) {
         LocalDate[] range = parseRange(startValue, endValue);
         LocalDate start = range[0], end = range[1];
+        Integer scopedEnterpriseId = enterpriseId;
+        if ("enterprise".equals(user.getRole())) {
+            if (enterpriseId != null && !enterpriseId.equals(user.getEnterpriseId())) throw ApiException.forbidden("无权查询其他投保单位");
+            scopedEnterpriseId = user.getEnterpriseId();
+        }
+        String insurerFilter = insurer == null ? "" : insurer.trim();
+        boolean platformView = "admin".equals(user.getRole());
         List<PremiumDetailRow> rows = new ArrayList<>();
         for (PolicyMember member : policyMemberMapper.findAll()) {
             Policy policy = policyMapper.findById(member.getPolicyId());
-            if (policy == null || ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(policy.getEnterpriseId()))) continue;
+            if (policy == null || (scopedEnterpriseId != null && !scopedEnterpriseId.equals(policy.getEnterpriseId()))) continue;
             InsuredPerson person = personMapper.findById(member.getPersonId());
             if (person == null) continue;
+            InsurancePlan plan = planMapper.findById(policy.getPlanId());
+            if (!insurerFilter.isEmpty() && (plan == null || !insurerFilter.equals(plan.getInsurer()))) continue;
             LocalDate effective = member.getEffectiveAt().toLocalDate();
             LocalDate terminated = member.getTerminatedAt() != null ? member.getTerminatedAt().toLocalDate() : null;
             LocalDate periodStart = effective.isAfter(start) ? effective : start;
             LocalDate periodEnd = terminated != null && terminated.isBefore(end) ? terminated : end;
             if (periodStart.isAfter(periodEnd)) continue;
             Enterprise enterprise = enterpriseMapper.findById(policy.getEnterpriseId());
-            InsurancePlan plan = planMapper.findById(policy.getPlanId());
             WorkPosition position = person.getPositionId() != null ? positionMapper.findById(person.getPositionId()) : null;
             ActualEmployer employer = position != null && position.getActualEmployerId() != null ? actualEmployerMapper.findById(position.getActualEmployerId()) : null;
             String billingMode = plan != null ? plan.getBillingMode() : "monthly";
-            double unitPrice = memberSalePrice(member, policy, person);
+            MemberPrices prices = memberPrices(member, policy, person);
             long activeDays = ChronoUnit.DAYS.between(periodStart, periodEnd) + 1;
-            double premium = PricingService.amount(periodPremium(unitPrice, billingMode, periodStart, periodEnd));
+            double premium = PricingService.amount(periodPremium(prices.salePrice(), billingMode, periodStart, periodEnd));
+            double settlement = PricingService.amount(periodPremium(prices.policyFloorPrice(), billingMode, periodStart, periodEnd));
             rows.add(new PremiumDetailRow(member.getId(), person.getId(), person.getName(), person.getIdNumber(),
                     enterprise != null ? enterprise.getName() : "",
                     employer != null ? employer.getName() : (position != null ? position.getActualEmployer() : ""),
                     position != null ? position.getName() : person.getOccupation(), person.getOccupationClass(),
                     policy.getPolicyNo(), plan != null ? plan.getInsurer() : "", plan != null ? plan.getName() : "",
-                    billingMode, PricingService.amount(unitPrice), member.getEffectiveAt(), member.getTerminatedAt(),
-                    periodStart, periodEnd, activeDays, premium));
+                    billingMode, PricingService.amount(prices.salePrice()), platformView ? PricingService.amount(prices.policyFloorPrice()) : 0,
+                    member.getEffectiveAt(), member.getTerminatedAt(), periodStart, periodEnd, activeDays, premium, platformView ? settlement : 0));
         }
-        double total = PricingService.amount(rows.stream().mapToDouble(PremiumDetailRow::premiumAmount).sum());
-        return new PremiumDetailReport(start.toString(), end.toString(), total, rows.size(), rows);
+        double totalPremium = PricingService.amount(rows.stream().mapToDouble(PremiumDetailRow::premiumAmount).sum());
+        double totalSettlement = platformView ? PricingService.amount(rows.stream().mapToDouble(PremiumDetailRow::settlementAmount).sum()) : 0;
+        return new PremiumDetailReport(start.toString(), end.toString(), totalPremium, totalSettlement,
+                rows.size(), scopedEnterpriseId, insurerFilter, rows);
     }
 
     @GetMapping("/reports/premium-details/export")
     public ResponseEntity<byte[]> exportPremiumDetails(@RequestParam("start_date") String startValue,
                                                         @RequestParam("end_date") String endValue,
+                                                        @RequestParam(name = "enterprise_id", required = false) Integer enterpriseId,
+                                                        @RequestParam(name = "insurer", required = false, defaultValue = "") String insurer,
                                                         User user) throws IOException {
-        PremiumDetailReport report = premiumDetails(startValue, endValue, user);
+        PremiumDetailReport report = premiumDetails(startValue, endValue, enterpriseId, insurer, user);
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("销售保费明细");
-            String[] columns = {"统计开始", "统计结束", "被保险人", "身份证号", "投保单位", "实际用工单位", "岗位", "职业类别", "保单号", "保险公司", "保险方案", "计费方式", "实际销售价", "本期开始", "本期结束", "计费天数", "保费金额"};
+            boolean platformExport = "admin".equals(user.getRole());
+            List<String> columns = new ArrayList<>(List.of("统计开始", "统计结束", "被保险人", "身份证号", "投保单位", "实际用工单位", "岗位", "职业类别", "保单号", "保险公司", "保险方案", "计费方式", "实际销售价", "本期开始", "本期结束", "计费天数", "保费金额"));
+            if (platformExport) columns.addAll(List.of("保司结算底价", "保司结算金额"));
             Row header = sheet.createRow(0);
-            for (int i = 0; i < columns.length; i++) header.createCell(i).setCellValue(columns[i]);
+            for (int i = 0; i < columns.size(); i++) header.createCell(i).setCellValue(columns.get(i));
             int rowIndex = 1;
             for (PremiumDetailRow detail : report.rows()) {
-                Object[] values = {report.startDate(), report.endDate(), detail.personName(), detail.idNumber(), detail.enterpriseName(), detail.actualEmployerName(), detail.positionName(), detail.occupationClass(), detail.policyNo(), detail.insurer(), detail.planName(), "daily".equals(detail.billingMode()) ? "按天" : "按月", detail.unitSalePrice(), detail.periodStart().toString(), detail.periodEnd().toString(), detail.activeDays(), detail.premiumAmount()};
+                List<Object> values = new ArrayList<>(java.util.Arrays.asList(report.startDate(), report.endDate(), detail.personName(), detail.idNumber(), detail.enterpriseName(), detail.actualEmployerName(), detail.positionName(), detail.occupationClass(), detail.policyNo(), detail.insurer(), detail.planName(), "daily".equals(detail.billingMode()) ? "按天" : "按月", detail.unitSalePrice(), detail.periodStart().toString(), detail.periodEnd().toString(), detail.activeDays(), detail.premiumAmount()));
+                if (platformExport) values.addAll(List.of(detail.unitPolicyFloorPrice(), detail.settlementAmount()));
                 Row row = sheet.createRow(rowIndex++);
-                for (int i = 0; i < values.length; i++) {
-                    Object value = values[i];
+                for (int i = 0; i < values.size(); i++) {
+                    Object value = values.get(i);
                     if (value instanceof Number number) row.createCell(i).setCellValue(number.doubleValue());
                     else row.createCell(i).setCellValue(String.valueOf(value));
                 }
             }
-            Row totalRow = sheet.createRow(rowIndex + 1); totalRow.createCell(0).setCellValue("保费总额"); totalRow.createCell(1).setCellValue(report.totalPremium());
-            for (int i = 0; i < columns.length; i++) sheet.autoSizeColumn(i);
+            Row totalRow = sheet.createRow(rowIndex + 1); totalRow.createCell(0).setCellValue("销售保费总额"); totalRow.createCell(1).setCellValue(report.totalPremium());
+            if (platformExport) {
+                Row settlementRow = sheet.createRow(rowIndex + 2); settlementRow.createCell(0).setCellValue("保司结算总额"); settlementRow.createCell(1).setCellValue(report.totalSettlement());
+            }
+            for (int i = 0; i < columns.size(); i++) sheet.autoSizeColumn(i);
             ByteArrayOutputStream output = new ByteArrayOutputStream(); workbook.write(output);
             HttpHeaders headers = new HttpHeaders(); headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=premium-details-" + report.startDate() + "-" + report.endDate() + ".xlsx");
             return ResponseEntity.ok().headers(headers).contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")).body(output.toByteArray());
