@@ -171,6 +171,9 @@ export interface Policy extends Partial<PricingSnapshot> {
   sale_total?: number
   total_commission_total?: number
   agent_commission_total?: number
+  document_url?: string
+  document_name?: string
+  document_download_url?: string
   created_at: string
 }
 

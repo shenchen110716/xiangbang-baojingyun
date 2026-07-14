@@ -4,6 +4,10 @@ import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.xbb.baojing.agent.AgentCommission;
 import com.xbb.baojing.agent.AgentCommissionMapper;
 import com.xbb.baojing.common.ApiException;
+import com.xbb.baojing.common.AppProperties;
+import com.xbb.baojing.common.AuditService;
+import com.xbb.baojing.common.FileTokenService;
+import com.xbb.baojing.common.Rbac;
 import com.xbb.baojing.common.User;
 import com.xbb.baojing.enterprise.ActualEmployer;
 import com.xbb.baojing.enterprise.ActualEmployerMapper;
@@ -22,11 +26,17 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.SecureRandom;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api")
@@ -39,10 +49,16 @@ public class PolicyController {
     private final WorkPositionMapper positionMapper;
     private final ActualEmployerMapper actualEmployerMapper;
     private final PricingService pricingService;
+    private final PolicyPricingService policyPricingService;
+    private final AuditService auditService;
+    private final FileTokenService fileTokenService;
+    private final String uploadsDir;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     public PolicyController(PolicyMapper policyMapper, EnterpriseMapper enterpriseMapper, InsurancePlanMapper planMapper,
                              AgentCommissionMapper commissionMapper, InsuredPersonMapper personMapper, WorkPositionMapper positionMapper,
-                             ActualEmployerMapper actualEmployerMapper, PricingService pricingService) {
+                             ActualEmployerMapper actualEmployerMapper, PricingService pricingService, PolicyPricingService policyPricingService,
+                             AuditService auditService, FileTokenService fileTokenService, AppProperties props) {
         this.policyMapper = policyMapper;
         this.enterpriseMapper = enterpriseMapper;
         this.planMapper = planMapper;
@@ -51,13 +67,27 @@ public class PolicyController {
         this.positionMapper = positionMapper;
         this.actualEmployerMapper = actualEmployerMapper;
         this.pricingService = pricingService;
+        this.policyPricingService = policyPricingService;
+        this.auditService = auditService;
+        this.fileTokenService = fileTokenService;
+        this.uploadsDir = props.getUploadsDir();
+    }
+
+    private String randomHex(int bytes) {
+        byte[] b = new byte[bytes];
+        RANDOM.nextBytes(b);
+        StringBuilder sb = new StringBuilder();
+        for (byte x : b) sb.append(String.format("%02x", x));
+        return sb.toString();
     }
 
     public static class PolicyOut extends Policy {
         private double premiumOriginal, calculatedPremium, insuranceBaseTotal, policyFloorTotal, minimumSaleTotal, saleTotal, totalCommissionTotal, agentCommissionTotal;
         private int insuredCount;
-        private String enterpriseName, insurer, planName, billingMode, effectiveMode;
+        private String enterpriseName, insurer, planName, billingMode, effectiveMode, documentDownloadUrl;
         private PricingSnapshot unit;
+        public String getDocumentDownloadUrl() { return documentDownloadUrl; }
+        public void setDocumentDownloadUrl(String v) { this.documentDownloadUrl = v; }
         public double getPremiumOriginal() { return premiumOriginal; }
         public void setPremiumOriginal(double v) { this.premiumOriginal = v; }
         public double getCalculatedPremium() { return calculatedPremium; }
@@ -91,22 +121,20 @@ public class PolicyController {
         public void setUnit(PricingSnapshot v) { this.unit = v; }
     }
 
-    /** Ports services/policies.py's policy_dict() 1:1. */
+    /** Ports services/policies.py's policy_dict(). Prices/counts reflect the
+     * current calendar month's day-prorated roster (PolicyPricingService),
+     * not just currently-active people — someone terminated partway through
+     * the month still owes premium for their billable days (feedback item 8). */
     private PolicyOut policyDict(Policy policy) {
         Enterprise enterprise = enterpriseMapper.findById(policy.getEnterpriseId());
         InsurancePlan plan = planMapper.findById(policy.getPlanId());
-        AgentCommission relation = commissionMapper.findActiveRelation(policy.getEnterpriseId(), policy.getPlanId());
-        List<InsuredPerson> people = personMapper.findByPolicy(policy.getId());
+        PolicyPricingService.CurrentMonthBilling billing = policyPricingService.currentMonthBilling(policy);
+        List<PolicyPricingService.BilledRow> rows = billing.rows();
 
-        List<PricingSnapshot> snapshots = new java.util.ArrayList<>();
-        if (plan != null) {
-            for (InsuredPerson p : people) snapshots.add(pricingService.snapshot(plan, relation, pricingService.planPriceForClass(plan, p.getOccupationClass())));
-            if (snapshots.isEmpty()) snapshots.add(pricingService.snapshot(plan, relation));
-        }
         java.util.function.Function<java.util.function.ToDoubleFunction<PricingSnapshot>, Double> total =
-                f -> PricingService.amount(snapshots.stream().mapToDouble(f).sum());
-        double calculated = !people.isEmpty() ? total.apply(PricingSnapshot::getSalePrice) : policy.getPremium();
-        PricingSnapshot unit = snapshots.isEmpty() ? null : snapshots.get(0);
+                f -> PricingService.amount(rows.stream().mapToDouble(r -> f.applyAsDouble(r.snapshot()) * r.ratio()).sum());
+        double calculated = !rows.isEmpty() ? total.apply(PricingSnapshot::getSalePrice) : policy.getPremium();
+        PricingSnapshot unit = !rows.isEmpty() ? rows.get(0).snapshot() : (plan != null ? pricingService.snapshot(plan, commissionMapper.findActiveRelation(policy.getEnterpriseId(), policy.getPlanId())) : null);
 
         PolicyOut out = new PolicyOut();
         out.setId(policy.getId());
@@ -117,22 +145,28 @@ public class PolicyController {
         out.setStatus(policy.getStatus());
         out.setStartDate(policy.getStartDate());
         out.setEndDate(policy.getEndDate());
+        out.setDocumentUrl(policy.getDocumentUrl());
+        out.setDocumentName(policy.getDocumentName());
+        if (policy.getDocumentUrl() != null && !policy.getDocumentUrl().isBlank()) {
+            FileTokenService.Token token = fileTokenService.makeToken("policy-document:" + policy.getId());
+            out.setDocumentDownloadUrl("/api/policies/" + policy.getId() + "/document/download?token=" + token.token() + "&expires=" + token.expires());
+        }
         out.setCreatedAt(policy.getCreatedAt());
         out.setPremiumOriginal(PricingService.amount(policy.getPremium()));
         out.setCalculatedPremium(PricingService.amount(calculated));
-        out.setInsuredCount(people.size());
+        out.setInsuredCount(billing.personCount());
         out.setEnterpriseName(enterprise != null ? enterprise.getName() : "");
         out.setInsurer(plan != null ? plan.getInsurer() : "");
         out.setPlanName(plan != null ? plan.getName() : "");
         out.setBillingMode(plan != null ? plan.getBillingMode() : "monthly");
         out.setEffectiveMode(plan != null ? plan.getEffectiveMode() : "next_day");
         out.setUnit(unit);
-        out.setInsuranceBaseTotal(!people.isEmpty() ? total.apply(PricingSnapshot::getInsuranceBasePrice) : (unit != null ? unit.getInsuranceBasePrice() : 0));
-        out.setPolicyFloorTotal(!people.isEmpty() ? total.apply(PricingSnapshot::getPolicyFloorPrice) : (unit != null ? unit.getPolicyFloorPrice() : 0));
-        out.setMinimumSaleTotal(!people.isEmpty() ? total.apply(PricingSnapshot::getMinimumSalePrice) : (unit != null ? unit.getMinimumSalePrice() : 0));
-        out.setSaleTotal(!people.isEmpty() ? total.apply(PricingSnapshot::getSalePrice) : (unit != null ? unit.getSalePrice() : 0));
-        out.setTotalCommissionTotal(!people.isEmpty() ? total.apply(PricingSnapshot::getTotalCommissionAmount) : (unit != null ? unit.getTotalCommissionAmount() : 0));
-        out.setAgentCommissionTotal(!people.isEmpty() ? total.apply(PricingSnapshot::getAgentCommissionAmount) : (unit != null ? unit.getAgentCommissionAmount() : 0));
+        out.setInsuranceBaseTotal(!rows.isEmpty() ? total.apply(PricingSnapshot::getInsuranceBasePrice) : (unit != null ? unit.getInsuranceBasePrice() : 0));
+        out.setPolicyFloorTotal(!rows.isEmpty() ? total.apply(PricingSnapshot::getPolicyFloorPrice) : (unit != null ? unit.getPolicyFloorPrice() : 0));
+        out.setMinimumSaleTotal(!rows.isEmpty() ? total.apply(PricingSnapshot::getMinimumSalePrice) : (unit != null ? unit.getMinimumSalePrice() : 0));
+        out.setSaleTotal(!rows.isEmpty() ? total.apply(PricingSnapshot::getSalePrice) : (unit != null ? unit.getSalePrice() : 0));
+        out.setTotalCommissionTotal(!rows.isEmpty() ? total.apply(PricingSnapshot::getTotalCommissionAmount) : (unit != null ? unit.getTotalCommissionAmount() : 0));
+        out.setAgentCommissionTotal(!rows.isEmpty() ? total.apply(PricingSnapshot::getAgentCommissionAmount) : (unit != null ? unit.getAgentCommissionAmount() : 0));
         return out;
     }
 
@@ -140,6 +174,37 @@ public class PolicyController {
     public List<PolicyOut> list(User user) {
         Integer scoped = "enterprise".equals(user.getRole()) && user.getEnterpriseId() != null ? user.getEnterpriseId() : null;
         return policyMapper.search(scoped).stream().map(this::policyDict).toList();
+    }
+
+    @PostMapping("/policies/{id}/document/upload")
+    public PolicyOut uploadDocument(@PathVariable int id, @RequestParam MultipartFile file, User user) throws IOException {
+        Rbac.requireRole(user, "仅平台端可导入保单文件", "admin");
+        Policy policy = policyMapper.findById(id);
+        if (policy == null) throw ApiException.notFound("保单不存在");
+        String original = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
+        String suffix = original.contains(".") ? original.substring(original.lastIndexOf('.')).toLowerCase() : "";
+        if (!Set.of(".pdf", ".jpg", ".jpeg", ".png").contains(suffix)) throw ApiException.badRequest("仅支持 PDF 或图片格式");
+        if (file.getSize() > 20L * 1024 * 1024) throw ApiException.badRequest("文件不能超过 20MB");
+        Path folder = Paths.get(uploadsDir, "policies", String.valueOf(id));
+        Files.createDirectories(folder);
+        String stored = randomHex(8) + suffix;
+        Files.write(folder.resolve(stored), file.getBytes());
+        policy.setDocumentUrl("/uploads/policies/" + id + "/" + stored);
+        policy.setDocumentName(original.isBlank() ? stored : original);
+        policyMapper.updateDocument(policy);
+        auditService.log(user, "upload", "policy_document", String.valueOf(id));
+        return policyDict(policy);
+    }
+
+    @GetMapping("/policies/{id}/document/download")
+    public ResponseEntity<org.springframework.core.io.Resource> downloadDocument(
+            @PathVariable int id, @RequestParam String token, @RequestParam long expires) throws IOException {
+        if (!fileTokenService.verify("policy-document:" + id, expires, token)) throw ApiException.forbidden("下载链接无效或已过期");
+        Policy policy = policyMapper.findById(id);
+        if (policy == null || policy.getDocumentUrl() == null || policy.getDocumentUrl().isBlank()) throw ApiException.notFound("保单文件不存在");
+        Path path = Paths.get(".", policy.getDocumentUrl());
+        if (!Files.isRegularFile(path)) throw ApiException.notFound("文件不存在");
+        return ResponseEntity.ok().body(new org.springframework.core.io.UrlResource(path.toUri()));
     }
 
     @GetMapping("/policies/{id}/export")

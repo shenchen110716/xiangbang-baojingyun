@@ -7,7 +7,7 @@ import java.util.List;
 @Mapper
 public interface PolicyMapper {
     String COLS = "id, policy_no as policyNo, enterprise_id as enterpriseId, plan_id as planId, premium, status, " +
-            "start_date as startDate, end_date as endDate, created_at as createdAt";
+            "start_date as startDate, end_date as endDate, document_url as documentUrl, document_name as documentName, created_at as createdAt";
 
     @Select("<script>SELECT " + COLS + " FROM policies WHERE 1=1 " +
             "<if test='enterpriseId != null'>AND enterprise_id = #{enterpriseId}</if> ORDER BY id DESC</script>")
@@ -26,4 +26,7 @@ public interface PolicyMapper {
 
     @Select("SELECT premium FROM policies WHERE enterprise_id = #{enterpriseId} AND plan_id = #{planId}")
     List<Double> findPremiumsForEnterprisePlan(@Param("enterpriseId") Integer enterpriseId, @Param("planId") Integer planId);
+
+    @Update("UPDATE policies SET document_url=#{documentUrl}, document_name=#{documentName} WHERE id=#{id}")
+    int updateDocument(Policy p);
 }

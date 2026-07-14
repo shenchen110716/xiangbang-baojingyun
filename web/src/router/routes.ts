@@ -31,4 +31,5 @@ export const routes: Array<RouteRecordRaw & { meta: NavMeta }> = [
   { path: '/message', name: 'message', component: () => import('@/views/messages/MessagesView.vue'), meta: { title: '消息中心', group: '其他', badge: true } },
   { path: '/settings', name: 'settings', component: () => import('@/views/settings/SettingsView.vue'), meta: { title: '账户设置', group: '其他' } },
   { path: '/login', name: 'login', component: () => import('@/views/auth/LoginView.vue'), meta: { title: '登录' } },
+  { path: '/certificate/:type/:id', name: 'certificate', component: () => import('@/views/certificate/CertificateView.vue'), meta: { title: '参保证明' } },
 ]

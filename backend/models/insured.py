@@ -32,6 +32,10 @@ class Policy(Base):
     status: Mapped[str] = mapped_column(String(30), default="active")
     start_date: Mapped[str] = mapped_column(String(20), default="")
     end_date: Mapped[str] = mapped_column(String(20), default="")
+    # 保司出具的真实保单文件（PDF/图片），由平台端手工导入，与系统自动生成的
+    # policy_no（内部编号）是两回事——见反馈条目 4「平台端要有保单导入功能」。
+    document_url: Mapped[str] = mapped_column(Text, default="")
+    document_name: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

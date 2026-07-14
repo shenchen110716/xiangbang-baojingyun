@@ -1,15 +1,21 @@
 import io
 import json
+import secrets
 from datetime import date
+from pathlib import Path
 
 import openpyxl
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.audit import audit
 from ..core.business_time import business_today
+from ..core.config import ROOT
 from ..core.db import db
+from ..core.file_tokens import make_download_token, verify_download_token
+from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import (
     ActualEmployer, AgentCommission, Claim, Enterprise, InsurancePlan,
@@ -18,6 +24,14 @@ from ..models import (
 from ..services import amount, billable_date_range, period_amount, plan_price_for_class, policy_dict, pricing_snapshot, usage_person_days
 
 router = APIRouter(prefix="/api", tags=["reports"])
+
+
+def _policy_with_document(policy: Policy, session: Session) -> dict:
+    payload = policy_dict(policy, session)
+    if policy.document_url:
+        token, expires = make_download_token(f"policy-document:{policy.id}")
+        payload["document_download_url"] = f"/api/policies/{policy.id}/document/download?token={token}&expires={expires}"
+    return payload
 
 
 def _parse_report_range(start_value: str, end_value: str) -> tuple[date, date]:
@@ -234,7 +248,30 @@ def billing(user: User = Depends(current_user), session: Session = Depends(db)):
 def policies(user: User = Depends(current_user), session: Session = Depends(db)):
     stmt=select(Policy).order_by(Policy.id.desc())
     if user.role=="enterprise" and user.enterprise_id: stmt=stmt.where(Policy.enterprise_id==user.enterprise_id)
-    return [policy_dict(x,session) for x in session.scalars(stmt)]
+    return [_policy_with_document(x,session) for x in session.scalars(stmt)]
+
+@router.post("/policies/{item_id}/document/upload", dependencies=[Depends(require_role("admin", detail="仅平台端可导入保单文件"))])
+async def upload_policy_document(item_id:int,file:UploadFile=File(...),user:User=Depends(current_user),session:Session=Depends(db)):
+    policy=session.get(Policy,item_id)
+    if not policy: raise HTTPException(404,'保单不存在')
+    suffix=Path(file.filename or '').suffix.lower()
+    if suffix not in {'.pdf','.jpg','.jpeg','.png'}: raise HTTPException(400,'仅支持 PDF 或图片格式')
+    content=await file.read()
+    if len(content)>20*1024*1024: raise HTTPException(400,'文件不能超过 20MB')
+    folder=ROOT/'uploads'/'policies'/str(item_id);folder.mkdir(parents=True,exist_ok=True)
+    stored=f'{secrets.token_hex(8)}{suffix}';(folder/stored).write_bytes(content)
+    policy.document_url=f'/uploads/policies/{item_id}/{stored}';policy.document_name=file.filename or stored
+    session.commit();audit(session,user,'upload','policy_document',str(item_id))
+    return _policy_with_document(policy,session)
+
+@router.get("/policies/{item_id}/document/download")
+def download_policy_document(item_id:int,token:str,expires:int,session:Session=Depends(db)):
+    if not verify_download_token(f"policy-document:{item_id}", expires, token): raise HTTPException(403,'下载链接无效或已过期')
+    policy=session.get(Policy,item_id)
+    if not policy or not policy.document_url: raise HTTPException(404,'保单文件不存在')
+    path=ROOT/policy.document_url.lstrip('/')
+    if not path.is_file(): raise HTTPException(404,'文件不存在')
+    return FileResponse(path,filename=policy.document_name or None)
 
 @router.get("/policies/{item_id}/export")
 def export_policy(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):

@@ -11,6 +11,8 @@ public class Policy {
     private String status = "active";
     private String startDate = "";
     private String endDate = "";
+    private String documentUrl = "";
+    private String documentName = "";
     private LocalDateTime createdAt;
 
     public Integer getId() { return id; }
@@ -29,6 +31,10 @@ public class Policy {
     public void setStartDate(String v) { this.startDate = v; }
     public String getEndDate() { return endDate; }
     public void setEndDate(String v) { this.endDate = v; }
+    public String getDocumentUrl() { return documentUrl; }
+    public void setDocumentUrl(String v) { this.documentUrl = v; }
+    public String getDocumentName() { return documentName; }
+    public void setDocumentName(String v) { this.documentName = v; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime v) { this.createdAt = v; }
 }

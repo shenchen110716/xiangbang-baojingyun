@@ -37,3 +37,6 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
         if column not in claim_columns: s.connection().exec_driver_sql(f"ALTER TABLE claims ADD COLUMN {column} {definition}")
     document_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(claim_documents)")}
     if "review_note" not in document_columns: s.connection().exec_driver_sql("ALTER TABLE claim_documents ADD COLUMN review_note TEXT DEFAULT ''")
+    policy_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(policies)")}
+    if "document_url" not in policy_columns: s.connection().exec_driver_sql("ALTER TABLE policies ADD COLUMN document_url TEXT DEFAULT ''")
+    if "document_name" not in policy_columns: s.connection().exec_driver_sql("ALTER TABLE policies ADD COLUMN document_name VARCHAR(200) DEFAULT ''")

@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import AppShell from '@/layouts/AppShell.vue'
 
 const route = useRoute()
-const isAuthPage = computed(() => route.name === 'login')
+const isAuthPage = computed(() => route.name === 'login' || route.name === 'certificate')
 </script>
 
 <template>

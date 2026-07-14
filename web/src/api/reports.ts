@@ -9,6 +9,12 @@ export function exportPolicyUrl(id: number) {
   return `/api/policies/${id}/export`
 }
 
+export function uploadPolicyDocument(id: number, file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  return client.post<Policy>(`/policies/${id}/document/upload`, form).then((r) => r.data)
+}
+
 export function getReports() {
   return client.get<ReportRow[]>('/reports').then((r) => r.data)
 }

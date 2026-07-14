@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { listPolicies } from '@/api/reports'
+import { listPolicies, uploadPolicyDocument } from '@/api/reports'
 import { listInsured } from '@/api/insured'
 import type { InsuredPerson, Policy } from '@/api/types'
 import { money } from '@/utils/format'
 import { downloadAuthenticated } from '@/utils/download'
+import { useAuthStore } from '@/stores/auth'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
 import DetailModal from '@/components/DetailModal.vue'
+
+const auth = useAuthStore()
 
 const loading = ref(true)
 const list = ref<Policy[]>([])
@@ -40,6 +43,41 @@ async function exportOne(item: Policy) {
     await downloadAuthenticated(`/policies/${item.id}/export`, `保单-${item.policy_no}.xlsx`)
   } catch (e) {
     ElMessage.error((e as Error).message)
+  }
+}
+
+function openCertificate(item: Policy) {
+  window.open(`/certificate/policy/${item.id}`, '_blank')
+}
+
+async function downloadDocument(item: Policy) {
+  if (!item.document_download_url) return
+  try {
+    await downloadAuthenticated(item.document_download_url.replace(/^\/api/, ''), item.document_name || `保单文件-${item.policy_no}`)
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
+const uploadingId = ref<number | null>(null)
+const fileInputs = ref<Record<number, HTMLInputElement | null>>({})
+function triggerUpload(item: Policy) {
+  fileInputs.value[item.id]?.click()
+}
+async function onDocumentChange(item: Policy, e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  uploadingId.value = item.id
+  try {
+    await uploadPolicyDocument(item.id, file)
+    ElMessage.success('保单文件已导入')
+    load()
+  } catch (err) {
+    ElMessage.error((err as Error).message)
+  } finally {
+    uploadingId.value = null
   }
 }
 
@@ -87,10 +125,21 @@ async function openDetail(item: Policy) {
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="保单文件" width="110">
+          <template #default="{ row }">
+            <el-button v-if="row.document_download_url" link type="primary" size="small" @click="downloadDocument(row)">{{ row.document_name || '已导入' }}</el-button>
+            <span v-else class="muted">未导入</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openDetail(row)">查看计价</el-button>
-            <el-button link type="primary" size="small" @click="exportOne(row)">导出</el-button>
+            <el-button link type="primary" size="small" @click="exportOne(row)">导出明细</el-button>
+            <el-button link type="primary" size="small" @click="openCertificate(row)">打印证明</el-button>
+            <template v-if="auth.isAdmin()">
+              <input :ref="(el) => (fileInputs[row.id] = el as HTMLInputElement)" type="file" accept=".pdf,.jpg,.jpeg,.png" style="display: none" @change="(e) => onDocumentChange(row, e)" />
+              <el-button link type="primary" size="small" :loading="uploadingId === row.id" @click="triggerUpload(row)">导入保单</el-button>
+            </template>
           </template>
         </el-table-column>
       </el-table>

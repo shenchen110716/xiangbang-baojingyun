@@ -59,6 +59,9 @@ function openDetail(item: InsuredPerson) {
   activePerson.value = item
   detailVisible.value = true
 }
+function openCertificate(item: InsuredPerson) {
+  window.open(`/certificate/person/${item.id}`, '_blank')
+}
 function openEditor(item: InsuredPerson | null) {
   activePerson.value = item
   editorVisible.value = true
@@ -227,10 +230,11 @@ function exportCsv() {
         <el-table-column label="停保时间" width="150">
           <template #default="{ row }">{{ row.terminated_at ? formatDateTime(row.terminated_at) : '—' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openDetail(row)">查看</el-button>
             <el-button link type="primary" size="small" @click="openEditor(row)">编辑</el-button>
+            <el-button v-if="row.effective_at" link type="primary" size="small" @click="openCertificate(row)">参保证明</el-button>
             <el-button v-if="row.status === 'active'" link type="danger" size="small" @click="openStopDialog(row)">停保</el-button>
             <el-button v-else link type="success" size="small" @click="changeStatus(row, 'active')">参保</el-button>
           </template>
