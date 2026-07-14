@@ -1,5 +1,5 @@
 from .serialization import serialize, amount
-from .pricing import plan_price_for_class, pricing_snapshot, plan_dict, validate_commission_price
+from .pricing import plan_price_for_class, pricing_snapshot, plan_dict, validate_commission_price, strip_internal_pricing
 from .commissions import commission_accrual, commission_dict, agent_commission_rows, agent_commission_summary
 from .accruals import billable_date_range, last_billable_date, period_amount, usage_person_days
 from .policies import policy_dict
@@ -11,7 +11,7 @@ from .policy_members import (
 
 __all__ = [
     "serialize", "amount",
-    "plan_price_for_class", "pricing_snapshot", "plan_dict", "validate_commission_price",
+    "plan_price_for_class", "pricing_snapshot", "plan_dict", "validate_commission_price", "strip_internal_pricing",
     "commission_accrual", "commission_dict", "agent_commission_rows", "agent_commission_summary",
     "billable_date_range", "last_billable_date", "period_amount", "usage_person_days",
     "policy_dict",

@@ -10,7 +10,7 @@ from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import AgentCommission, InsurancePlan, PlanTier, Policy, User, WorkPosition
 from ..schemas import PlanIn, PlanTierIn, PlanUpdate
-from ..services import plan_dict, serialize
+from ..services import plan_dict, serialize, strip_internal_pricing
 
 router = APIRouter(prefix="/api", tags=["plans"])
 
@@ -22,7 +22,7 @@ def plans(user: User = Depends(current_user), session: Session = Depends(db)):
         allowed = select(AgentCommission.plan_id).where(AgentCommission.enterprise_id == user.enterprise_id)
         position_plans=select(WorkPosition.plan_id).where(WorkPosition.enterprise_id==user.enterprise_id,WorkPosition.plan_id.is_not(None))
         stmt = stmt.where(or_(InsurancePlan.id.in_(allowed),InsurancePlan.id.in_(position_plans)))
-    return [plan_dict(x) for x in session.scalars(stmt)]
+    return [strip_internal_pricing(plan_dict(x), user) for x in session.scalars(stmt)]
 
 @router.post("/plans")
 def add_plan(data: PlanIn, user: User = Depends(current_user), session: Session = Depends(db)):

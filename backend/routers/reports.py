@@ -21,13 +21,13 @@ from ..models import (
     ActualEmployer, AgentCommission, Claim, Enterprise, InsurancePlan,
     InsuredPerson, Policy, PolicyMember, User, WorkPosition,
 )
-from ..services import amount, billable_date_range, period_amount, plan_price_for_class, policy_dict, pricing_snapshot, usage_person_days
+from ..services import amount, billable_date_range, period_amount, plan_price_for_class, policy_dict, pricing_snapshot, strip_internal_pricing, usage_person_days
 
 router = APIRouter(prefix="/api", tags=["reports"])
 
 
-def _policy_with_document(policy: Policy, session: Session) -> dict:
-    payload = policy_dict(policy, session)
+def _policy_with_document(policy: Policy, session: Session, user: User) -> dict:
+    payload = strip_internal_pricing(policy_dict(policy, session), user)
     if policy.document_url:
         token, expires = make_download_token(f"policy-document:{policy.id}")
         payload["document_download_url"] = f"/api/policies/{policy.id}/document/download?token={token}&expires={expires}"
@@ -248,7 +248,7 @@ def billing(user: User = Depends(current_user), session: Session = Depends(db)):
 def policies(user: User = Depends(current_user), session: Session = Depends(db)):
     stmt=select(Policy).order_by(Policy.id.desc())
     if user.role=="enterprise" and user.enterprise_id: stmt=stmt.where(Policy.enterprise_id==user.enterprise_id)
-    return [_policy_with_document(x,session) for x in session.scalars(stmt)]
+    return [_policy_with_document(x,session,user) for x in session.scalars(stmt)]
 
 @router.post("/policies/{item_id}/document/upload", dependencies=[Depends(require_role("admin", detail="仅平台端可导入保单文件"))])
 async def upload_policy_document(item_id:int,file:UploadFile=File(...),user:User=Depends(current_user),session:Session=Depends(db)):
@@ -262,7 +262,7 @@ async def upload_policy_document(item_id:int,file:UploadFile=File(...),user:User
     stored=f'{secrets.token_hex(8)}{suffix}';(folder/stored).write_bytes(content)
     policy.document_url=f'/uploads/policies/{item_id}/{stored}';policy.document_name=file.filename or stored
     session.commit();audit(session,user,'upload','policy_document',str(item_id))
-    return _policy_with_document(policy,session)
+    return _policy_with_document(policy,session,user)
 
 @router.get("/policies/{item_id}/document/download")
 def download_policy_document(item_id:int,token:str,expires:int,session:Session=Depends(db)):

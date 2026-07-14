@@ -49,6 +49,27 @@ def pricing_snapshot(plan:InsurancePlan,relation:Optional[AgentCommission]=None,
 def plan_dict(plan:InsurancePlan) -> dict:
     return {**serialize(plan),**pricing_snapshot(plan)}
 
+# Internal cost/margin figures: insurer settlement price, commission, and
+# platform profit. Enterprise-role callers (miniprogram end users, company
+# HR accounts) should only ever see the actual premium they're charged, not
+# the platform's cost basis — mirrors the split already used in the Excel
+# export (reports.py: enterprise_export branch).
+_INTERNAL_PRICING_FIELDS = {
+    'insurance_base_price', 'total_commission_rate', 'total_commission_amount',
+    'policy_floor_price', 'insurer_settlement_price', 'profit_amount',
+    'commission_mode', 'agent_commission_rate', 'agent_commission_amount',
+    'platform_margin_amount', 'insurance_base_total', 'policy_floor_total',
+    'total_commission_total', 'agent_commission_total',
+    # raw InsurancePlan columns duplicating the same cost basis under
+    # different names (plan.price == insurance_base_price, plan.commission_rate
+    # == total_commission_rate) once plan_dict() merges serialize(plan) in.
+    'price', 'commission_rate',
+}
+
+def strip_internal_pricing(data:dict,user) -> dict:
+    if user.role != 'enterprise': return data
+    return {k:v for k,v in data.items() if k not in _INTERNAL_PRICING_FIELDS}
+
 def validate_commission_price(data,plan:InsurancePlan):
     mode='price' if data.mode in {'price','markup'} else 'rebate'
     minimum=pricing_snapshot(plan)['minimum_sale_price']
