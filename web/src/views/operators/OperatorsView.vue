@@ -57,6 +57,31 @@ async function submitCreate() {
   }
 }
 
+const editVisible = ref(false)
+const editForm = reactive({ id: 0, name: '', phone: '' })
+const editError = ref('')
+const editSaving = ref(false)
+function openEdit(item: Operator) {
+  Object.assign(editForm, { id: item.id, name: item.name, phone: item.phone || '' })
+  editError.value = ''
+  editVisible.value = true
+}
+async function submitEdit() {
+  editError.value = ''
+  if (!editForm.name.trim()) { editError.value = '请输入操作员姓名'; return }
+  editSaving.value = true
+  try {
+    await operatorsApi.updateOperator(editForm.id, { name: editForm.name.trim(), phone: editForm.phone.trim() })
+    ElMessage.success('操作员信息已更新')
+    editVisible.value = false
+    load()
+  } catch (e) {
+    editError.value = (e as Error).message
+  } finally {
+    editSaving.value = false
+  }
+}
+
 async function toggleActive(item: Operator) {
   try {
     await operatorsApi.updateOperator(item.id, { active: !item.active })
@@ -112,6 +137,7 @@ async function resetPassword(item: Operator) {
         </el-table-column>
         <el-table-column v-if="canManage" label="操作" width="180" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-button link type="primary" size="small" @click="resetPassword(row)">重置密码</el-button>
             <el-button v-if="!row.is_owner" link :type="row.active ? 'danger' : 'success'" size="small" @click="toggleActive(row)">{{ row.active ? '停用' : '启用' }}</el-button>
           </template>
@@ -136,6 +162,18 @@ async function resetPassword(item: Operator) {
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="submitCreate">创建操作员</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="editVisible" title="编辑操作员" width="440px">
+      <el-form :model="editForm" label-width="110px">
+        <el-form-item label="操作员姓名"><el-input v-model="editForm.name" placeholder="请输入姓名" /></el-form-item>
+        <el-form-item label="手机号"><el-input v-model="editForm.phone" placeholder="选填" /></el-form-item>
+        <p v-if="editError" class="error-text">{{ editError }}</p>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editSaving" @click="submitEdit">保存</el-button>
       </template>
     </el-dialog>
   </div>
