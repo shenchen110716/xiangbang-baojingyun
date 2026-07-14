@@ -134,8 +134,12 @@ def correct_person_policy_dates(session: Session, person: InsuredPerson, effecti
     validate_person_policy_dates(session, person, effective_at, terminated_at, operation)
     member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == person.id).order_by(PolicyMember.id.desc()))
     if member is None:
-        if effective_at is None:
+        if effective_at is None and terminated_at is None:
             return None
+        # terminated_at alone (no explicit effective_at) on a brand-new person
+        # is the "临时日结" one-shot flow: activate now with the plan's
+        # default earliest effective time, then immediately apply the given
+        # termination — not a no-op (see feedback item 10).
         member = activate_person_policy(session, person, effective_at)
         if member is None:
             return None

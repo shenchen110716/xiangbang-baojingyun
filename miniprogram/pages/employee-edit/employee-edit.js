@@ -10,6 +10,8 @@ Page({
     terminatedTime: '00:00',
     plans: [],
     effectiveRuleText: '月单：最早为操作日次日 00:00',
+    isDailyBilling: false,
+    dailyMode: 'temporary',
     enterprises: [],
     allPositions: [],
     positions: [],
@@ -38,7 +40,7 @@ Page({
         const form = current
           ? { name: current.name, id_number: current.id_number, phone: current.phone || '', enterprise_id: current.enterprise_id, position_id: current.position_id || 0, effective_at: effectiveAt, terminated_at: terminatedAt }
           : { ...this.data.form, enterprise_id: enterpriseId, position_id: (positions[0] && positions[0].id) || 0 };
-        this.setData({ enterprises, allPositions: approved, plans, positions, enterpriseIndex, positionIndex, selectedPosition, form, effectiveTime, terminatedTime, originalEffectiveAt: effectiveAt ? `${effectiveAt}T${effectiveTime}:00` : '', originalTerminatedAt: terminatedAt ? `${terminatedAt}T${terminatedTime}:00` : '', effectiveRuleText: selectedPlan && selectedPlan.effective_mode === 'immediate' ? '即时单：最早为操作时间后 1 小时' : '月单：最早为操作日次日 00:00', loading: false });
+        this.setData({ enterprises, allPositions: approved, plans, positions, enterpriseIndex, positionIndex, selectedPosition, form, effectiveTime, terminatedTime, originalEffectiveAt: effectiveAt ? `${effectiveAt}T${effectiveTime}:00` : '', originalTerminatedAt: terminatedAt ? `${terminatedAt}T${terminatedTime}:00` : '', effectiveRuleText: selectedPlan && selectedPlan.effective_mode === 'immediate' ? '即时单：最早为操作时间后 1 小时' : '月单：最早为操作日次日 00:00', isDailyBilling: !!(selectedPlan && selectedPlan.billing_mode === 'daily'), loading: false });
       }).catch(() => this.setData({ loading: false }));
   },
   input(e) { this.setData({ [`form.${e.currentTarget.dataset.key}`]: e.detail.value }); },
@@ -48,12 +50,18 @@ Page({
     const enterpriseIndex = Number(e.detail.value), enterprise = this.data.enterprises[enterpriseIndex];
     const positions = this.data.allPositions.filter((item) => item.enterprise_id === enterprise.id);
     const selectedPosition = positions[0] || null, selectedPlan = this.data.plans.find((item) => selectedPosition && item.id === selectedPosition.plan_id);
-    this.setData({ enterpriseIndex, positions, positionIndex: 0, selectedPosition, effectiveRuleText: selectedPlan && selectedPlan.effective_mode === 'immediate' ? '即时单：最早为操作时间后 1 小时' : '月单：最早为操作日次日 00:00', 'form.enterprise_id': enterprise.id, 'form.position_id': (positions[0] && positions[0].id) || 0 });
+    this.setData({ enterpriseIndex, positions, positionIndex: 0, selectedPosition, effectiveRuleText: selectedPlan && selectedPlan.effective_mode === 'immediate' ? '即时单：最早为操作时间后 1 小时' : '月单：最早为操作日次日 00:00', isDailyBilling: !!(selectedPlan && selectedPlan.billing_mode === 'daily'), 'form.enterprise_id': enterprise.id, 'form.position_id': (positions[0] && positions[0].id) || 0 });
   },
   positionChange(e) {
     const positionIndex = Number(e.detail.value), position = this.data.positions[positionIndex];
     const plan = this.data.plans.find((item) => position && item.id === position.plan_id);
-    this.setData({ positionIndex, selectedPosition: position || null, effectiveRuleText: plan && plan.effective_mode === 'immediate' ? '即时单：最早为操作时间后 1 小时' : '月单：最早为操作日次日 00:00', 'form.position_id': (position && position.id) || 0 });
+    this.setData({ positionIndex, selectedPosition: position || null, effectiveRuleText: plan && plan.effective_mode === 'immediate' ? '即时单：最早为操作时间后 1 小时' : '月单：最早为操作日次日 00:00', isDailyBilling: !!(plan && plan.billing_mode === 'daily'), 'form.position_id': (position && position.id) || 0 });
+  },
+  dailyModeChange(e) { this.setData({ dailyMode: e.currentTarget.dataset.value }); },
+  tomorrowDate() {
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T00:00:00`;
   },
   save() {
     const form = this.data.form;
@@ -62,7 +70,8 @@ Page({
     this.setData({ saving: true });
     const payload = { ...form, name: form.name.trim(), id_number: form.id_number.trim(), phone: form.phone.trim() };
     const effectiveAt = payload.effective_at ? `${payload.effective_at}T${this.data.effectiveTime}:00` : '';
-    const terminatedAt = payload.terminated_at ? `${payload.terminated_at}T${this.data.terminatedTime}:00` : '';
+    const useTemporaryDaily = !this.data.id && this.data.isDailyBilling && this.data.dailyMode === 'temporary';
+    const terminatedAt = useTemporaryDaily ? this.tomorrowDate() : (payload.terminated_at ? `${payload.terminated_at}T${this.data.terminatedTime}:00` : '');
     let request;
     if (this.data.id) {
       const data = { name: payload.name, id_number: payload.id_number, phone: payload.phone, position_id: payload.position_id };

@@ -197,7 +197,11 @@ public class PolicyMemberService {
         validateDates(person, effectiveAt, terminatedAt, LocalDateTime.now());
         PolicyMember latest = policyMemberMapper.findLatestForPerson(person.getId());
         if (latest == null) {
-            if (effectiveAt == null) return null; // nothing to backfill onto
+            if (effectiveAt == null && terminatedAt == null) return null; // nothing to backfill onto
+            // terminatedAt alone (no explicit effectiveAt) on a brand-new
+            // person is the "临时日结" one-shot flow: activate now with the
+            // plan's default earliest effective time, then immediately apply
+            // the given termination — not a no-op (feedback item 10).
             Integer policyId = activate(person, effectiveAt);
             if (policyId == null || terminatedAt == null) return policyId;
             latest = policyMemberMapper.findLatestForPerson(person.getId());

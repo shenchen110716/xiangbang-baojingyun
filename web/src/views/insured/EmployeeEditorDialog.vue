@@ -23,7 +23,14 @@ const form = reactive({
   effective_at: null as string | null,
   terminated_at: null as string | null,
 })
+const dailyMode = ref<'temporary' | 'custom'>('temporary')
 const saving = ref(false)
+
+function tomorrowDate() {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return `${d.toISOString().slice(0, 10)}T00:00:00`
+}
 
 watch(visible, async (isVisible) => {
   if (!isVisible) return
@@ -43,6 +50,7 @@ watch(visible, async (isVisible) => {
     })
   } else {
     Object.assign(form, { enterprise_id: null, position_id: null, name: '', id_number: '', phone: '', effective_at: null, terminated_at: null })
+    dailyMode.value = 'temporary'
   }
 })
 
@@ -61,6 +69,8 @@ const selectedPlan = computed(() => {
 const effectiveRuleHint = computed(() => selectedPlan.value?.effective_mode === 'immediate'
   ? '即时单：生效时间不得早于操作时间后 1 小时'
   : '月单：生效时间不得早于操作日次日 00:00')
+const isDailyBilling = computed(() => selectedPlan.value?.billing_mode === 'daily')
+const showDailyModeToggle = computed(() => !props.person && isDailyBilling.value)
 
 async function submit() {
   if (!props.person && !form.enterprise_id) { ElMessage.error('请选择投保单位'); return }
@@ -75,9 +85,10 @@ async function submit() {
       if (form.terminated_at !== (props.person.terminated_at ? props.person.terminated_at.replace('Z', '').slice(0, 19) : null)) payload.terminated_at = form.terminated_at
       await updateInsured(props.person.id, payload)
     } else {
+      const terminatedAt = showDailyModeToggle.value && dailyMode.value === 'temporary' ? tomorrowDate() : form.terminated_at
       await createInsured({
         enterprise_id: form.enterprise_id!, position_id: form.position_id, name: form.name, id_number: form.id_number, phone: form.phone,
-        effective_at: form.effective_at, terminated_at: form.terminated_at,
+        effective_at: form.effective_at, terminated_at: terminatedAt,
       })
     }
     ElMessage.success('保存成功')
@@ -108,11 +119,17 @@ async function submit() {
       <el-form-item label="被保险人姓名" required><el-input v-model="form.name" /></el-form-item>
       <el-form-item label="身份证号" required><el-input v-model="form.id_number" /></el-form-item>
       <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
+      <el-form-item v-if="showDailyModeToggle" label="日结方式">
+        <el-radio-group v-model="dailyMode">
+          <el-radio value="temporary">临时日结（当天有效，次日零时自动到期）</el-radio>
+          <el-radio value="custom">自定义日结（手动选择起止时间）</el-radio>
+        </el-radio-group>
+      </el-form-item>
       <el-form-item label="生效时间">
         <el-date-picker v-model="form.effective_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="请选择生效日期和时间" style="width: 100%" />
         <small class="hint">{{ effectiveRuleHint }}；留空则不修改</small>
       </el-form-item>
-      <el-form-item label="停保时间">
+      <el-form-item v-if="!showDailyModeToggle || dailyMode === 'custom'" label="停保时间">
         <el-date-picker v-model="form.terminated_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="请选择停保日期和时间" style="width: 100%" />
         <small class="hint">最早为操作日次日 00:00，且必须晚于生效时间；留空则不修改</small>
       </el-form-item>
