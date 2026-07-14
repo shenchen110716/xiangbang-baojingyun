@@ -26,7 +26,7 @@ import java.util.Set;
 public class StaticFrontendController {
     private final Path webDist;
 
-    private static final Set<String> WEB_ROOT_FILES = Set.of("favicon.svg", "icons.svg");
+    private static final Set<String> WEB_ROOT_FILES = Set.of("favicon.svg", "icons.svg", "xbbzp.html");
     private static final Set<String> FRONTEND_ROUTES = Set.of(
             "", "home", "screen", "team", "dispatch", "workers", "work-relations",
             "agents", "insurance", "policy", "claims", "insurers", "exports",
@@ -45,7 +45,7 @@ public class StaticFrontendController {
             if (!Files.isRegularFile(file)) throw ApiException.notFound("not found");
             return ResponseEntity.ok().body(new FileSystemResource(file));
         }
-        if (FRONTEND_ROUTES.contains(p)) {
+        if (FRONTEND_ROUTES.contains(p) || p.startsWith("certificate/")) {
             Path index = webDist.resolve("index.html");
             return ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(new FileSystemResource(index));
         }

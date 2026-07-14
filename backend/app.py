@@ -81,7 +81,7 @@ app.include_router(claims_router)
 WEB_DIST = ROOT / "web" / "dist"
 app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="web-assets")
 
-_WEB_ROOT_FILES = {"favicon.svg", "icons.svg"}
+_WEB_ROOT_FILES = {"favicon.svg", "icons.svg", "xbbzp.html"}
 
 _FRONTEND_ROUTES = {
     "/", "/home", "/screen", "/team", "/dispatch", "/workers", "/work-relations",
@@ -94,7 +94,7 @@ _FRONTEND_ROUTES = {
 def serve_frontend(path: str):
     if path in _WEB_ROOT_FILES:
         return FileResponse(WEB_DIST / path)
-    if f"/{path}" in _FRONTEND_ROUTES:
+    if f"/{path}" in _FRONTEND_ROUTES or path.startswith("certificate/"):
         return FileResponse(
             WEB_DIST / "index.html",
             media_type="text/html",
