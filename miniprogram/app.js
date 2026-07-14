@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE = 'https://spectacular-spending-piano-eco.trycloudflare.com/api';
+const DEFAULT_API_BASE = 'https://florence-columns-strips-mixed.trycloudflare.com/api';
 
 App({
   globalData: {
