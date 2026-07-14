@@ -5,19 +5,25 @@ import com.xbb.baojing.common.AuditService;
 import com.xbb.baojing.common.JwtService;
 import com.xbb.baojing.common.User;
 import com.xbb.baojing.common.UserMapper;
+import com.xbb.baojing.enterprise.Enterprise;
+import com.xbb.baojing.enterprise.EnterpriseMapper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
     private final UserMapper userMapper;
+    private final EnterpriseMapper enterpriseMapper;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
 
-    public AuthController(UserMapper userMapper, JwtService jwtService, PasswordEncoder passwordEncoder, AuditService auditService) {
+    public AuthController(UserMapper userMapper, EnterpriseMapper enterpriseMapper, JwtService jwtService, PasswordEncoder passwordEncoder, AuditService auditService) {
         this.userMapper = userMapper;
+        this.enterpriseMapper = enterpriseMapper;
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
         this.auditService = auditService;
@@ -41,6 +47,33 @@ public class AuthController {
 
     @GetMapping("/me")
     public User me(User user) { return user; }
+
+    public record LinkedAccountOut(int id, String name, Integer enterpriseId, String enterpriseName) {}
+
+    /** Other enterprise-owner accounts sharing this user's phone number — the
+     * real-world case being one person who is 负责人 for multiple 参保单位,
+     * each with its own separate account (feedback item 11). Lets the web app
+     * offer an in-app switcher instead of requiring logout/login per company. */
+    private List<User> linkedAccounts(User user) {
+        if (!"enterprise".equals(user.getRole()) || !user.isOwner() || user.getPhone() == null || user.getPhone().isBlank()) return List.of();
+        return userMapper.findLinkedOwnersByPhone(user.getPhone(), user.getId());
+    }
+
+    @GetMapping("/linked-accounts")
+    public List<LinkedAccountOut> getLinkedAccounts(User user) {
+        return linkedAccounts(user).stream().map(item -> {
+            Enterprise enterprise = item.getEnterpriseId() != null ? enterpriseMapper.findById(item.getEnterpriseId()) : null;
+            return new LinkedAccountOut(item.getId(), item.getName(), item.getEnterpriseId(), enterprise != null ? enterprise.getName() : "");
+        }).toList();
+    }
+
+    @PostMapping("/switch-account")
+    public TokenOut switchAccount(@RequestParam("target_user_id") int targetUserId, User user) {
+        User target = linkedAccounts(user).stream().filter(item -> item.getId() == targetUserId).findFirst()
+                .orElseThrow(() -> ApiException.forbidden("无权切换到该账号"));
+        auditService.log(user, "switch_account", "user", String.valueOf(target.getId()));
+        return new TokenOut(jwtService.issueToken(target.getId(), target.getSessionVersion()), "bearer");
+    }
 
     @PatchMapping("/password")
     public java.util.Map<String, Boolean> changePassword(@RequestBody PasswordChangeIn data, User user) {

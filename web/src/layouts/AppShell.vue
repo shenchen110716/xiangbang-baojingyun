@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { routes } from '@/router/routes'
 import * as miscApi from '@/api/misc'
+import { listLinkedAccounts, type LinkedAccount } from '@/api/auth'
 import GlobalSearch from '@/components/GlobalSearch.vue'
 
 const router = useRouter()
@@ -13,6 +14,46 @@ const auth = useAuthStore()
 
 const messageCount = ref(0)
 const searchVisible = ref(false)
+const linkedAccounts = ref<LinkedAccount[]>([])
+const switcherVisible = ref(false)
+const switcherSearch = ref('')
+const switching = ref(false)
+
+async function loadLinkedAccounts() {
+  if (!auth.isEnterprise() || !auth.user?.is_owner) { linkedAccounts.value = []; return }
+  try {
+    linkedAccounts.value = await listLinkedAccounts()
+  } catch {
+    linkedAccounts.value = []
+  }
+}
+
+const filteredAccounts = computed(() => {
+  if (!switcherSearch.value) return linkedAccounts.value
+  const q = switcherSearch.value.toLowerCase()
+  return linkedAccounts.value.filter((x) => x.enterprise_name.toLowerCase().includes(q))
+})
+
+function openSwitcher() {
+  if (!linkedAccounts.value.length) return
+  switcherSearch.value = ''
+  switcherVisible.value = true
+}
+
+async function doSwitch(account: LinkedAccount) {
+  switching.value = true
+  try {
+    await auth.switchAccount(account.id)
+    switcherVisible.value = false
+    ElMessage.success(`已切换到 ${account.enterprise_name}`)
+    router.push({ name: 'home' })
+    loadLinkedAccounts()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    switching.value = false
+  }
+}
 
 const navRoutes = routes.filter((r) => r.meta.group !== undefined && r.name !== 'login')
 const navGroups = computed(() => {
@@ -50,6 +91,7 @@ onMounted(async () => {
     await auth.loadProfile().catch(() => {})
   }
   loadMessageCount()
+  loadLinkedAccounts()
 })
 
 function handleLogout() {
@@ -73,12 +115,13 @@ async function openPasswordChange() {
           <div class="brand-title">{{ brandSubtitle }}</div>
         </div>
       </div>
-      <div class="account-card">
+      <div class="account-card" :class="{ clickable: linkedAccounts.length > 0 }" @click="openSwitcher">
         <div class="avatar">{{ auth.user?.name?.slice(0, 1) || '?' }}</div>
         <div class="account-info">
           <b>{{ auth.user?.name || '加载中' }}</b>
           <small>{{ accountSubtitle }}</small>
         </div>
+        <span v-if="linkedAccounts.length > 0" class="switch-hint">切换 ⇄</span>
       </div>
       <el-menu :default-active="route.name as string" router class="side-nav">
         <template v-for="(items, group) in navGroups" :key="group">
@@ -120,6 +163,17 @@ async function openPasswordChange() {
       </div>
     </main>
     <GlobalSearch v-model="searchVisible" />
+
+    <el-dialog v-model="switcherVisible" title="切换登录账户" width="420px">
+      <el-input v-model="switcherSearch" placeholder="搜索公司名" clearable style="margin-bottom: 14px" />
+      <div class="switch-list">
+        <div v-for="item in filteredAccounts" :key="item.id" class="switch-row" :class="{ disabled: switching }" @click="!switching && doSwitch(item)">
+          <div class="switch-name">{{ item.enterprise_name }}</div>
+          <small class="muted">负责人：{{ item.name }}</small>
+        </div>
+        <el-empty v-if="!filteredAccounts.length" description="没有匹配的单位" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -188,6 +242,43 @@ async function openPasswordChange() {
 }
 .account-info small {
   color: var(--el-text-color-secondary);
+}
+.account-card.clickable {
+  cursor: pointer;
+}
+.account-card.clickable:hover {
+  background: var(--el-fill-color);
+}
+.switch-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--el-color-primary);
+}
+.switch-list {
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.switch-row {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--el-fill-color-light);
+  cursor: pointer;
+}
+.switch-row:hover {
+  background: var(--el-fill-color);
+}
+.switch-row.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.switch-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.muted {
+  color: var(--el-text-color-placeholder);
 }
 .side-nav {
   flex: 1;

@@ -32,6 +32,9 @@ public interface UserMapper {
     @Select("SELECT DISTINCT enterprise_id FROM users WHERE role = 'enterprise' AND enterprise_id IS NOT NULL")
     List<Integer> findDistinctEnterpriseIdsWithUsers();
 
+    @Select("SELECT " + COLUMNS + " FROM users WHERE role = 'enterprise' AND is_owner = true AND phone = #{phone} AND id != #{excludeId} AND active = true ORDER BY id ASC")
+    List<User> findLinkedOwnersByPhone(@Param("phone") String phone, @Param("excludeId") int excludeId);
+
     @Insert("INSERT INTO users (username, password_hash, name, role, enterprise_id, phone, status, active, is_owner, session_version, created_at) " +
             "VALUES (#{username}, #{passwordHash}, #{name}, #{role}, #{enterpriseId}, #{phone}, #{status}, #{active}, #{owner}, #{sessionVersion}, #{createdAt})")
     @Options(useGeneratedKeys = true, keyProperty = "id")

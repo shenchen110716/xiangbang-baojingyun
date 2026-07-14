@@ -23,11 +23,18 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value
   }
 
+  async function switchAccount(targetUserId: number) {
+    const result = await authApi.switchAccount(targetUserId)
+    token.value = result.access_token
+    localStorage.setItem(TOKEN_KEY, result.access_token)
+    await loadProfile()
+  }
+
   function logout() {
     user.value = null
     token.value = null
     localStorage.removeItem(TOKEN_KEY)
   }
 
-  return { user, token, isEnterprise, isAdmin, login, loadProfile, logout }
+  return { user, token, isEnterprise, isAdmin, login, loadProfile, logout, switchAccount }
 })
