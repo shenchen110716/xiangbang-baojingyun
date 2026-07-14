@@ -383,4 +383,31 @@ p {
     font-size: 28px;
   }
 }
+
+@media (max-width: 640px) {
+  .auth-side {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    min-height: 0;
+  }
+  .auth-side::before {
+    display: none;
+  }
+  .side-body,
+  .back-link {
+    display: none;
+  }
+  .auth-main {
+    padding: 28px 20px 40px;
+    place-items: start stretch;
+  }
+  .auth-card {
+    max-width: none;
+  }
+  .portal-picker {
+    gap: 8px;
+  }
+}
 </style>
