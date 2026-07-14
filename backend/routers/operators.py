@@ -41,6 +41,12 @@ def update_operator(item_id:int,data:OperatorUpdate,user:User=Depends(current_us
     if item.id==user.id and data.active is False: raise HTTPException(400,"不能停用当前登录账号")
     if item.is_owner and data.active is False: raise HTTPException(400,"单位主管不能停用")
     values=data.model_dump(exclude_unset=True)
+    if values.get("enterprise_id") is not None:
+        if user.role!="admin": raise HTTPException(403,"仅平台端可调整所属单位")
+        if item.is_owner: raise HTTPException(400,"单位主管不能更换所属单位")
+        target=session.get(Enterprise,values["enterprise_id"])
+        if not target: raise HTTPException(400,"目标投保单位不存在")
+        item.enterprise_id=target.id
     if values.get("name") is not None: item.name=values["name"].strip()
     if values.get("phone") is not None: item.phone=values["phone"].strip()
     if values.get("password"): item.password_hash=pwd.hash(values["password"]);item.session_version+=1

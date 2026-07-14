@@ -58,20 +58,26 @@ async function submitCreate() {
 }
 
 const editVisible = ref(false)
-const editForm = reactive({ id: 0, name: '', phone: '' })
+const editForm = reactive({ id: 0, name: '', phone: '', enterprise_id: null as number | null })
 const editError = ref('')
 const editSaving = ref(false)
+const editTarget = ref<Operator | null>(null)
+const canReassignEnterprise = computed(() => auth.isAdmin() && !editTarget.value?.is_owner)
 function openEdit(item: Operator) {
-  Object.assign(editForm, { id: item.id, name: item.name, phone: item.phone || '' })
+  editTarget.value = item
+  Object.assign(editForm, { id: item.id, name: item.name, phone: item.phone || '', enterprise_id: item.enterprise_id })
   editError.value = ''
   editVisible.value = true
 }
 async function submitEdit() {
   editError.value = ''
   if (!editForm.name.trim()) { editError.value = '请输入操作员姓名'; return }
+  if (canReassignEnterprise.value && !editForm.enterprise_id) { editError.value = '请选择所属投保单位'; return }
   editSaving.value = true
   try {
-    await operatorsApi.updateOperator(editForm.id, { name: editForm.name.trim(), phone: editForm.phone.trim() })
+    const payload: { name: string; phone: string; enterprise_id?: number } = { name: editForm.name.trim(), phone: editForm.phone.trim() }
+    if (canReassignEnterprise.value && editForm.enterprise_id) payload.enterprise_id = editForm.enterprise_id
+    await operatorsApi.updateOperator(editForm.id, payload)
     ElMessage.success('操作员信息已更新')
     editVisible.value = false
     load()
@@ -167,6 +173,15 @@ async function resetPassword(item: Operator) {
 
     <el-dialog v-model="editVisible" title="编辑操作员" width="440px">
       <el-form :model="editForm" label-width="110px">
+        <el-form-item v-if="canReassignEnterprise" label="所属投保单位">
+          <el-select v-model="editForm.enterprise_id" style="width: 100%">
+            <el-option v-for="e in enterprises" :key="e.id" :label="e.name" :value="e.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-else-if="auth.isAdmin()" label="所属投保单位">
+          <span>{{ editTarget?.enterprise_name || '—' }}</span>
+          <small class="muted" style="margin-left: 8px">单位主管账号不能更换所属单位</small>
+        </el-form-item>
         <el-form-item label="操作员姓名"><el-input v-model="editForm.name" placeholder="请输入姓名" /></el-form-item>
         <el-form-item label="手机号"><el-input v-model="editForm.phone" placeholder="选填" /></el-form-item>
         <p v-if="editError" class="error-text">{{ editError }}</p>

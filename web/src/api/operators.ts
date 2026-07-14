@@ -9,6 +9,6 @@ export function createOperator(data: { enterprise_id?: number; username: string;
   return client.post<Operator>('/operators', data).then((r) => r.data)
 }
 
-export function updateOperator(id: number, data: { name?: string; phone?: string; password?: string; active?: boolean }) {
+export function updateOperator(id: number, data: { name?: string; phone?: string; password?: string; active?: boolean; enterprise_id?: number }) {
   return client.patch<Operator>(`/operators/${id}`, data).then((r) => r.data)
 }

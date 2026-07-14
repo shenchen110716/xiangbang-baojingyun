@@ -25,7 +25,7 @@ public class OperatorController {
     }
 
     public record OperatorIn(String username, String password, String name, String phone, Integer enterpriseId) {}
-    public record OperatorUpdate(String name, String phone, String password, Boolean active) {}
+    public record OperatorUpdate(String name, String phone, String password, Boolean active, Integer enterpriseId) {}
     public record OperatorOut(int id, String username, String name, String phone, String role, Integer enterpriseId,
                                String enterpriseName, boolean isOwner, boolean active, java.time.LocalDateTime createdAt) {}
 
@@ -82,6 +82,13 @@ public class OperatorController {
         }
         if (item.getId().equals(user.getId()) && Boolean.FALSE.equals(data.active())) throw ApiException.badRequest("不能停用当前登录账号");
         if (item.isOwner() && Boolean.FALSE.equals(data.active())) throw ApiException.badRequest("单位主管不能停用");
+        if (data.enterpriseId() != null) {
+            if (!"admin".equals(user.getRole())) throw ApiException.forbidden("仅平台端可调整所属单位");
+            if (item.isOwner()) throw ApiException.badRequest("单位主管不能更换所属单位");
+            Enterprise target = enterpriseMapper.findById(data.enterpriseId());
+            if (target == null) throw ApiException.badRequest("目标投保单位不存在");
+            item.setEnterpriseId(target.getId());
+        }
         if (data.name() != null) item.setName(data.name().strip());
         if (data.phone() != null) item.setPhone(data.phone().strip());
         if (data.password() != null && !data.password().isBlank()) {
