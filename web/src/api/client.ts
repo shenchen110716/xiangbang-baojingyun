@@ -22,7 +22,7 @@ client.interceptors.response.use(
     if (error?.response?.status === 401) {
       localStorage.removeItem(TOKEN_KEY)
       if (router.currentRoute.value.name !== 'login') {
-        router.push({ name: 'login' })
+        router.push({ name: 'login', query: router.currentRoute.value.query })
       }
     }
     return Promise.reject(new Error(detail))
