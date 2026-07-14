@@ -17,6 +17,7 @@ class WorkPosition(Base):
     occupation_class: Mapped[str] = mapped_column(String(30), default="待定")
     plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("insurance_plans.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="pending")
+    created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

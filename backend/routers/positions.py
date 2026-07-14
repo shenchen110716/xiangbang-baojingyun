@@ -34,7 +34,7 @@ def positions(user: User = Depends(current_user), session: Session = Depends(db)
     if user.role == "enterprise" and user.enterprise_id: stmt=stmt.where(WorkPosition.enterprise_id==user.enterprise_id)
     result=[]
     for x in session.scalars(stmt):
-        item=serialize(x);em=session.get(ActualEmployer,x.actual_employer_id) if x.actual_employer_id else None;videos=session.scalars(select(PositionVideo).where(PositionVideo.position_id==x.id).order_by(PositionVideo.id.desc())).all();item['actual_employer_name']=em.name if em else x.actual_employer;item['video_count']=len(videos);item['latest_video_status']=videos[0].status if videos else 'missing';item['review_note']=videos[0].review_note if videos else '';result.append(item)
+        item=serialize(x);em=session.get(ActualEmployer,x.actual_employer_id) if x.actual_employer_id else None;plan=session.get(InsurancePlan,x.plan_id) if x.plan_id else None;creator=session.get(User,x.created_by) if x.created_by else None;videos=session.scalars(select(PositionVideo).where(PositionVideo.position_id==x.id).order_by(PositionVideo.id.desc())).all();item['actual_employer_name']=em.name if em else x.actual_employer;item['plan_name']=plan.name if plan else '';item['creator_name']=creator.name if creator else '';item['video_count']=len(videos);item['latest_video_status']=videos[0].status if videos else 'missing';item['review_note']=videos[0].review_note if videos else '';result.append(item)
     return result
 
 @router.get("/actual-employers")
@@ -156,7 +156,7 @@ def add_position(data: PositionIn, user: User = Depends(current_user), session: 
     employer=session.get(ActualEmployer,data.actual_employer_id) if data.actual_employer_id else None
     if not employer or employer.enterprise_id!=target_enterprise: raise HTTPException(400,"请选择本企业添加的有效实际工作单位")
     if employer.status!='active': raise HTTPException(400,"该工作单位已暂停，不能新增岗位")
-    item=WorkPosition(enterprise_id=target_enterprise,actual_employer_id=employer.id,actual_employer=employer.name,name=data.name,occupation_class='待定' if user.role=='enterprise' else data.occupation_class,plan_id=None if user.role=='enterprise' else data.plan_id,status='pending')
+    item=WorkPosition(enterprise_id=target_enterprise,actual_employer_id=employer.id,actual_employer=employer.name,name=data.name,occupation_class='待定' if user.role=='enterprise' else data.occupation_class,plan_id=None if user.role=='enterprise' else data.plan_id,status='pending',created_by=user.id)
     session.add(item);session.commit();session.refresh(item);audit(session,user,"create","position",str(item.id));return serialize(item)
 
 @router.patch("/positions/{item_id}")

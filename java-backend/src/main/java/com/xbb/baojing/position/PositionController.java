@@ -29,6 +29,7 @@ public class PositionController {
     private final EnterpriseMapper enterpriseMapper;
     private final InsuredPersonMapper personMapper;
     private final InsurancePlanMapper planMapper;
+    private final UserMapper userMapper;
     private final AuditService auditService;
     private final FileTokenService fileTokenService;
     private final String uploadsDir;
@@ -36,13 +37,14 @@ public class PositionController {
 
     public PositionController(WorkPositionMapper positionMapper, PositionVideoMapper videoMapper, ActualEmployerMapper actualEmployerMapper,
                                EnterpriseMapper enterpriseMapper, InsuredPersonMapper personMapper, InsurancePlanMapper planMapper,
-                               AuditService auditService, FileTokenService fileTokenService, AppProperties props) {
+                               UserMapper userMapper, AuditService auditService, FileTokenService fileTokenService, AppProperties props) {
         this.positionMapper = positionMapper;
         this.videoMapper = videoMapper;
         this.actualEmployerMapper = actualEmployerMapper;
         this.enterpriseMapper = enterpriseMapper;
         this.personMapper = personMapper;
         this.planMapper = planMapper;
+        this.userMapper = userMapper;
         this.auditService = auditService;
         this.fileTokenService = fileTokenService;
         this.uploadsDir = props.getUploadsDir();
@@ -64,8 +66,12 @@ public class PositionController {
 
     private WorkPosition enrich(WorkPosition x) {
         ActualEmployer em = x.getActualEmployerId() != null ? actualEmployerMapper.findById(x.getActualEmployerId()) : null;
+        var plan = x.getPlanId() != null ? planMapper.findById(x.getPlanId()) : null;
+        User creator = x.getCreatedBy() != null ? userMapper.findById(x.getCreatedBy()) : null;
         List<PositionVideo> videos = videoMapper.findByPosition(x.getId());
         x.setActualEmployerName(em != null ? em.getName() : x.getActualEmployer());
+        x.setPlanName(plan != null ? plan.getName() : "");
+        x.setCreatorName(creator != null ? creator.getName() : "");
         x.setVideoCount(videos.size());
         x.setLatestVideoStatus(videos.isEmpty() ? "missing" : videos.get(0).getStatus());
         x.setReviewNote(videos.isEmpty() ? "" : videos.get(0).getReviewNote());
@@ -99,6 +105,7 @@ public class PositionController {
         item.setOccupationClass("enterprise".equals(user.getRole()) ? "待定" : (data.occupationClass() == null ? "待定" : data.occupationClass()));
         item.setPlanId("enterprise".equals(user.getRole()) ? null : data.planId());
         item.setStatus("pending");
+        item.setCreatedBy(user.getId());
         item.setCreatedAt(LocalDateTime.now());
         positionMapper.insert(item);
         auditService.log(user, "create", "position", String.valueOf(item.getId()));

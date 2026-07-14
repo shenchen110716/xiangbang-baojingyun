@@ -11,10 +11,13 @@ public class WorkPosition {
     private String occupationClass = "待定";
     private Integer planId;
     private String status = "pending";
+    private Integer createdBy;
     private LocalDateTime createdAt;
 
     // response-only, joined
     private String actualEmployerName;
+    private String planName;
+    private String creatorName;
     private int videoCount;
     private String latestVideoStatus;
     private String reviewNote;
@@ -35,10 +38,16 @@ public class WorkPosition {
     public void setPlanId(Integer v) { this.planId = v; }
     public String getStatus() { return status; }
     public void setStatus(String v) { this.status = v; }
+    public Integer getCreatedBy() { return createdBy; }
+    public void setCreatedBy(Integer v) { this.createdBy = v; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime v) { this.createdAt = v; }
     public String getActualEmployerName() { return actualEmployerName; }
     public void setActualEmployerName(String v) { this.actualEmployerName = v; }
+    public String getPlanName() { return planName; }
+    public void setPlanName(String v) { this.planName = v; }
+    public String getCreatorName() { return creatorName; }
+    public void setCreatorName(String v) { this.creatorName = v; }
     public int getVideoCount() { return videoCount; }
     public void setVideoCount(int v) { this.videoCount = v; }
     public String getLatestVideoStatus() { return latestVideoStatus; }

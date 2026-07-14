@@ -192,10 +192,22 @@ async function submitReview() {
           </template>
         </el-table-column>
         <el-table-column prop="occupation_class" label="职业类别" width="100" />
+        <el-table-column label="保险方案" min-width="140">
+          <template #default="{ row }">{{ row.plan_name || '—' }}</template>
+        </el-table-column>
         <el-table-column label="审核状态" width="110">
           <template #default="{ row }">
             <el-tag :type="statusLabel(row).type" size="small">{{ statusLabel(row).text }}</el-tag>
           </template>
+        </el-table-column>
+        <el-table-column label="审核意见" min-width="160">
+          <template #default="{ row }">{{ row.review_note || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="添加人" width="100">
+          <template #default="{ row }">{{ row.creator_name || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="添加时间" width="160">
+          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">

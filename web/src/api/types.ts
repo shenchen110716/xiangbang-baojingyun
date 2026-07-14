@@ -48,6 +48,8 @@ export interface WorkPosition {
   name: string
   occupation_class: string
   plan_id: number | null
+  plan_name?: string
+  creator_name?: string
   status: 'pending' | 'approved' | 'rejected' | 'supplement'
   video_count?: number
   latest_video_status?: string
