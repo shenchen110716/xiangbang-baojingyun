@@ -1,12 +1,14 @@
 package com.xbb.baojing.insured;
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.baojing.agent.AgentCommission;
 import com.xbb.baojing.agent.AgentCommissionMapper;
 import com.xbb.baojing.common.ApiException;
 import com.xbb.baojing.common.AppProperties;
 import com.xbb.baojing.common.AuditService;
 import com.xbb.baojing.common.FileTokenService;
+import com.xbb.baojing.common.InternalPricingFilter;
 import com.xbb.baojing.common.Rbac;
 import com.xbb.baojing.common.User;
 import com.xbb.baojing.enterprise.ActualEmployer;
@@ -53,12 +55,13 @@ public class PolicyController {
     private final AuditService auditService;
     private final FileTokenService fileTokenService;
     private final String uploadsDir;
+    private final ObjectMapper objectMapper;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     public PolicyController(PolicyMapper policyMapper, EnterpriseMapper enterpriseMapper, InsurancePlanMapper planMapper,
                              AgentCommissionMapper commissionMapper, InsuredPersonMapper personMapper, WorkPositionMapper positionMapper,
                              ActualEmployerMapper actualEmployerMapper, PricingService pricingService, PolicyPricingService policyPricingService,
-                             AuditService auditService, FileTokenService fileTokenService, AppProperties props) {
+                             AuditService auditService, FileTokenService fileTokenService, AppProperties props, ObjectMapper objectMapper) {
         this.policyMapper = policyMapper;
         this.enterpriseMapper = enterpriseMapper;
         this.planMapper = planMapper;
@@ -71,6 +74,7 @@ public class PolicyController {
         this.auditService = auditService;
         this.fileTokenService = fileTokenService;
         this.uploadsDir = props.getUploadsDir();
+        this.objectMapper = objectMapper;
     }
 
     private String randomHex(int bytes) {
@@ -171,9 +175,9 @@ public class PolicyController {
     }
 
     @GetMapping("/policies")
-    public List<PolicyOut> list(User user) {
+    public List<Object> list(User user) {
         Integer scoped = "enterprise".equals(user.getRole()) && user.getEnterpriseId() != null ? user.getEnterpriseId() : null;
-        return policyMapper.search(scoped).stream().map(this::policyDict).toList();
+        return policyMapper.search(scoped).stream().map(p -> InternalPricingFilter.strip(policyDict(p), user, objectMapper)).toList();
     }
 
     @PostMapping("/policies/{id}/document/upload")

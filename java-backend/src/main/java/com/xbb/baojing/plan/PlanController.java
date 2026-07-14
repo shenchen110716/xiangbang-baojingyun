@@ -1,8 +1,10 @@
 package com.xbb.baojing.plan;
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.baojing.common.ApiException;
 import com.xbb.baojing.common.AuditService;
+import com.xbb.baojing.common.InternalPricingFilter;
 import com.xbb.baojing.common.Rbac;
 import com.xbb.baojing.common.User;
 import org.springframework.web.bind.annotation.*;
@@ -18,12 +20,14 @@ public class PlanController {
     private final PlanTierMapper tierMapper;
     private final PricingService pricingService;
     private final AuditService auditService;
+    private final ObjectMapper objectMapper;
 
-    public PlanController(InsurancePlanMapper planMapper, PlanTierMapper tierMapper, PricingService pricingService, AuditService auditService) {
+    public PlanController(InsurancePlanMapper planMapper, PlanTierMapper tierMapper, PricingService pricingService, AuditService auditService, ObjectMapper objectMapper) {
         this.planMapper = planMapper;
         this.tierMapper = tierMapper;
         this.pricingService = pricingService;
         this.auditService = auditService;
+        this.objectMapper = objectMapper;
     }
 
     public record PlanIn(String insurer, String insurerEmail, String name, String coverage, String occupationClasses,
@@ -62,11 +66,11 @@ public class PlanController {
     }
 
     @GetMapping("/plans")
-    public List<PlanOut> list(User user) {
+    public List<Object> list(User user) {
         List<InsurancePlan> plans = "enterprise".equals(user.getRole()) && user.getEnterpriseId() != null
                 ? planMapper.findVisibleForEnterprise(user.getEnterpriseId())
                 : planMapper.findAll();
-        return plans.stream().map(this::toOut).toList();
+        return plans.stream().map(p -> InternalPricingFilter.strip(toOut(p), user, objectMapper)).toList();
     }
 
     @PostMapping("/plans")
