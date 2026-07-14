@@ -7,6 +7,8 @@ import { money } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 import ClaimCreateDialog from './ClaimCreateDialog.vue'
 import ClaimWorkbenchDialog from './ClaimWorkbenchDialog.vue'
 
@@ -36,6 +38,7 @@ const filtered = computed(() => {
   }
   return rows
 })
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
 
 const openCount = computed(() => list.value.filter((x) => !['paid', 'closed', 'rejected'].includes(x.status)).length)
 const highRiskCount = computed(() => list.value.filter((x) => x.calculated_risk === 'high').length)
@@ -79,7 +82,7 @@ function openWorkbench(item: Claim) {
           </el-select>
         </FilterBar>
       </div>
-      <el-table :data="filtered" size="small">
+      <el-table :data="paged" size="small">
         <el-table-column label="案件号 / 被保险人" min-width="160">
           <template #default="{ row }">
             <div><b>{{ row.claim_no }}</b></div>
@@ -112,6 +115,7 @@ function openWorkbench(item: Claim) {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
     <ClaimCreateDialog v-model="createVisible" @created="load" />

@@ -7,6 +7,8 @@ import { formatDateTime } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 
 const router = useRouter()
 const loading = ref(true)
@@ -28,6 +30,7 @@ const filtered = computed(() => {
   const q = search.value.toLowerCase()
   return rows.value.filter((x) => [x.title, x.content].some((v) => (v || '').toLowerCase().includes(q)))
 })
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
 const todoCount = computed(() => rows.value.filter((x) => x.type !== 'success').length)
 
 const typeText: Record<string, string> = { warning: '预警', todo: '待办', danger: '紧急', success: '正常' }
@@ -58,7 +61,7 @@ function handleOpen(item: MessageItem) {
         <el-button @click="load">刷新消息</el-button>
       </template>
       <div class="filter-row"><FilterBar v-model:search="search" /></div>
-      <el-table :data="filtered" size="small">
+      <el-table :data="paged" size="small">
         <el-table-column label="消息" min-width="240">
           <template #default="{ row }">
             <div><b>{{ row.title }}</b></div>
@@ -77,6 +80,7 @@ function handleOpen(item: MessageItem) {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
   </div>
 </template>

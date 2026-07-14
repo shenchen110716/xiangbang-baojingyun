@@ -10,6 +10,8 @@ import { useAuthStore } from '@/stores/auth'
 import { money, formatDateTime } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import StatTile from '@/components/StatTile.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 
 const auth = useAuthStore()
 const loading = ref(true)
@@ -35,6 +37,8 @@ const totalUsage = computed(() => accounts.value.filter((x) => x.account === '�
 const monthUsageAccrued = computed(() => accounts.value.filter((x) => x.account === '平台使用费账户').reduce((s, x) => s + x.month_accrued, 0))
 const totalUsageAccrued = computed(() => accounts.value.filter((x) => x.account === '平台使用费账户').reduce((s, x) => s + x.total_accrued, 0))
 const pendingInvoices = computed(() => invoices.value.filter((x) => x.status === 'pending').length)
+const { page: accountsPage, pageSize: accountsPageSize, total: accountsPagedTotal, paged: pagedAccounts } = usePagedList(accounts)
+const { page: invoicesPage, pageSize: invoicesPageSize, total: invoicesPagedTotal, paged: pagedInvoices } = usePagedList(invoices)
 
 // ---- recharge ----
 const rechargeVisible = ref(false)
@@ -114,7 +118,7 @@ async function setInvoiceStatus(item: Invoice, status: string) {
       <template #actions>
         <el-button type="primary" @click="openInvoiceCreate">＋ 申请发票</el-button>
       </template>
-      <el-table :data="accounts" size="small">
+      <el-table :data="pagedAccounts" size="small">
         <el-table-column prop="enterprise_name" label="投保单位" min-width="150" />
         <el-table-column prop="account" label="账户" width="140" />
         <el-table-column label="余额" width="110"><template #default="{ row }">{{ money(row.balance) }}</template></el-table-column>
@@ -131,10 +135,11 @@ async function setInvoiceStatus(item: Invoice, status: string) {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="accountsPage" v-model:page-size="accountsPageSize" :total="accountsPagedTotal" />
     </PageCard>
 
     <PageCard title="发票申请" :count="invoices.length" hint="企业提交、平台审核并登记开票状态">
-      <el-table :data="invoices" size="small">
+      <el-table :data="pagedInvoices" size="small">
         <el-table-column label="申请时间" width="150"><template #default="{ row }">{{ formatDateTime(row.created_at) }}</template></el-table-column>
         <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
         <el-table-column label="发票抬头" min-width="140">
@@ -161,6 +166,7 @@ async function setInvoiceStatus(item: Invoice, status: string) {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="invoicesPage" v-model:page-size="invoicesPageSize" :total="invoicesPagedTotal" />
     </PageCard>
 
     <el-dialog v-model="rechargeVisible" title="账户充值" width="420px">

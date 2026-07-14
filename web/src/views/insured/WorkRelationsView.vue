@@ -5,6 +5,8 @@ import type { InsuredPerson } from '@/api/types'
 import { insuredStatusLabel } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 import EmployeeDetailDialog from './EmployeeDetailDialog.vue'
 import EmployeeEditorDialog from './EmployeeEditorDialog.vue'
 
@@ -27,6 +29,7 @@ const filtered = computed(() => {
   const q = search.value.toLowerCase()
   return list.value.filter((x) => [x.name, x.id_number, x.enterprise_name, x.actual_employer_name, x.position_name].some((v) => (v || '').toLowerCase().includes(q)))
 })
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
 
 const detailVisible = ref(false)
 const editorVisible = ref(false)
@@ -65,7 +68,7 @@ function exportCsv() {
         <el-button type="primary" @click="openEditor(null)">＋ 新增员工关系</el-button>
       </template>
       <div class="filter-row"><FilterBar v-model:search="search" /></div>
-      <el-table :data="filtered" size="small" max-height="560">
+      <el-table :data="paged" size="small" max-height="560">
         <el-table-column label="被保险人" min-width="130">
           <template #default="{ row }">
             <div>{{ row.name }}</div>
@@ -87,6 +90,7 @@ function exportCsv() {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
     <EmployeeDetailDialog v-model="detailVisible" :person="activePerson" @edit="editFromDetail" @toggle-status="detailVisible = false" />

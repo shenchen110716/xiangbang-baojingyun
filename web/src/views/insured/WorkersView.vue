@@ -7,6 +7,8 @@ import { formatCoverageDate, formatDateTime, insuredStatusLabel } from '@/utils/
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 import EmployeeDetailDialog from './EmployeeDetailDialog.vue'
 import EmployeeEditorDialog from './EmployeeEditorDialog.vue'
 
@@ -44,6 +46,7 @@ const filtered = computed(() => {
   }
   return rows
 })
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
 
 const totalCount = computed(() => list.value.length)
 const activeCount = computed(() => list.value.filter((x) => x.status === 'active').length)
@@ -198,7 +201,7 @@ function exportCsv() {
           <el-button @click="runBulkAction">执行勾选操作</el-button>
         </div>
       </div>
-      <el-table :data="filtered" size="small" max-height="560" @selection-change="(rows: InsuredPerson[]) => (selected = rows)">
+      <el-table :data="paged" size="small" max-height="560" @selection-change="(rows: InsuredPerson[]) => (selected = rows)">
         <el-table-column type="selection" width="42" />
         <el-table-column label="被保险人" min-width="120">
           <template #default="{ row }">
@@ -240,6 +243,7 @@ function exportCsv() {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
     <EmployeeDetailDialog v-model="detailVisible" :person="activePerson" @edit="editFromDetail" @toggle-status="toggleStatusFromDetail" />

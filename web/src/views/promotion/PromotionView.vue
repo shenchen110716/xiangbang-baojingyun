@@ -8,6 +8,8 @@ import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
 import DetailModal from '@/components/DetailModal.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 import AgentCommissionDialog from '@/views/agents/AgentCommissionDialog.vue'
 
 const loading = ref(true)
@@ -34,6 +36,7 @@ const filtered = computed(() => {
   }
   return rows
 })
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
 
 const totalFloor = computed(() => list.value.reduce((s, x) => s + (x.policy_floor_price || 0), 0))
 const totalCommission = computed(() => list.value.reduce((s, x) => s + (x.accrued_total_commission || 0), 0))
@@ -92,7 +95,7 @@ async function removeItem(item: AgentCommission) {
           </el-select>
         </FilterBar>
       </div>
-      <el-table :data="filtered" size="small">
+      <el-table :data="paged" size="small">
         <el-table-column label="业务员 / 单位" min-width="150">
           <template #default="{ row }">
             <div><b>{{ row.agent_name }}</b></div>
@@ -128,6 +131,7 @@ async function removeItem(item: AgentCommission) {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
     <DetailModal v-model="detailVisible" title="业务计价详情">

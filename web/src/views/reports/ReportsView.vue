@@ -10,6 +10,8 @@ import { money } from '@/utils/format'
 import { downloadAuthenticated } from '@/utils/download'
 import { useAuthStore } from '@/stores/auth'
 import PageCard from '@/components/PageCard.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 
 const auth = useAuthStore()
 const loading = ref(true)
@@ -24,6 +26,8 @@ const selectedMonth = ref(defaultMonth)
 const selectedRange = ref<[string, string] | null>(null)
 const premiumLoading = ref(false)
 const premiumReport = ref<PremiumDetailReport | null>(null)
+const premiumRows = computed(() => premiumReport.value?.rows || [])
+const { page: premiumPage, pageSize: premiumPageSize, total: premiumPagedTotal, paged: pagedPremiumRows } = usePagedList(premiumRows)
 const enterprises = ref<Enterprise[]>([])
 const agents = ref<Agent[]>([])
 const insurers = ref<string[]>([])
@@ -168,7 +172,7 @@ async function exportPremiumDetails() {
           <b v-if="!auth.isEnterprise()">业务员佣金：{{ money(premiumReport.total_agent_commission) }}</b>
         </div>
       </div>
-      <el-table v-loading="premiumLoading" :data="premiumReport?.rows || []" size="small" empty-text="该时间段暂无保费明细">
+      <el-table v-loading="premiumLoading" :data="pagedPremiumRows" size="small" empty-text="该时间段暂无保费明细">
         <el-table-column label="被保险人" min-width="150">
           <template #default="{ row }"><div>{{ row.person_name }}</div><small class="muted">{{ row.id_number }}</small></template>
         </el-table-column>
@@ -190,6 +194,7 @@ async function exportPremiumDetails() {
         <el-table-column v-if="!auth.isEnterprise()" label="总返佣金额" width="125"><template #default="{ row }"><div><b>{{ money(row.commission_amount) }}</b></div><small class="muted">单价 {{ money(row.unit_total_commission) }}</small></template></el-table-column>
         <el-table-column v-if="!auth.isEnterprise()" label="业务员佣金" width="125"><template #default="{ row }"><div><b>{{ money(row.agent_commission_amount) }}</b></div><small class="muted">单价 {{ money(row.unit_agent_commission) }}</small></template></el-table-column>
       </el-table>
+      <TablePagination v-model:page="premiumPage" v-model:page-size="premiumPageSize" :total="premiumPagedTotal" />
     </PageCard>
   </div>
 </template>

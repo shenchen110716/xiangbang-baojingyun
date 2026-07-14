@@ -8,6 +8,8 @@ import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
 import DetailModal from '@/components/DetailModal.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 
 const router = useRouter()
 const loading = ref(true)
@@ -29,6 +31,7 @@ const filtered = computed(() => {
   const q = search.value.toLowerCase()
   return list.value.filter((x) => [x.insurer, x.name, x.insurer_email].some((v) => (v || '').toLowerCase().includes(q)))
 })
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
 const activeCount = computed(() => list.value.filter((x) => x.status === 'active').length)
 const immediateCount = computed(() => list.value.filter((x) => x.effective_mode === 'immediate' && x.billing_mode === 'daily').length)
 
@@ -53,7 +56,7 @@ function openDetail(item: InsurancePlan) {
         <el-button type="primary" @click="router.push({ name: 'insurers' })">＋ 维护保险方案</el-button>
       </template>
       <div class="filter-row"><FilterBar v-model:search="search" /></div>
-      <el-table :data="filtered" size="small">
+      <el-table :data="paged" size="small">
         <el-table-column label="保险公司" min-width="150">
           <template #default="{ row }">
             <div>{{ row.insurer }}</div>
@@ -95,6 +98,7 @@ function openDetail(item: InsurancePlan) {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
     <DetailModal v-model="detailVisible" title="产品计价详情">

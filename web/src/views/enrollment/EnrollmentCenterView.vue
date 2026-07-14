@@ -11,6 +11,8 @@ import { downloadAuthenticated } from '@/utils/download'
 import { formatCoverageDate, formatDateTime, insuredStatusLabel } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 
 const auth = useAuthStore()
 const loading = ref(true)
@@ -64,6 +66,8 @@ const filteredPeople = computed(() => {
   }
   return rows
 })
+const { page: peoplePage, pageSize: peoplePageSize, total: peoplePagedTotal, paged: pagedPeople } = usePagedList(filteredPeople)
+const { page: emailsPage, pageSize: emailsPageSize, total: emailsPagedTotal, paged: pagedEmails } = usePagedList(computed(() => emails.value))
 function exportPeopleCsv() {
   const header = ['姓名', '身份证号', '手机号', '投保单位', '实际工作单位', '岗位', '状态', '添加时间', '生效时间', '停保时间']
   const rows = filteredPeople.value.map((p) => [
@@ -212,7 +216,7 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
           </el-select>
         </FilterBar>
       </div>
-      <el-table :data="filteredPeople" size="small" max-height="560">
+      <el-table :data="pagedPeople" size="small" max-height="560">
         <el-table-column label="被保险人" min-width="120">
           <template #default="{ row }">
             <div>{{ row.name }}</div>
@@ -236,6 +240,7 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
           <template #default="{ row }">{{ formatCoverageDate(row.terminated_at, row.effective_mode) }}</template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="peoplePage" v-model:page-size="peoplePageSize" :total="peoplePagedTotal" />
     </PageCard>
 
     <PageCard title="产品参停保与邮件" :count="summary.length">
@@ -274,7 +279,7 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
     </PageCard>
 
     <PageCard title="邮件发送记录" :count="emails.length" hint="含名单附件和请求编号">
-      <el-table :data="emails" size="small">
+      <el-table :data="pagedEmails" size="small">
         <el-table-column label="发送时间" width="150"><template #default="{ row }">{{ formatDateTime(row.created_at) }}</template></el-table-column>
         <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
         <el-table-column label="保险公司 / 产品" min-width="150">
@@ -298,6 +303,7 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="emailsPage" v-model:page-size="emailsPageSize" :total="emailsPagedTotal" />
     </PageCard>
 
     <el-dialog v-model="emailDialogVisible" title="选择投保单位" width="360px">

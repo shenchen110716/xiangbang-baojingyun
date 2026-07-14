@@ -7,6 +7,8 @@ import { money } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import StatTile from '@/components/StatTile.vue'
 import DetailModal from '@/components/DetailModal.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 import AgentCommissionDialog from './AgentCommissionDialog.vue'
 
 const loading = ref(true)
@@ -22,6 +24,7 @@ async function load() {
 }
 onMounted(load)
 
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(list)
 const totalCommission = computed(() => list.value.reduce((s, x) => s + (x.total_commission || 0), 0))
 const totalProductRelations = computed(() => list.value.reduce((s, x) => s + (x.product_count || 0), 0))
 
@@ -93,7 +96,7 @@ function onCommissionSaved() {
     </PageCard>
 
     <PageCard title="业务员列表" :count="list.length" hint="仅总后台可操作">
-      <el-table :data="list" size="small">
+      <el-table :data="paged" size="small">
         <el-table-column prop="name" label="姓名" width="100" />
         <el-table-column prop="username" label="账号" width="120" />
         <el-table-column prop="phone" label="手机" width="120" />
@@ -111,6 +114,7 @@ function onCommissionSaved() {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
     <DetailModal v-model="commissionsVisible" title="业务员佣金明细">

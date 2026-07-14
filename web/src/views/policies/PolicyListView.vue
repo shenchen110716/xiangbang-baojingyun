@@ -11,6 +11,8 @@ import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
 import DetailModal from '@/components/DetailModal.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 
 const auth = useAuthStore()
 
@@ -33,6 +35,7 @@ const filtered = computed(() => {
   const q = search.value.toLowerCase()
   return list.value.filter((x) => [x.policy_no, x.enterprise_name, x.insurer, x.plan_name].some((v) => (v || '').toLowerCase().includes(q)))
 })
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
 
 const totalInsured = computed(() => list.value.reduce((sum, x) => sum + (x.insured_count || 0), 0))
 const totalSalePremium = computed(() => list.value.reduce((sum, x) => sum + (x.sale_total ?? x.premium ?? 0), 0))
@@ -103,7 +106,7 @@ async function openDetail(item: Policy) {
 
     <PageCard title="保单管理" :count="filtered.length" hint="保单保费与产品、佣金使用同一价格计算口径">
       <div class="filter-row"><FilterBar v-model:search="search" /></div>
-      <el-table :data="filtered" size="small">
+      <el-table :data="paged" size="small">
         <el-table-column label="保单 / 单位" min-width="160">
           <template #default="{ row }">
             <div><b>{{ row.policy_no }}</b></div>
@@ -143,6 +146,7 @@ async function openDetail(item: Policy) {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
     <DetailModal v-model="detailVisible" title="保单详情">

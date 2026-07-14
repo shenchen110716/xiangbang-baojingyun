@@ -10,6 +10,8 @@ import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import DetailModal from '@/components/DetailModal.vue'
 import StatTile from '@/components/StatTile.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 
 const loading = ref(true)
 const list = ref<Enterprise[]>([])
@@ -36,6 +38,7 @@ onMounted(async () => {
   load()
 })
 
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(list)
 const pendingCount = computed(() => list.value.filter((x) => x.status === 'pending').length)
 
 // ---- create / edit ----
@@ -154,7 +157,7 @@ async function removeEnterprise(item: Enterprise) {
           </el-select>
         </FilterBar>
       </div>
-      <el-table :data="list" size="small">
+      <el-table :data="paged" size="small">
         <el-table-column prop="name" label="单位名称" min-width="160" />
         <el-table-column prop="kind" label="类型" width="100" />
         <el-table-column prop="contact" label="联系人" width="110" />
@@ -184,6 +187,7 @@ async function removeEnterprise(item: Enterprise) {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
     <el-dialog v-model="formVisible" :title="editingId ? '编辑投保单位' : '新增投保单位'" width="520px">

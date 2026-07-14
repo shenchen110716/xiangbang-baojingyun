@@ -7,6 +7,8 @@ import type { Enterprise, Operator } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import PageCard from '@/components/PageCard.vue'
 import StatTile from '@/components/StatTile.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 
 const auth = useAuthStore()
 const loading = ref(true)
@@ -26,6 +28,7 @@ async function load() {
 }
 onMounted(load)
 
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(list)
 const activeCount = computed(() => list.value.filter((x) => x.active).length)
 const inactiveCount = computed(() => list.value.filter((x) => !x.active).length)
 
@@ -121,7 +124,7 @@ async function resetPassword(item: Operator) {
       <template #actions>
         <el-button v-if="canManage" type="primary" @click="openCreate">＋ 新增操作员</el-button>
       </template>
-      <el-table :data="list" size="small">
+      <el-table :data="paged" size="small">
         <el-table-column label="姓名" width="140">
           <template #default="{ row }">
             <b>{{ row.name }}</b>
@@ -149,6 +152,7 @@ async function resetPassword(item: Operator) {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
     <el-dialog v-model="createVisible" title="新增操作员" width="440px">

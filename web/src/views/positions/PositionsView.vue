@@ -9,6 +9,8 @@ import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
 import DetailModal from '@/components/DetailModal.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 import { formatDateTime } from '@/utils/format'
 
 const auth = useAuthStore()
@@ -42,6 +44,7 @@ const filtered = computed(() => {
   const q = search.value.toLowerCase()
   return list.value.filter((x) => [x.name, x.actual_employer_name || x.actual_employer, x.occupation_class].some((v) => (v || '').toLowerCase().includes(q)))
 })
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
 const pendingCount = computed(() => list.value.filter((x) => x.status === 'pending').length)
 const approvedCount = computed(() => list.value.filter((x) => x.status === 'approved').length)
 
@@ -180,7 +183,7 @@ async function submitReview() {
         <el-button v-if="isEnterprise" type="primary" @click="openCreate">＋ 新增岗位并上传视频</el-button>
       </template>
       <div class="filter-row"><FilterBar v-model:search="search" /></div>
-      <el-table :data="filtered" size="small" max-height="560">
+      <el-table :data="paged" size="small" max-height="560">
         <el-table-column prop="name" label="岗位名称" min-width="140" />
         <el-table-column label="实际工作单位" min-width="150">
           <template #default="{ row }">{{ row.actual_employer_name || row.actual_employer }}</template>
@@ -219,6 +222,7 @@ async function submitReview() {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
     <el-dialog v-model="formVisible" :title="editingId ? '编辑岗位' : '新增岗位'" width="500px">

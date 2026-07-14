@@ -7,6 +7,8 @@ import { money } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import DetailModal from '@/components/DetailModal.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 
 const loading = ref(true)
 const list = ref<InsurancePlan[]>([])
@@ -27,6 +29,7 @@ const filtered = computed(() => {
   const q = search.value.toLowerCase()
   return list.value.filter((x) => [x.insurer, x.name, x.insurer_email].some((v) => (v || '').toLowerCase().includes(q)))
 })
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
 
 // ---- create/edit ----
 const editingId = ref<number | null>(null)
@@ -167,7 +170,7 @@ async function submitTier() {
 
     <PageCard title="已录入方案" :count="filtered.length" hint="保司结算底价 = 保险原价 ×（1-总返佣比例）">
       <div class="filter-row"><FilterBar v-model:search="search" /></div>
-      <el-table :data="filtered" size="small">
+      <el-table :data="paged" size="small">
         <el-table-column label="保险公司" min-width="140">
           <template #default="{ row }">
             <div>{{ row.insurer }}</div>
@@ -196,6 +199,7 @@ async function submitTier() {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
     <DetailModal v-model="detailVisible" title="保险方案计价详情">

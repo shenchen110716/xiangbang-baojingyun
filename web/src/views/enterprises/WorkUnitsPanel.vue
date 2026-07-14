@@ -6,6 +6,8 @@ import type { ActualEmployer } from '@/api/types'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 
 const loading = ref(true)
 const list = ref<ActualEmployer[]>([])
@@ -26,6 +28,7 @@ const filtered = computed(() => {
   const q = search.value.toLowerCase()
   return list.value.filter((x) => [x.name, x.credit_code, x.contact, x.phone].some((v) => v.toLowerCase().includes(q)))
 })
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
 const activeCount = computed(() => list.value.filter((x) => x.status === 'active').length)
 const pausedCount = computed(() => list.value.filter((x) => x.status === 'paused').length)
 
@@ -93,7 +96,7 @@ async function removeItem(item: ActualEmployer) {
         <el-button type="primary" @click="openCreate">＋ 新增实际工作单位</el-button>
       </template>
       <div class="filter-row"><FilterBar v-model:search="search" /></div>
-      <el-table :data="filtered" size="small">
+      <el-table :data="paged" size="small">
         <el-table-column prop="name" label="单位名称" min-width="160" />
         <el-table-column prop="credit_code" label="统一社会信用代码" min-width="160" />
         <el-table-column prop="contact" label="联系人" width="110" />
@@ -113,6 +116,7 @@ async function removeItem(item: ActualEmployer) {
           </template>
         </el-table-column>
       </el-table>
+      <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
     <el-dialog v-model="formVisible" :title="editingId ? '编辑工作单位' : '新增实际工作单位'" width="480px">
