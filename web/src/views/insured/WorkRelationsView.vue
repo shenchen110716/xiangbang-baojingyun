@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { listInsured } from '@/api/insured'
 import type { InsuredPerson } from '@/api/types'
+import { insuredStatusLabel } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import EmployeeDetailDialog from './EmployeeDetailDialog.vue'
@@ -27,9 +28,6 @@ const filtered = computed(() => {
   return list.value.filter((x) => [x.name, x.id_number, x.enterprise_name, x.actual_employer_name, x.position_name].some((v) => (v || '').toLowerCase().includes(q)))
 })
 
-const statusText: Record<string, string> = { active: '在保', pending: '待审核', stopped: '已停保' }
-const statusType: Record<string, string> = { active: 'success', pending: 'warning', stopped: 'danger' }
-
 const detailVisible = ref(false)
 const editorVisible = ref(false)
 const activePerson = ref<InsuredPerson | null>(null)
@@ -48,7 +46,7 @@ function editFromDetail() {
 
 function exportCsv() {
   const header = ['被保险人', '投保单位', '实际工作单位', '岗位', '职业类别', '保险方案', '状态']
-  const rows = filtered.value.map((p) => [p.name, p.enterprise_name, p.actual_employer_name, p.position_name, p.occupation_class, p.plan_name, statusText[p.status]])
+  const rows = filtered.value.map((p) => [p.name, p.enterprise_name, p.actual_employer_name, p.position_name, p.occupation_class, p.plan_name, insuredStatusLabel(p).text])
   const csv = '﻿' + [header, ...rows].map((r) => r.map((v) => `"${(v || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv' })
   const link = document.createElement('a')
@@ -67,7 +65,7 @@ function exportCsv() {
         <el-button type="primary" @click="openEditor(null)">＋ 新增员工关系</el-button>
       </template>
       <div class="filter-row"><FilterBar v-model:search="search" /></div>
-      <el-table :data="filtered" size="small">
+      <el-table :data="filtered" size="small" max-height="560">
         <el-table-column label="被保险人" min-width="130">
           <template #default="{ row }">
             <div>{{ row.name }}</div>
@@ -80,7 +78,7 @@ function exportCsv() {
         <el-table-column prop="occupation_class" label="职业类别" width="90" />
         <el-table-column prop="plan_name" label="保险方案" min-width="120" />
         <el-table-column label="状态" width="90">
-          <template #default="{ row }"><el-tag size="small" :type="statusType[row.status]">{{ statusText[row.status] }}</el-tag></template>
+          <template #default="{ row }"><el-tag size="small" :type="insuredStatusLabel(row).type">{{ insuredStatusLabel(row).text }}</el-tag></template>
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listInsured, setInsuredStatus } from '@/api/insured'
+import { listInsured, setInsuredStatus, updateInsured } from '@/api/insured'
 import type { InsuredPerson } from '@/api/types'
-import { formatDateTime } from '@/utils/format'
+import { formatDateTime, insuredStatusLabel } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
@@ -13,6 +13,7 @@ import EmployeeEditorDialog from './EmployeeEditorDialog.vue'
 const loading = ref(true)
 const list = ref<InsuredPerson[]>([])
 const search = ref('')
+const searchField = ref<'all' | 'name' | 'id_number' | 'actual_employer_name'>('all')
 const statusFilter = ref('')
 const selected = ref<InsuredPerson[]>([])
 const bulkAction = ref('')
@@ -27,18 +28,22 @@ async function load() {
 }
 onMounted(load)
 
+function isPendingEffective(x: InsuredPerson) {
+  return x.status === 'active' && !!x.effective_at && new Date(x.effective_at) > new Date()
+}
+
 const filtered = computed(() => {
   let rows = list.value
-  if (statusFilter.value) rows = rows.filter((x) => x.status === statusFilter.value)
+  if (statusFilter.value === 'active-pending') rows = rows.filter(isPendingEffective)
+  else if (statusFilter.value === 'active') rows = rows.filter((x) => x.status === 'active' && !isPendingEffective(x))
+  else if (statusFilter.value) rows = rows.filter((x) => x.status === statusFilter.value)
   if (search.value) {
     const q = search.value.toLowerCase()
-    rows = rows.filter((x) => [x.name, x.id_number, x.phone, x.enterprise_name, x.position_name].some((v) => (v || '').toLowerCase().includes(q)))
+    const fields = searchField.value === 'all' ? (['name', 'id_number', 'phone', 'enterprise_name', 'position_name'] as const) : ([searchField.value] as const)
+    rows = rows.filter((x) => fields.some((f) => (x[f as keyof InsuredPerson] as string || '').toLowerCase().includes(q)))
   }
   return rows
 })
-
-const statusText: Record<string, string> = { active: '在保', pending: '待审核', stopped: '已停保' }
-const statusType: Record<string, string> = { active: 'success', pending: 'warning', stopped: 'danger' }
 
 const totalCount = computed(() => list.value.length)
 const activeCount = computed(() => list.value.filter((x) => x.status === 'active').length)
@@ -65,12 +70,13 @@ function editFromDetail() {
 async function toggleStatusFromDetail() {
   if (!activePerson.value) return
   detailVisible.value = false
-  await changeStatus(activePerson.value, activePerson.value.status === 'active' ? 'stopped' : 'active')
+  if (activePerson.value.status === 'active') openStopDialog(activePerson.value)
+  else await changeStatus(activePerson.value, 'active')
 }
 
-async function changeStatus(item: InsuredPerson, target: 'active' | 'stopped' | 'pending') {
+async function changeStatus(item: InsuredPerson, target: 'active' | 'pending') {
   try {
-    await ElMessageBox.confirm(`确定将「${item.name}」${target === 'active' ? '参保' : target === 'stopped' ? '停保' : '转为待审核'}吗？`, '操作确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确定将「${item.name}」${target === 'active' ? '参保' : '转为待审核'}吗？`, '操作确认', { type: 'warning' })
   } catch { return }
   try {
     await setInsuredStatus(item.id, target)
@@ -81,13 +87,52 @@ async function changeStatus(item: InsuredPerson, target: 'active' | 'stopped' | 
   }
 }
 
+function defaultStopDate() {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+// ---- stop-insurance dialog: 停保必须选择停保时间，不能一键直接停保 ----
+const stopVisible = ref(false)
+const stopDate = ref('')
+const stopTargets = ref<InsuredPerson[]>([])
+const stopSaving = ref(false)
+function openStopDialog(item: InsuredPerson) {
+  stopTargets.value = [item]
+  stopDate.value = defaultStopDate()
+  stopVisible.value = true
+}
+function openBulkStopDialog() {
+  if (!selected.value.length) { ElMessage.error('请先勾选员工'); return }
+  stopTargets.value = selected.value
+  stopDate.value = defaultStopDate()
+  stopVisible.value = true
+}
+async function submitStop() {
+  if (!stopDate.value) { ElMessage.error('请选择停保时间'); return }
+  stopSaving.value = true
+  try {
+    await Promise.all(stopTargets.value.map((p) => updateInsured(p.id, { terminated_at: stopDate.value })))
+    ElMessage.success(`已停保 ${stopTargets.value.length} 人`)
+    stopVisible.value = false
+    bulkAction.value = ''
+    load()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    stopSaving.value = false
+  }
+}
+
 async function runBulkAction() {
   if (!bulkAction.value || !selected.value.length) { ElMessage.error('请勾选员工并选择操作'); return }
+  if (bulkAction.value === 'stopped') { openBulkStopDialog(); return }
   try {
     await ElMessageBox.confirm(`确定对选中的 ${selected.value.length} 名员工执行该操作吗？`, '批量操作确认', { type: 'warning' })
   } catch { return }
   try {
-    await Promise.all(selected.value.map((p) => setInsuredStatus(p.id, bulkAction.value as 'active' | 'stopped' | 'pending')))
+    await Promise.all(selected.value.map((p) => setInsuredStatus(p.id, bulkAction.value as 'active' | 'pending')))
     ElMessage.success('批量操作完成')
     bulkAction.value = ''
     load()
@@ -99,7 +144,7 @@ async function runBulkAction() {
 function exportCsv() {
   const header = ['姓名', '身份证号', '手机号', '投保单位', '实际工作单位', '岗位', '职业类别', '产品方案', '保单号', '状态', '添加时间', '生效时间', '停保时间']
   const rows = filtered.value.map((p) => [
-    p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, p.occupation_class, p.plan_name, p.policy_no, statusText[p.status],
+    p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, p.occupation_class, p.plan_name, p.policy_no, insuredStatusLabel(p).text,
     formatDateTime(p.created_at), p.effective_at ? formatDateTime(p.effective_at) : '', p.terminated_at ? formatDateTime(p.terminated_at) : '',
   ])
   const csv = '﻿' + [header, ...rows].map((r) => r.map((v) => `"${(v || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -127,9 +172,16 @@ function exportCsv() {
         <el-button type="primary" @click="openEditor(null)">＋ 新增参保员工</el-button>
       </template>
       <div class="filter-row">
-        <FilterBar v-model:search="search">
+        <FilterBar v-model:search="search" :placeholder="{ all: '搜索姓名/身份证号/手机号/单位', name: '按姓名搜索', id_number: '按身份证号搜索', actual_employer_name: '按实际单位搜索' }[searchField]">
+          <el-select v-model="searchField" style="width: 130px">
+            <el-option label="全部字段" value="all" />
+            <el-option label="姓名" value="name" />
+            <el-option label="身份证号" value="id_number" />
+            <el-option label="实际单位" value="actual_employer_name" />
+          </el-select>
           <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 130px">
             <el-option label="待审核" value="pending" />
+            <el-option label="待生效" value="active-pending" />
             <el-option label="在保" value="active" />
             <el-option label="已停保" value="stopped" />
           </el-select>
@@ -143,7 +195,7 @@ function exportCsv() {
           <el-button @click="runBulkAction">执行勾选操作</el-button>
         </div>
       </div>
-      <el-table :data="filtered" size="small" @selection-change="(rows: InsuredPerson[]) => (selected = rows)">
+      <el-table :data="filtered" size="small" max-height="560" @selection-change="(rows: InsuredPerson[]) => (selected = rows)">
         <el-table-column type="selection" width="42" />
         <el-table-column label="被保险人" min-width="120">
           <template #default="{ row }">
@@ -164,7 +216,7 @@ function exportCsv() {
           </template>
         </el-table-column>
         <el-table-column label="状态" width="90">
-          <template #default="{ row }"><el-tag size="small" :type="statusType[row.status]">{{ statusText[row.status] }}</el-tag></template>
+          <template #default="{ row }"><el-tag size="small" :type="insuredStatusLabel(row).type">{{ insuredStatusLabel(row).text }}</el-tag></template>
         </el-table-column>
         <el-table-column label="添加时间" width="150">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
@@ -179,9 +231,8 @@ function exportCsv() {
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openDetail(row)">查看</el-button>
             <el-button link type="primary" size="small" @click="openEditor(row)">编辑</el-button>
-            <el-button link :type="row.status === 'active' ? 'danger' : 'success'" size="small" @click="changeStatus(row, row.status === 'active' ? 'stopped' : 'active')">
-              {{ row.status === 'active' ? '停保' : '参保' }}
-            </el-button>
+            <el-button v-if="row.status === 'active'" link type="danger" size="small" @click="openStopDialog(row)">停保</el-button>
+            <el-button v-else link type="success" size="small" @click="changeStatus(row, 'active')">参保</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -189,6 +240,17 @@ function exportCsv() {
 
     <EmployeeDetailDialog v-model="detailVisible" :person="activePerson" @edit="editFromDetail" @toggle-status="toggleStatusFromDetail" />
     <EmployeeEditorDialog v-model="editorVisible" :person="activePerson" @saved="load" />
+
+    <el-dialog v-model="stopVisible" title="选择停保时间" width="400px">
+      <p class="dialog-hint">{{ stopTargets.length > 1 ? `将对选中的 ${stopTargets.length} 名员工统一停保` : `确定将「${stopTargets[0]?.name}」停保` }}</p>
+      <el-form label-width="90px">
+        <el-form-item label="停保时间"><el-date-picker v-model="stopDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="stopVisible = false">取消</el-button>
+        <el-button type="danger" :loading="stopSaving" @click="submitStop">确认停保</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

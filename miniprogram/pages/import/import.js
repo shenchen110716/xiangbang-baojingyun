@@ -7,7 +7,23 @@ Page({
   positionChange(e) { this.setData({ positionIndex: Number(e.detail.value) }); },
   template() { wx.showLoading({ title: '下载中' }); wx.downloadFile({ url: `${app.globalData.apiBase}/insured/import-template`, header: { Authorization: `Bearer ${app.globalData.token}` }, success: (res) => { wx.hideLoading(); if (res.statusCode === 200) wx.openDocument({ filePath: res.tempFilePath, showMenu: true }); else wx.showToast({ title: '模板下载失败', icon: 'none' }); }, fail: () => { wx.hideLoading(); wx.showToast({ title: '模板下载失败', icon: 'none' }); } }); },
   choose() { wx.chooseMessageFile({ count: 1, type: 'file', extension: ['csv', 'xlsx'], success: (res) => { const file = res.tempFiles[0], isCsv = file.name.toLowerCase().endsWith('.csv'); this.setData({ fileName: file.name, filePath: file.path, rows: [], errors: [] }); if (isCsv) wx.getFileSystemManager().readFile({ filePath: file.path, encoding: 'utf-8', success: (data) => this.parseCsv(data.data), fail: () => wx.showToast({ title: '文件读取失败，请重新选择', icon: 'none' }) }); }, fail: (error) => { const message = (error && error.errMsg) || ''; if (message.includes('cancel')) return; wx.showToast({ title: '选择文件失败，请从聊天记录中选择 CSV 或 XLSX 文件', icon: 'none' }); } }); },
-  parseCsv(text) { const lines = text.replace(/^\ufeff/, '').split(/\r?\n/).filter(Boolean), rows = [], errors = []; lines.slice(1).forEach((line, index) => { const cells = line.split(',').map((value) => value.trim().replace(/^"|"$/g, '')), row = { name: cells[0] || '', id_number: cells[1] || '', phone: cells[2] || '', effective_at: cells[3] || '', terminated_at: cells[4] || '' }; if (!row.id_number || (this.data.kindIndex === 0 && !row.name)) errors.push({ row: index + 2, message: '参保需姓名和身份证号，停保需身份证号' }); else rows.push(row); }); this.setData({ rows, errors }); },
+  parseCsv(text) {
+    const lines = text.replace(/^\ufeff/, '').split(/\r?\n/).filter(Boolean), rows = [], errors = [];
+    if (!lines.length) { this.setData({ rows: [], errors: [] }); return; }
+    const headerCells = lines[0].split(',').map((value) => value.trim().replace(/^"|"$/g, '').replace(/\s/g, ''));
+    const colIndex = (label) => headerCells.indexOf(label);
+    const nameCol = colIndex('姓名'), idCol = colIndex('身份证号'), phoneCol = colIndex('手机号');
+    const enterpriseCol = colIndex('投保单位'), employerCol = colIndex('实际工作单位'), positionCol = colIndex('岗位名称');
+    const effectiveCol = colIndex('生效日期'), terminatedCol = colIndex('停保日期');
+    lines.slice(1).forEach((line, index) => {
+      const cells = line.split(',').map((value) => value.trim().replace(/^"|"$/g, ''));
+      const at = (col) => (col >= 0 ? cells[col] || '' : '');
+      const row = { name: at(nameCol), id_number: at(idCol), phone: at(phoneCol), enterprise: at(enterpriseCol), actual_employer: at(employerCol), position: at(positionCol), effective_at: at(effectiveCol), terminated_at: at(terminatedCol) };
+      if (!row.id_number || (this.data.kindIndex === 0 && !row.name)) errors.push({ row: index + 2, message: '参保需姓名和身份证号，停保需身份证号' });
+      else rows.push(row);
+    });
+    this.setData({ rows, errors });
+  },
   submit() { if (!this.data.filePath) { wx.showToast({ title: '请先选择电子表格', icon: 'none' }); return; } if (this.data.errors.length) { wx.showToast({ title: '请先修正表格错误', icon: 'none' }); return; } const enterprise = this.data.enterprises[this.data.enterpriseIndex], position = this.data.positions[this.data.positionIndex], kind = this.data.kindValues[this.data.kindIndex]; if (!enterprise || (kind === 'enrollment' && !position)) { wx.showToast({ title: '请选择单位和已审核岗位', icon: 'none' }); return; } this.setData({ loading: true }); app.upload('/insured/import-file', this.data.filePath, 'file', { kind, enterprise_id: String(enterprise.id), position_id: String((position && position.id) || 0) }).then((data) => { if (!data.ok) { this.setData({ errors: data.errors || [], loading: false }); return; } wx.showToast({ title: `成功 ${data.success} 人` }); this.setData({ fileName: '', filePath: '', rows: [], errors: [], loading: false }); }).catch(() => this.setData({ loading: false })); },
   onShareAppMessage() { return app.share('/pages/import/import', 'from=share'); }
 });

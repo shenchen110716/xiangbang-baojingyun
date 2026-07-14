@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import type { InsuredPerson, PolicyMemberHistory } from '@/api/types'
 import { getPolicyMembers } from '@/api/insured'
-import { money, formatDateTime } from '@/utils/format'
+import { money, formatDateTime, insuredStatusLabel } from '@/utils/format'
 import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{ person: InsuredPerson | null }>()
@@ -27,7 +27,6 @@ watch(
   },
 )
 
-const statusText: Record<string, string> = { active: '在保', pending: '待审核', stopped: '已停保' }
 </script>
 
 <template>
@@ -51,7 +50,7 @@ const statusText: Record<string, string> = { active: '在保', pending: '待审�
         <div class="row"><span>业务员佣金</span><b>{{ money(person.agent_commission_amount) }}</b></div>
       </template>
       <div class="row"><span>保单</span><b>{{ person.policy_no || '尚未出单' }}</b></div>
-      <div class="row"><span>状态</span><b>{{ statusText[person.status] }}</b></div>
+      <div class="row"><span>状态</span><b>{{ insuredStatusLabel(person).text }}</b></div>
 
       <div class="history-section">
         <div class="history-title">参保历史</div>

@@ -180,7 +180,7 @@ async function submitReview() {
         <el-button v-if="isEnterprise" type="primary" @click="openCreate">＋ 新增岗位并上传视频</el-button>
       </template>
       <div class="filter-row"><FilterBar v-model:search="search" /></div>
-      <el-table :data="filtered" size="small">
+      <el-table :data="filtered" size="small" max-height="560">
         <el-table-column prop="name" label="岗位名称" min-width="140" />
         <el-table-column label="实际工作单位" min-width="150">
           <template #default="{ row }">{{ row.actual_employer_name || row.actual_employer }}</template>

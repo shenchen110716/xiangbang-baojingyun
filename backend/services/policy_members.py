@@ -115,7 +115,9 @@ def terminate_person_policy(session: Session, person: InsuredPerson, terminated_
         else:
             target_terminated_at = earliest_termination_at(operation)
             if as_business_time(target_terminated_at) <= as_business_time(member.effective_at):
-                target_terminated_at = as_business_time(member.effective_at) + timedelta(hours=1)
+                # Minimum coverage period is one full day: bump to the day
+                # after effective_at at 00:00, not an arbitrary +1 hour.
+                target_terminated_at = datetime.combine(as_business_time(member.effective_at).date() + timedelta(days=1), time.min)
         member.terminated_at = target_terminated_at
         member.status = "terminated"
     person.policy_id = None

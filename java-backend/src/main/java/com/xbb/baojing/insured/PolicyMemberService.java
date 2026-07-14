@@ -172,7 +172,11 @@ public class PolicyMemberService {
                 target = terminatedAt;
             } else {
                 target = earliestTerminationAt(operation);
-                if (!target.isAfter(open.getEffectiveAt())) target = open.getEffectiveAt().plusHours(1);
+                if (!target.isAfter(open.getEffectiveAt())) {
+                    // Minimum coverage period is one full day: bump to the
+                    // day after effective_at at 00:00, not an arbitrary +1h.
+                    target = LocalDateTime.of(open.getEffectiveAt().toLocalDate().plusDays(1), LocalTime.MIDNIGHT);
+                }
             }
             open.setTerminatedAt(target);
             open.setStatus("terminated");

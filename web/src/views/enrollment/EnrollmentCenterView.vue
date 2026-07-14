@@ -8,7 +8,7 @@ import { importInsuredFile, importTemplateUrl, listInsured } from '@/api/insured
 import type { Enterprise, EnrollmentEmailLog, EnrollmentSummaryRow, InsuredPerson, WorkPosition } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { downloadAuthenticated } from '@/utils/download'
-import { formatDateTime } from '@/utils/format'
+import { formatDateTime, insuredStatusLabel } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 
@@ -47,22 +47,27 @@ onMounted(load)
 
 // ---- 参停保人员名单 ----
 const peopleSearch = ref('')
+const peopleSearchField = ref<'all' | 'name' | 'id_number' | 'actual_employer_name'>('all')
 const peopleStatusFilter = ref('')
-const statusText: Record<string, string> = { active: '在保', pending: '待审核', stopped: '已停保' }
-const statusType: Record<string, string> = { active: 'success', pending: 'warning', stopped: 'danger' }
+function isPendingEffective(x: InsuredPerson) {
+  return x.status === 'active' && !!x.effective_at && new Date(x.effective_at) > new Date()
+}
 const filteredPeople = computed(() => {
   let rows = people.value
-  if (peopleStatusFilter.value) rows = rows.filter((x) => x.status === peopleStatusFilter.value)
+  if (peopleStatusFilter.value === 'active-pending') rows = rows.filter(isPendingEffective)
+  else if (peopleStatusFilter.value === 'active') rows = rows.filter((x) => x.status === 'active' && !isPendingEffective(x))
+  else if (peopleStatusFilter.value) rows = rows.filter((x) => x.status === peopleStatusFilter.value)
   if (peopleSearch.value) {
     const q = peopleSearch.value.toLowerCase()
-    rows = rows.filter((x) => [x.name, x.id_number, x.phone, x.enterprise_name].some((v) => (v || '').toLowerCase().includes(q)))
+    const fields = peopleSearchField.value === 'all' ? (['name', 'id_number', 'phone', 'enterprise_name', 'actual_employer_name'] as const) : ([peopleSearchField.value] as const)
+    rows = rows.filter((x) => fields.some((f) => (x[f as keyof InsuredPerson] as string || '').toLowerCase().includes(q)))
   }
   return rows
 })
 function exportPeopleCsv() {
   const header = ['姓名', '身份证号', '手机号', '投保单位', '实际工作单位', '岗位', '状态', '添加时间', '生效时间', '停保时间']
   const rows = filteredPeople.value.map((p) => [
-    p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, statusText[p.status],
+    p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, insuredStatusLabel(p).text,
     formatDateTime(p.created_at), p.effective_at ? formatDateTime(p.effective_at) : '', p.terminated_at ? formatDateTime(p.terminated_at) : '',
   ])
   const csv = '﻿' + [header, ...rows].map((r) => r.map((v) => `"${(v || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -181,7 +186,7 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
           <el-button @click="downloadTemplate">下载模板</el-button>
         </el-form-item>
         <p class="hint-text wide">
-          模板包含「生效日期」「停保日期」两列（格式 yyyy-MM-dd，可留空）：批量参保时填写生效日期会直接激活参保（不再停留在待审核）；批量停保时填写停保日期会用该日期而不是当前时间登记停保。
+          模板包含「投保单位」「实际工作单位」「岗位名称」三列（可留空，留空则使用上方选择的默认单位与岗位；填写后按名称匹配，可在一次导入中包含多个不同单位/岗位的名单，仅平台端可通过「投保单位」列导入其他单位数据），以及「生效日期」「停保日期」两列（格式 yyyy-MM-dd，可留空）：批量参保时填写生效日期会直接激活参保（不再停留在待审核）；批量停保时填写停保日期会用该日期而不是当前时间登记停保。
         </p>
         <p v-if="importError" class="error-text wide">{{ importError }}</p>
       </el-form>
@@ -193,14 +198,21 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
       </template>
       <div class="filter-row">
         <FilterBar v-model:search="peopleSearch">
+          <el-select v-model="peopleSearchField" style="width: 130px">
+            <el-option label="全部字段" value="all" />
+            <el-option label="姓名" value="name" />
+            <el-option label="身份证号" value="id_number" />
+            <el-option label="实际单位" value="actual_employer_name" />
+          </el-select>
           <el-select v-model="peopleStatusFilter" placeholder="全部状态" clearable style="width: 130px">
             <el-option label="待审核" value="pending" />
+            <el-option label="待生效" value="active-pending" />
             <el-option label="在保" value="active" />
             <el-option label="已停保" value="stopped" />
           </el-select>
         </FilterBar>
       </div>
-      <el-table :data="filteredPeople" size="small">
+      <el-table :data="filteredPeople" size="small" max-height="560">
         <el-table-column label="被保险人" min-width="120">
           <template #default="{ row }">
             <div>{{ row.name }}</div>
@@ -212,7 +224,7 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
         <el-table-column prop="actual_employer_name" label="实际工作单位" min-width="120" />
         <el-table-column prop="position_name" label="岗位" min-width="110" />
         <el-table-column label="状态" width="90">
-          <template #default="{ row }"><el-tag size="small" :type="statusType[row.status]">{{ statusText[row.status] }}</el-tag></template>
+          <template #default="{ row }"><el-tag size="small" :type="insuredStatusLabel(row).type">{{ insuredStatusLabel(row).text }}</el-tag></template>
         </el-table-column>
         <el-table-column label="添加时间" width="150">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>

@@ -4,6 +4,7 @@ import com.xbb.baojing.agent.AgentCommission;
 import com.xbb.baojing.agent.AgentCommissionMapper;
 import com.xbb.baojing.common.ApiException;
 import com.xbb.baojing.common.AuditService;
+import com.xbb.baojing.common.IdNumberValidator;
 import com.xbb.baojing.common.User;
 import com.xbb.baojing.enterprise.ActualEmployer;
 import com.xbb.baojing.enterprise.ActualEmployerMapper;
@@ -105,7 +106,8 @@ public class InsuredPersonController {
     public InsuredPerson create(@RequestBody PersonIn data, User user) {
         if (enterpriseMapper.findById(data.enterpriseId()) == null) throw ApiException.notFound("企业不存在");
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(data.enterpriseId())) throw ApiException.forbidden("无权操作该单位");
-        if (personMapper.countDuplicateIdNumber(data.enterpriseId(), data.idNumber(), -1) > 0) throw ApiException.conflict("该身份证号已存在");
+        if (!IdNumberValidator.isValid(data.idNumber())) throw ApiException.badRequest("身份证号格式不正确");
+        if (personMapper.countDuplicateIdNumber(data.enterpriseId(), data.idNumber(), -1) > 0) throw ApiException.conflict("该身份证号已在本单位参保，请勿重复添加");
         InsuredPerson item = new InsuredPerson();
         item.setEnterpriseId(data.enterpriseId());
         item.setName(data.name());
@@ -151,8 +153,9 @@ public class InsuredPersonController {
         InsuredPerson item = personMapper.findById(id);
         if (item == null) throw ApiException.notFound("参保员工不存在");
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(item.getEnterpriseId())) throw ApiException.forbidden("无权操作该员工");
-        if (data.idNumber() != null && !data.idNumber().equals(item.getIdNumber()) && personMapper.countDuplicateIdNumber(item.getEnterpriseId(), data.idNumber(), id) > 0) {
-            throw ApiException.conflict("该身份证号已存在");
+        if (data.idNumber() != null && !data.idNumber().equals(item.getIdNumber())) {
+            if (!IdNumberValidator.isValid(data.idNumber())) throw ApiException.badRequest("身份证号格式不正确");
+            if (personMapper.countDuplicateIdNumber(item.getEnterpriseId(), data.idNumber(), id) > 0) throw ApiException.conflict("该身份证号已在本单位参保，请勿重复添加");
         }
         if (data.positionId() != null) {
             WorkPosition position = positionMapper.findById(data.positionId());
@@ -216,10 +219,14 @@ public class InsuredPersonController {
 
     @GetMapping(value = "/insured/import-template", produces = "text/csv")
     public byte[] importTemplate() {
-        // 生效日期/停保日期 are optional: leave a row's column blank for the old
-        // behaviour (enrollment rows land as 'pending' for manual review;
+        // 投保单位/实际工作单位/岗位名称 are optional: leave blank to use the
+        // enterprise/position selected at upload time (backward compatible
+        // with the miniprogram, which doesn't send these columns). Fill them
+        // in to import multiple different units/positions in one file.
+        // 生效日期/停保日期 are optional too: leave a row's column blank for the
+        // old behaviour (enrollment rows land as 'pending' for manual review;
         // termination rows use "now" as the stop time).
-        String content = "姓名,身份证号,手机号,生效日期,停保日期\n张三,340123199001011234,13800000000,2026-01-01,\n";
+        String content = "姓名,身份证号,手机号,投保单位,实际工作单位,岗位名称,生效日期,停保日期\n张三,340123199001011234,13800000000,,,,2026-01-01,\n";
         return ("﻿" + content).getBytes(java.nio.charset.StandardCharsets.UTF_8);
     }
 
@@ -287,10 +294,10 @@ public class InsuredPersonController {
                                     @RequestParam MultipartFile file, User user) throws IOException {
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(enterpriseId)) throw ApiException.forbidden("无权操作该单位");
         if (enterpriseMapper.findById(enterpriseId) == null) throw ApiException.notFound("投保单位不存在");
-        WorkPosition position = null;
-        if ("enrollment".equals(kind)) {
-            position = positionMapper.findById(positionId);
-            if (position == null || !position.getEnterpriseId().equals(enterpriseId) || !"approved".equals(position.getStatus())) {
+        WorkPosition defaultPosition = null;
+        if ("enrollment".equals(kind) && positionId != 0) {
+            defaultPosition = positionMapper.findById(positionId);
+            if (defaultPosition == null || !defaultPosition.getEnterpriseId().equals(enterpriseId) || !"approved".equals(defaultPosition.getStatus())) {
                 throw ApiException.badRequest("批量参保必须选择本单位已审核通过的岗位");
             }
         }
@@ -324,36 +331,67 @@ public class InsuredPersonController {
         Integer nameCol = headers.get("姓名");
         Integer idCol = headers.get("身份证号");
         Integer phoneCol = headers.get("手机号");
+        // 以下三列可选：留空则沿用上传时选择的默认投保单位/岗位（兼容旧模板和小程序端），
+        // 填写则按名称匹配，用于单次导入多个不同单位/岗位的名单（反馈条目 5）。
+        Integer enterpriseCol = headers.get("投保单位");
+        Integer employerCol = headers.get("实际工作单位");
+        Integer positionCol = headers.get("岗位名称");
         Integer effectiveCol = headers.get("生效日期");
         Integer terminatedCol = headers.get("停保日期");
         if (idCol == null || ("enrollment".equals(kind) && nameCol == null)) throw ApiException.badRequest("模板必须包含姓名、身份证号；停保模板至少包含身份证号");
 
         List<Map<String, Object>> errors = new ArrayList<>();
-        record PendingRow(String action, InsuredPerson existing, String name, String identity, String phone, LocalDateTime effectiveAt, LocalDateTime terminatedAt) {}
+        record PendingRow(String action, int enterpriseId, WorkPosition position, InsuredPerson existing, String name, String identity, String phone, LocalDateTime effectiveAt, LocalDateTime terminatedAt) {}
         List<PendingRow> pending = new ArrayList<>();
         Set<String> seen = new HashSet<>();
+        Map<String, com.xbb.baojing.enterprise.Enterprise> enterpriseCache = new HashMap<>();
         for (int i = 1; i < raw.size(); i++) {
             int rowNo = i + 1;
             String[] row = raw.get(i);
             String identity = idCol < row.length ? row[idCol].strip() : "";
             String personName = nameCol != null && nameCol < row.length ? row[nameCol].strip() : "";
             String phone = phoneCol != null && phoneCol < row.length ? row[phoneCol].strip() : "";
+            String rowEnterpriseName = enterpriseCol != null && enterpriseCol < row.length ? row[enterpriseCol].strip() : "";
+            String rowEmployerName = employerCol != null && employerCol < row.length ? row[employerCol].strip() : "";
+            String rowPositionName = positionCol != null && positionCol < row.length ? row[positionCol].strip() : "";
             String effectiveRaw = effectiveCol != null && effectiveCol < row.length ? row[effectiveCol].strip() : "";
             String terminatedRaw = terminatedCol != null && terminatedCol < row.length ? row[terminatedCol].strip() : "";
             if (identity.isBlank()) { errors.add(Map.of("row", rowNo, "message", "身份证号必填")); continue; }
+            if (!IdNumberValidator.isValid(identity)) { errors.add(Map.of("row", rowNo, "message", "身份证号格式不正确")); continue; }
             if (seen.contains(identity)) { errors.add(Map.of("row", rowNo, "message", "表格内身份证号重复")); continue; }
             if (!effectiveRaw.isBlank() && parseImportDate(effectiveRaw) == null) { errors.add(Map.of("row", rowNo, "message", "生效日期格式不正确，应为 yyyy-MM-dd")); continue; }
             if (!terminatedRaw.isBlank() && parseImportDate(terminatedRaw) == null) { errors.add(Map.of("row", rowNo, "message", "停保日期格式不正确，应为 yyyy-MM-dd")); continue; }
             seen.add(identity);
-            InsuredPerson existing = personMapper.findByEnterpriseAndIdNumber(enterpriseId, identity);
+
+            int rowEnterpriseId;
+            if (rowEnterpriseName.isBlank()) {
+                rowEnterpriseId = enterpriseId;
+            } else {
+                com.xbb.baojing.enterprise.Enterprise found = enterpriseCache.computeIfAbsent(rowEnterpriseName, enterpriseMapper::findByName);
+                if (found == null) { errors.add(Map.of("row", rowNo, "message", "投保单位\"" + rowEnterpriseName + "\"不存在")); continue; }
+                if ("enterprise".equals(user.getRole()) && !found.getId().equals(user.getEnterpriseId())) { errors.add(Map.of("row", rowNo, "message", "无权为其他投保单位导入数据")); continue; }
+                rowEnterpriseId = found.getId();
+            }
+
+            InsuredPerson existing = personMapper.findByEnterpriseAndIdNumber(rowEnterpriseId, identity);
             if ("enrollment".equals(kind)) {
                 if (personName.isBlank()) { errors.add(Map.of("row", rowNo, "message", "姓名必填")); continue; }
                 if (existing != null && !"stopped".equals(existing.getStatus())) { errors.add(Map.of("row", rowNo, "message", "该员工已在保或待审核")); continue; }
-                pending.add(new PendingRow("create", existing, personName, identity, phone, parseImportDate(effectiveRaw), parseImportDate(terminatedRaw)));
+                WorkPosition rowPosition = (rowEnterpriseId == enterpriseId && rowEmployerName.isBlank() && rowPositionName.isBlank()) ? defaultPosition : null;
+                if (rowPosition == null) {
+                    ActualEmployer employer = rowEmployerName.isBlank() ? null : actualEmployerMapper.findByEnterpriseAndName(rowEnterpriseId, rowEmployerName);
+                    if (!rowEmployerName.isBlank() && employer == null) { errors.add(Map.of("row", rowNo, "message", "实际工作单位\"" + rowEmployerName + "\"不存在")); continue; }
+                    rowPosition = rowPositionName.isBlank() ? null : positionMapper.findApprovedByName(rowEnterpriseId, employer != null ? employer.getId() : null, rowPositionName);
+                    if (rowPosition == null) { errors.add(Map.of("row", rowNo, "message", "未找到匹配的已审核岗位，请填写实际工作单位与岗位名称，或先在岗位管理中创建并完成审核")); continue; }
+                }
+                LocalDateTime effectiveAt = parseImportDate(effectiveRaw);
+                LocalDateTime terminatedAt = parseImportDate(terminatedRaw);
+                if (effectiveAt != null && terminatedAt != null && !terminatedAt.isAfter(effectiveAt)) { errors.add(Map.of("row", rowNo, "message", "停保日期必须晚于生效日期")); continue; }
+                pending.add(new PendingRow("create", rowEnterpriseId, rowPosition, existing, personName, identity, phone, effectiveAt, terminatedAt));
             } else {
                 if (existing == null) { errors.add(Map.of("row", rowNo, "message", "未找到该单位参保员工")); continue; }
                 if ("stopped".equals(existing.getStatus())) { errors.add(Map.of("row", rowNo, "message", "该员工已停保")); continue; }
-                pending.add(new PendingRow("stop", existing, personName, identity, phone, null, parseImportDate(terminatedRaw)));
+                pending.add(new PendingRow("stop", rowEnterpriseId, null, existing, personName, identity, phone, null, parseImportDate(terminatedRaw)));
             }
         }
         if (!errors.isEmpty()) return new ImportResult(false, kind, 0, errors);
@@ -364,11 +402,11 @@ public class InsuredPersonController {
                 InsuredPerson item = row.existing() != null ? row.existing() : new InsuredPerson();
                 item.setName(row.name());
                 item.setPhone(row.phone());
-                item.setEnterpriseId(enterpriseId);
-                item.setPositionId(position.getId());
+                item.setEnterpriseId(row.enterpriseId());
+                item.setPositionId(row.position().getId());
                 item.setIdNumber(row.identity());
-                item.setOccupation(position.getName());
-                item.setOccupationClass(position.getOccupationClass());
+                item.setOccupation(row.position().getName());
+                item.setOccupationClass(row.position().getOccupationClass());
                 // 生效日期 present -> the row is already-enrolled data being backfilled,
                 // so activate immediately instead of leaving it 'pending' for review.
                 item.setStatus(row.effectiveAt() != null ? (row.terminatedAt() != null ? "stopped" : "active") : "pending");

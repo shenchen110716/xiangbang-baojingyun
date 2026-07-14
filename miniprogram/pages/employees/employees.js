@@ -6,15 +6,19 @@ Page({
     filtered: [],
     q: '',
     status: '',
-    statuses: [{ value: '', label: '全部' }, { value: 'active', label: '在保' }, { value: 'pending', label: '待审核' }, { value: 'stopped', label: '已停保' }],
+    statuses: [{ value: '', label: '全部' }, { value: 'active-pending', label: '待生效' }, { value: 'active', label: '在保' }, { value: 'pending', label: '待审核' }, { value: 'stopped', label: '已停保' }],
     loading: false
   },
   onShow() { this.load(); },
   onPullDownRefresh() { this.load().finally(() => wx.stopPullDownRefresh()); },
+  isPendingEffective(item) { return item.status === 'active' && item.effective_at && new Date(item.effective_at) > new Date(); },
   load() {
     this.setData({ loading: true });
     return app.request('/insured', { silent: true }).then((items) => {
-      const mapped = items.map((item) => ({ ...item, initial: String(item.name || '员').slice(0, 1), status_label: app.statusText(item.status), id_masked: this.maskId(item.id_number) }));
+      const mapped = items.map((item) => {
+        const pendingEffective = this.isPendingEffective(item);
+        return { ...item, initial: String(item.name || '员').slice(0, 1), status_label: pendingEffective ? '待生效' : app.statusText(item.status), status_display: pendingEffective ? 'active-pending' : item.status, id_masked: this.maskId(item.id_number) };
+      });
       this.setData({ items: mapped, loading: false }); this.applyFilter();
     }).catch((error) => { this.setData({ loading: false }); wx.showToast({ title: error.message, icon: 'none' }); });
   },
@@ -23,7 +27,7 @@ Page({
   chooseStatus(e) { this.setData({ status: e.currentTarget.dataset.value }); this.applyFilter(); },
   applyFilter() {
     const q = this.data.q.trim().toLowerCase(), status = this.data.status;
-    const filtered = this.data.items.filter((item) => (!status || item.status === status) && (!q || `${item.name}${item.phone}${item.id_number}${item.position_name}${item.actual_employer_name}`.toLowerCase().includes(q)));
+    const filtered = this.data.items.filter((item) => (!status || item.status_display === status) && (!q || `${item.name}${item.phone}${item.id_number}${item.position_name}${item.actual_employer_name}`.toLowerCase().includes(q)));
     this.setData({ filtered });
   },
   add() { wx.navigateTo({ url: '/pages/employee-edit/employee-edit' }); },

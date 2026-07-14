@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from ..core.audit import audit
 from ..core.business_time import as_business_time
 from ..core.db import db
+from ..core.id_number import is_valid_id_number
 from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
 from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
@@ -58,7 +59,8 @@ def insured(q: str = "", user: User = Depends(current_user), session: Session = 
 def add_person(data: PersonIn, user: User = Depends(current_user), session: Session = Depends(db)):
     if not session.get(Enterprise, data.enterprise_id): raise HTTPException(404, "企业不存在")
     if user.role=="enterprise" and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,"无权操作该单位")
-    if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==data.enterprise_id,InsuredPerson.id_number==data.id_number).limit(1)): raise HTTPException(409,'该身份证号已存在')
+    if not is_valid_id_number(data.id_number): raise HTTPException(400,'身份证号格式不正确')
+    if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==data.enterprise_id,InsuredPerson.id_number==data.id_number).limit(1)): raise HTTPException(409,'该身份证号已在本单位参保，请勿重复添加')
     effective_at = _parse_business_time(data.effective_at, "生效")
     terminated_at = _parse_business_time(data.terminated_at, "停保")
     payload=data.model_dump(exclude={"effective_at", "terminated_at"})
@@ -77,7 +79,9 @@ def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),
     if not item: raise HTTPException(404,'参保员工不存在')
     if user.role=='enterprise' and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,'无权操作该员工')
     values=data.model_dump(exclude_unset=True)
-    if 'id_number' in values and values['id_number']!=item.id_number and session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==item.enterprise_id,InsuredPerson.id_number==values['id_number'],InsuredPerson.id!=item.id).limit(1)): raise HTTPException(409,'该身份证号已存在')
+    if 'id_number' in values and values['id_number']!=item.id_number:
+        if not is_valid_id_number(values['id_number']): raise HTTPException(400,'身份证号格式不正确')
+        if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==item.enterprise_id,InsuredPerson.id_number==values['id_number'],InsuredPerson.id!=item.id).limit(1)): raise HTTPException(409,'该身份证号已在本单位参保，请勿重复添加')
     if 'position_id' in values:
         position=session.get(WorkPosition,values['position_id'])
         if not position or position.enterprise_id!=item.enterprise_id or position.status!='approved': raise HTTPException(400,'只能选择本单位已审核通过的有效岗位')
@@ -119,7 +123,9 @@ def insured_policy_members(item_id: int, user: User = Depends(current_user), ses
 
 @router.get("/insured/import-template")
 def insured_import_template(user:User=Depends(current_user)):
-    content='姓名,身份证号,手机号\n张三,340123199001011234,13800000000\n'
+    header = '姓名,身份证号,手机号,投保单位,实际工作单位,岗位名称,生效日期,停保日期\n'
+    sample = '张三,340123199001011234,13800000000,,,,2026-01-01,\n'
+    content = header + sample
     return StreamingResponse(iter([content.encode('utf-8-sig')]),media_type='text/csv',headers={'Content-Disposition':'attachment; filename=insured-import-template.csv'})
 
 @router.post("/insured/bulk")
@@ -143,10 +149,10 @@ def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Se
 async def import_insured_file(kind:Literal['enrollment','termination']=Form(...),enterprise_id:int=Form(...),position_id:int=Form(0),file:UploadFile=File(...),user:User=Depends(current_user),session:Session=Depends(db)):
     if user.role=='enterprise' and user.enterprise_id!=enterprise_id: raise HTTPException(403,'无权操作该单位')
     if not session.get(Enterprise,enterprise_id): raise HTTPException(404,'投保单位不存在')
-    position=None
-    if kind=='enrollment':
-        position=session.get(WorkPosition,position_id)
-        if not position or position.enterprise_id!=enterprise_id or position.status!='approved': raise HTTPException(400,'批量参保必须选择本单位已审核通过的岗位')
+    default_position=None
+    if kind=='enrollment' and position_id:
+        default_position=session.get(WorkPosition,position_id)
+        if not default_position or default_position.enterprise_id!=enterprise_id or default_position.status!='approved': raise HTTPException(400,'批量参保必须选择本单位已审核通过的岗位')
     content=await file.read();name=(file.filename or '').lower();raw=[]
     try:
         if name.endswith('.xlsx'):
@@ -158,34 +164,76 @@ async def import_insured_file(kind:Literal['enrollment','termination']=Form(...)
     except HTTPException: raise
     except Exception as exc: raise HTTPException(400,f'电子表格解析失败：{exc}')
     if len(raw)<2: raise HTTPException(400,'电子表格没有可导入的数据')
-    headers={x.replace(' ',''):i for i,x in enumerate(raw[0])};name_col=headers.get('姓名');id_col=headers.get('身份证号');phone_col=headers.get('手机号')
+    headers={x.replace(' ',''):i for i,x in enumerate(raw[0])}
+    name_col=headers.get('姓名');id_col=headers.get('身份证号');phone_col=headers.get('手机号')
+    # 三列可选：留空则沿用上传时选择的默认投保单位/岗位（兼容旧模板和小程序端），
+    # 填写则按名称匹配，用于单次导入多个不同单位/岗位的名单（见反馈条目 5）。
+    enterprise_col=headers.get('投保单位');employer_col=headers.get('实际工作单位');position_col=headers.get('岗位名称')
+    effective_col=headers.get('生效日期');terminated_col=headers.get('停保日期')
     if id_col is None or (kind=='enrollment' and name_col is None): raise HTTPException(400,'模板必须包含姓名、身份证号；停保模板至少包含身份证号')
+
+    def cell(row,col):
+        return row[col].strip() if col is not None and col<len(row) else ''
+
+    enterprise_cache: dict[str,Enterprise|None]={}
+    def resolve_enterprise(raw_name:str) -> tuple[int|None,str|None]:
+        if not raw_name: return enterprise_id,None
+        if raw_name not in enterprise_cache:
+            enterprise_cache[raw_name]=session.scalar(select(Enterprise).where(Enterprise.name==raw_name))
+        found=enterprise_cache[raw_name]
+        if not found: return None,f'投保单位"{raw_name}"不存在'
+        if user.role=='enterprise' and found.id!=user.enterprise_id: return None,'无权为其他投保单位导入数据'
+        return found.id,None
+
     errors=[];pending=[];seen=set()
     for row_no,row in enumerate(raw[1:],start=2):
-        identity=row[id_col].strip() if id_col<len(row) else '';person_name=row[name_col].strip() if name_col is not None and name_col<len(row) else '';phone=row[phone_col].strip() if phone_col is not None and phone_col<len(row) else ''
+        identity=cell(row,id_col);person_name=cell(row,name_col);phone=cell(row,phone_col)
+        row_enterprise_name=cell(row,enterprise_col);row_employer_name=cell(row,employer_col);row_position_name=cell(row,position_col)
+        effective_raw=cell(row,effective_col);terminated_raw=cell(row,terminated_col)
         if not identity: errors.append({'row':row_no,'message':'身份证号必填'});continue
+        if not is_valid_id_number(identity): errors.append({'row':row_no,'message':'身份证号格式不正确'});continue
         if identity in seen: errors.append({'row':row_no,'message':'表格内身份证号重复'});continue
         seen.add(identity)
-        existing=session.scalar(select(InsuredPerson).where(InsuredPerson.enterprise_id==enterprise_id,InsuredPerson.id_number==identity))
+        row_enterprise_id,err=resolve_enterprise(row_enterprise_name)
+        if err: errors.append({'row':row_no,'message':err});continue
+        try:
+            effective_at=_parse_business_time(effective_raw,'生效') if effective_raw else None
+            terminated_at=_parse_business_time(terminated_raw,'停保') if terminated_raw else None
+        except HTTPException as exc:
+            errors.append({'row':row_no,'message':exc.detail});continue
+        existing=session.scalar(select(InsuredPerson).where(InsuredPerson.enterprise_id==row_enterprise_id,InsuredPerson.id_number==identity))
         if kind=='enrollment':
             if not person_name: errors.append({'row':row_no,'message':'姓名必填'});continue
             if existing and existing.status!='stopped': errors.append({'row':row_no,'message':'该员工已在保或待审核'});continue
-            pending.append(('create',person_name,identity,phone,existing))
+            row_position=default_position if row_enterprise_id==enterprise_id and not (row_employer_name or row_position_name) else None
+            if row_position is None:
+                employer=session.scalar(select(ActualEmployer).where(ActualEmployer.enterprise_id==row_enterprise_id,ActualEmployer.name==row_employer_name)) if row_employer_name else None
+                if row_employer_name and not employer: errors.append({'row':row_no,'message':f'实际工作单位"{row_employer_name}"不存在'});continue
+                position_query=select(WorkPosition).where(WorkPosition.enterprise_id==row_enterprise_id,WorkPosition.name==row_position_name,WorkPosition.status=='approved')
+                if employer: position_query=position_query.where(WorkPosition.actual_employer_id==employer.id)
+                row_position=session.scalar(position_query) if row_position_name else None
+                if not row_position: errors.append({'row':row_no,'message':'未找到匹配的已审核岗位，请填写实际工作单位与岗位名称，或先在岗位管理中创建并完成审核'});continue
+            if effective_at is not None and terminated_at is not None and terminated_at<=effective_at: errors.append({'row':row_no,'message':'停保日期必须晚于生效日期'});continue
+            pending.append(('create',row_enterprise_id,row_position,person_name,identity,phone,effective_at,terminated_at,existing))
         else:
             if not existing: errors.append({'row':row_no,'message':'未找到该单位参保员工'});continue
             if existing.status=='stopped': errors.append({'row':row_no,'message':'该员工已停保'});continue
-            pending.append(('stop',person_name,identity,phone,existing))
+            pending.append(('stop',row_enterprise_id,None,person_name,identity,phone,None,terminated_at,existing))
     if errors: return {'ok':False,'kind':kind,'success':0,'errors':errors}
     affected=[]
-    for action,person_name,identity,phone,existing in pending:
+    for action,row_enterprise_id,row_position,person_name,identity,phone,effective_at,terminated_at,existing in pending:
         if action=='create':
             if existing:
-                existing.name=person_name;existing.phone=phone;existing.position_id=position.id;existing.occupation=position.name;existing.occupation_class=position.occupation_class;existing.status='pending';item=existing
+                existing.name=person_name;existing.phone=phone;existing.position_id=row_position.id;existing.occupation=row_position.name;existing.occupation_class=row_position.occupation_class;existing.status='pending';item=existing
             else:
-                item=InsuredPerson(enterprise_id=enterprise_id,position_id=position.id,name=person_name,id_number=identity,phone=phone,occupation=position.name,occupation_class=position.occupation_class,status='pending');session.add(item)
+                item=InsuredPerson(enterprise_id=row_enterprise_id,position_id=row_position.id,name=person_name,id_number=identity,phone=phone,occupation=row_position.name,occupation_class=row_position.occupation_class,status='pending');session.add(item);session.flush()
+            if effective_at is not None:
+                member=correct_person_policy_dates(session,item,effective_at,terminated_at)
+                if member is not None: item.status='stopped' if member.terminated_at is not None else 'active'
         else:
-            if existing.status=='active': terminate_person_policy(session,existing)
-            existing.status='stopped';item=existing
+            item=existing
+            if item.status=='active': terminate_person_policy(session,item,terminated_at)
+            item.status='stopped'
         affected.append(item)
     session.commit();audit(session,user,'bulk_enrollment' if kind=='enrollment' else 'bulk_termination','insured_person','',f'count={len(affected)};file={file.filename}')
     return {'ok':True,'kind':kind,'success':len(affected),'errors':[]}

@@ -15,6 +15,9 @@ public interface ActualEmployerMapper {
     @Select("SELECT " + COLS + " FROM actual_employers WHERE id = #{id}")
     ActualEmployer findById(Integer id);
 
+    @Select("SELECT " + COLS + " FROM actual_employers WHERE enterprise_id = #{enterpriseId} AND name = #{name} LIMIT 1")
+    ActualEmployer findByEnterpriseAndName(@Param("enterpriseId") Integer enterpriseId, @Param("name") String name);
+
     @Insert("INSERT INTO actual_employers (enterprise_id, name, credit_code, contact, phone, status, created_at) " +
             "VALUES (#{enterpriseId}, #{name}, #{creditCode}, #{contact}, #{phone}, #{status}, #{createdAt})")
     @Options(useGeneratedKeys = true, keyProperty = "id")

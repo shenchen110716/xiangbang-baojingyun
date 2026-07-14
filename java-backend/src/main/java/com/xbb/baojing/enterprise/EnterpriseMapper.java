@@ -23,6 +23,9 @@ public interface EnterpriseMapper {
     @Select("SELECT " + COLS + " FROM enterprises ORDER BY id ASC LIMIT 1")
     Enterprise findFirst();
 
+    @Select("SELECT " + COLS + " FROM enterprises WHERE name = #{name} LIMIT 1")
+    Enterprise findByName(String name);
+
     @Insert("INSERT INTO enterprises (name, kind, credit_code, contact, phone, status, agent_id, premium_balance, usage_balance, usage_fee_daily, alert_days, created_at) " +
             "VALUES (#{name}, #{kind}, #{creditCode}, #{contact}, #{phone}, #{status}, #{agentId}, #{premiumBalance}, #{usageBalance}, #{usageFeeDaily}, #{alertDays}, #{createdAt})")
     @Options(useGeneratedKeys = true, keyProperty = "id")

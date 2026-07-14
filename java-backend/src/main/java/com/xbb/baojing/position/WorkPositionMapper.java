@@ -16,6 +16,10 @@ public interface WorkPositionMapper {
     @Select("SELECT " + COLS + " FROM work_positions WHERE id = #{id}")
     WorkPosition findById(Integer id);
 
+    @Select("<script>SELECT " + COLS + " FROM work_positions WHERE enterprise_id = #{enterpriseId} AND name = #{name} AND status = 'approved' " +
+            "<if test='actualEmployerId != null'>AND actual_employer_id = #{actualEmployerId}</if> LIMIT 1</script>")
+    WorkPosition findApprovedByName(@Param("enterpriseId") Integer enterpriseId, @Param("actualEmployerId") Integer actualEmployerId, @Param("name") String name);
+
     @Insert("INSERT INTO work_positions (enterprise_id, actual_employer_id, actual_employer, name, occupation_class, plan_id, status, created_by, created_at) " +
             "VALUES (#{enterpriseId}, #{actualEmployerId}, #{actualEmployer}, #{name}, #{occupationClass}, #{planId}, #{status}, #{createdBy}, #{createdAt})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
