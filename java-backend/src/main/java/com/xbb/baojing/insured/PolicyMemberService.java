@@ -74,14 +74,22 @@ public class PolicyMemberService {
         return position != null && position.getPlanId() != null ? planMapper.findById(position.getPlanId()) : null;
     }
 
+    /** 即时生效方案：生效时间就是参保（操作）时间本身；次日生效方案：最早
+     * 为操作日次日零点。 */
     public LocalDateTime earliestEffectiveAt(InsurancePlan plan, LocalDateTime operationTime) {
         LocalDateTime operation = operationTime != null ? operationTime : LocalDateTime.now();
         return "immediate".equals(plan.getEffectiveMode())
-                ? operation.plusHours(1)
+                ? operation
                 : LocalDateTime.of(operation.toLocalDate().plusDays(1), LocalTime.MIDNIGHT);
     }
 
-    public LocalDateTime earliestTerminationAt(LocalDateTime operationTime) {
+    /** 即时生效方案：最早停保时间为生效时间往后推 24 小时（最短保障周期为
+     * 整 24 小时）；次日生效方案（或方案未知）：最早为操作日次日零点（最短
+     * 保障周期为一个完整自然日），与生效时间无关。 */
+    public LocalDateTime earliestTerminationAt(InsurancePlan plan, LocalDateTime effectiveAt, LocalDateTime operationTime) {
+        if (plan != null && "immediate".equals(plan.getEffectiveMode()) && effectiveAt != null) {
+            return effectiveAt.plusHours(24);
+        }
         LocalDateTime operation = operationTime != null ? operationTime : LocalDateTime.now();
         return LocalDateTime.of(operation.toLocalDate().plusDays(1), LocalTime.MIDNIGHT);
     }
@@ -91,18 +99,22 @@ public class PolicyMemberService {
         InsurancePlan plan = planFor(person);
         if (plan == null) return null;
         LocalDateTime operation = operationTime != null ? operationTime : LocalDateTime.now();
+        PolicyMember latest = policyMemberMapper.findLatestForPerson(person.getId());
         if (effectiveAt != null) {
             LocalDateTime earliest = earliestEffectiveAt(plan, operation);
             if (effectiveAt.isBefore(earliest)) {
-                String rule = "immediate".equals(plan.getEffectiveMode()) ? "操作时间后 1 小时" : "操作日次日 00:00";
+                String rule = "immediate".equals(plan.getEffectiveMode()) ? "参保（操作）时间" : "操作日次日 00:00";
                 throw ApiException.badRequest("生效时间不合理：该方案最早可于" + rule + "生效（" + earliest + "）");
             }
         }
         if (terminatedAt != null) {
-            LocalDateTime earliest = earliestTerminationAt(operation);
-            if (terminatedAt.isBefore(earliest)) throw ApiException.badRequest("停保时间不合理：最早可于操作日次日 00:00 停保（" + earliest + "）");
+            LocalDateTime candidateEffectiveForTerm = effectiveAt != null ? effectiveAt : (latest != null ? latest.getEffectiveAt() : null);
+            LocalDateTime earliest = earliestTerminationAt(plan, candidateEffectiveForTerm, operation);
+            if (terminatedAt.isBefore(earliest)) {
+                String rule = "immediate".equals(plan.getEffectiveMode()) ? "生效时间往后 24 小时" : "操作日次日 00:00";
+                throw ApiException.badRequest("停保时间不合理：最早可于" + rule + "停保（" + earliest + "）");
+            }
         }
-        PolicyMember latest = policyMemberMapper.findLatestForPerson(person.getId());
         LocalDateTime candidateEffective = effectiveAt != null ? effectiveAt : (latest != null ? latest.getEffectiveAt() : null);
         LocalDateTime candidateTermination = terminatedAt != null ? terminatedAt : (latest != null ? latest.getTerminatedAt() : null);
         if (candidateEffective != null && candidateTermination != null && !candidateTermination.isAfter(candidateEffective)) {
@@ -166,15 +178,17 @@ public class PolicyMemberService {
         PolicyMember open = policyMemberMapper.findOpenForPerson(person.getId());
         if (open != null) {
             LocalDateTime operation = LocalDateTime.now();
+            InsurancePlan plan = planFor(person);
             LocalDateTime target;
             if (terminatedAt != null) {
                 validateDates(person, null, terminatedAt, operation);
                 target = terminatedAt;
             } else {
-                target = earliestTerminationAt(operation);
+                // 即时生效方案默认停保时间为生效时间往后 24 小时；次日生效
+                // 方案为操作日次日零点，如与生效时间冲突则顺延到生效当天的
+                // 次日零点，保证最短保障周期为一个完整自然日。
+                target = earliestTerminationAt(plan, open.getEffectiveAt(), operation);
                 if (!target.isAfter(open.getEffectiveAt())) {
-                    // Minimum coverage period is one full day: bump to the
-                    // day after effective_at at 00:00, not an arbitrary +1h.
                     target = LocalDateTime.of(open.getEffectiveAt().toLocalDate().plusDays(1), LocalTime.MIDNIGHT);
                 }
             }

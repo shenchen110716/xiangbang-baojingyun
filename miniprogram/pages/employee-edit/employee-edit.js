@@ -58,11 +58,6 @@ Page({
     this.setData({ positionIndex, selectedPosition: position || null, effectiveRuleText: plan && plan.effective_mode === 'immediate' ? '即时单：最早为操作时间后 1 小时' : '月单：最早为操作日次日 00:00', isDailyBilling: !!(plan && plan.billing_mode === 'daily'), 'form.position_id': (position && position.id) || 0 });
   },
   dailyModeChange(e) { this.setData({ dailyMode: e.currentTarget.dataset.value }); },
-  tomorrowDate() {
-    const d = new Date(); d.setDate(d.getDate() + 1);
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T00:00:00`;
-  },
   save() {
     const form = this.data.form;
     if (!form.name.trim() || !form.id_number.trim()) { wx.showToast({ title: '姓名和身份证号必填', icon: 'none' }); return; }
@@ -70,8 +65,8 @@ Page({
     this.setData({ saving: true });
     const payload = { ...form, name: form.name.trim(), id_number: form.id_number.trim(), phone: form.phone.trim() };
     const effectiveAt = payload.effective_at ? `${payload.effective_at}T${this.data.effectiveTime}:00` : '';
+    const terminatedAt = payload.terminated_at ? `${payload.terminated_at}T${this.data.terminatedTime}:00` : '';
     const useTemporaryDaily = !this.data.id && this.data.isDailyBilling && this.data.dailyMode === 'temporary';
-    const terminatedAt = useTemporaryDaily ? this.tomorrowDate() : (payload.terminated_at ? `${payload.terminated_at}T${this.data.terminatedTime}:00` : '');
     let request;
     if (this.data.id) {
       const data = { name: payload.name, id_number: payload.id_number, phone: payload.phone, position_id: payload.position_id };
@@ -79,6 +74,14 @@ Page({
       if (effectiveAt && effectiveAt !== this.data.originalEffectiveAt) data.effective_at = effectiveAt;
       if (terminatedAt && terminatedAt !== this.data.originalTerminatedAt) data.terminated_at = terminatedAt;
       request = app.request(`/insured/${this.data.id}`, { method: 'PATCH', data });
+    } else if (useTemporaryDaily) {
+      // 临时日结：不预先算日期，创建后依次调用"参保"（生效时间取服务端默认
+      // 的"参保时间本身"）和"停保"（默认停保时间=生效时间+24小时），两步
+      // 都复用后端已经校正过的默认规则，避免小程序端时钟和服务端不一致。
+      const data = { name: payload.name, id_number: payload.id_number, phone: payload.phone, enterprise_id: payload.enterprise_id, position_id: payload.position_id };
+      request = app.request('/insured', { method: 'POST', data })
+        .then((created) => app.request(`/insured/${created.id}/status?status=active`, { method: 'PATCH' }))
+        .then((activated) => app.request(`/insured/${activated.id}/status?status=stopped`, { method: 'PATCH' }));
     } else {
       const data = { name: payload.name, id_number: payload.id_number, phone: payload.phone, enterprise_id: payload.enterprise_id, position_id: payload.position_id };
       if (effectiveAt) data.effective_at = effectiveAt;

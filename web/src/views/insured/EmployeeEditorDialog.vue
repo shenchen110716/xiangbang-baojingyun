@@ -4,7 +4,7 @@ import { ElMessage } from 'element-plus'
 import { listEnterprises } from '@/api/enterprises'
 import { listPlans } from '@/api/plans'
 import { listPositions } from '@/api/positions'
-import { createInsured, updateInsured } from '@/api/insured'
+import { createInsured, setInsuredStatus, updateInsured } from '@/api/insured'
 import type { Enterprise, InsurancePlan, InsuredPerson, WorkPosition } from '@/api/types'
 
 const props = defineProps<{ person: InsuredPerson | null }>()
@@ -25,12 +25,6 @@ const form = reactive({
 })
 const dailyMode = ref<'temporary' | 'custom'>('temporary')
 const saving = ref(false)
-
-function tomorrowDate() {
-  const d = new Date()
-  d.setDate(d.getDate() + 1)
-  return `${d.toISOString().slice(0, 10)}T00:00:00`
-}
 
 watch(visible, async (isVisible) => {
   if (!isVisible) return
@@ -84,11 +78,19 @@ async function submit() {
       if (form.effective_at !== (props.person.effective_at ? props.person.effective_at.replace('Z', '').slice(0, 19) : null)) payload.effective_at = form.effective_at
       if (form.terminated_at !== (props.person.terminated_at ? props.person.terminated_at.replace('Z', '').slice(0, 19) : null)) payload.terminated_at = form.terminated_at
       await updateInsured(props.person.id, payload)
+    } else if (showDailyModeToggle.value && dailyMode.value === 'temporary') {
+      // 临时日结：不预先算日期，创建后依次调用"参保"（生效时间取服务端默认
+      // 的"参保时间本身"）和"停保"（默认停保时间=生效时间+24小时），两步
+      // 都复用后端已经校正过的默认规则，避免客户端时钟和服务端不一致。
+      const created = await createInsured({
+        enterprise_id: form.enterprise_id!, position_id: form.position_id, name: form.name, id_number: form.id_number, phone: form.phone,
+      })
+      await setInsuredStatus(created.id, 'active')
+      await setInsuredStatus(created.id, 'stopped')
     } else {
-      const terminatedAt = showDailyModeToggle.value && dailyMode.value === 'temporary' ? tomorrowDate() : form.terminated_at
       await createInsured({
         enterprise_id: form.enterprise_id!, position_id: form.position_id, name: form.name, id_number: form.id_number, phone: form.phone,
-        effective_at: form.effective_at, terminated_at: terminatedAt,
+        effective_at: form.effective_at, terminated_at: form.terminated_at,
       })
     }
     ElMessage.success('保存成功')

@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listInsured, setInsuredStatus, updateInsured } from '@/api/insured'
 import type { InsuredPerson } from '@/api/types'
-import { formatDateTime, insuredStatusLabel } from '@/utils/format'
+import { formatCoverageDate, formatDateTime, insuredStatusLabel } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
@@ -148,7 +148,7 @@ function exportCsv() {
   const header = ['姓名', '身份证号', '手机号', '投保单位', '实际工作单位', '岗位', '职业类别', '产品方案', '保单号', '状态', '添加时间', '生效时间', '停保时间']
   const rows = filtered.value.map((p) => [
     p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, p.occupation_class, p.plan_name, p.policy_no, insuredStatusLabel(p).text,
-    formatDateTime(p.created_at), p.effective_at ? formatDateTime(p.effective_at) : '', p.terminated_at ? formatDateTime(p.terminated_at) : '',
+    formatDateTime(p.created_at), formatCoverageDate(p.effective_at, p.effective_mode), formatCoverageDate(p.terminated_at, p.effective_mode),
   ])
   const csv = '﻿' + [header, ...rows].map((r) => r.map((v) => `"${(v || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv' })
@@ -225,10 +225,10 @@ function exportCsv() {
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
         <el-table-column label="生效时间" width="150">
-          <template #default="{ row }">{{ row.effective_at ? formatDateTime(row.effective_at) : '—' }}</template>
+          <template #default="{ row }">{{ formatCoverageDate(row.effective_at, row.effective_mode) }}</template>
         </el-table-column>
         <el-table-column label="停保时间" width="150">
-          <template #default="{ row }">{{ row.terminated_at ? formatDateTime(row.terminated_at) : '—' }}</template>
+          <template #default="{ row }">{{ formatCoverageDate(row.terminated_at, row.effective_mode) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">

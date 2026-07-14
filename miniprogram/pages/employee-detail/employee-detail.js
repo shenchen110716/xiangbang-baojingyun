@@ -12,6 +12,8 @@ Page({
         item.status_label = pendingEffective ? '待生效' : app.statusText(item.status);
         item.status_display = pendingEffective ? 'active-pending' : item.status;
         item.initial = String(item.name || '员').slice(0, 1);
+        item.effective_at_display = app.formatCoverageDate(item.effective_at, item.effective_mode);
+        item.terminated_at_display = app.formatCoverageDate(item.terminated_at, item.effective_mode);
       }
       this.setData({ item, loading: false });
     }).catch(() => this.setData({ loading: false }));

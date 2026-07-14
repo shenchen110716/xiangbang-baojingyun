@@ -126,6 +126,8 @@ export interface InsuredPerson extends Partial<PricingSnapshot> {
   insurer?: string
   policy_no?: string
   policy_status?: string
+  effective_mode?: 'immediate' | 'next_day' | ''
+  billing_mode?: 'daily' | 'monthly' | ''
   status: 'pending' | 'active' | 'stopped'
   policy_id: number | null
   created_at: string
@@ -146,6 +148,7 @@ export interface PolicyMemberHistory {
   policy_no: string
   insurer: string
   plan_name: string
+  effective_mode?: string
 }
 
 export interface Policy extends Partial<PricingSnapshot> {

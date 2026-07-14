@@ -17,6 +17,7 @@ public class PolicyMember {
     private String policyNo;
     private String insurer;
     private String planName;
+    private String effectiveMode = "";
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -42,4 +43,6 @@ public class PolicyMember {
     public void setInsurer(String v) { this.insurer = v; }
     public String getPlanName() { return planName; }
     public void setPlanName(String v) { this.planName = v; }
+    public String getEffectiveMode() { return effectiveMode; }
+    public void setEffectiveMode(String v) { this.effectiveMode = v; }
 }

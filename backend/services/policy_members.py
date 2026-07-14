@@ -20,13 +20,20 @@ def _plan_for_person(session: Session, person: InsuredPerson) -> InsurancePlan |
 
 
 def earliest_effective_at(plan: InsurancePlan, operation_time: datetime | None = None) -> datetime:
+    """即时生效方案：生效时间就是参保（操作）时间本身；次日生效方案：最早为
+    操作日次日零点。"""
     operation = as_business_time(operation_time) if operation_time else business_now()
     if plan.effective_mode == "immediate":
-        return operation + timedelta(hours=1)
+        return operation
     return datetime.combine(operation.date() + timedelta(days=1), time.min)
 
 
-def earliest_termination_at(operation_time: datetime | None = None) -> datetime:
+def earliest_termination_at(plan: InsurancePlan | None, effective_at: datetime | None, operation_time: datetime | None = None) -> datetime:
+    """即时生效方案：最早停保时间为生效时间往后推 24 小时（最短保障周期为
+    整 24 小时）；次日生效方案（或方案未知）：最早为操作日次日零点（最短保
+    障周期为一个完整自然日），与生效时间无关。"""
+    if plan is not None and plan.effective_mode == "immediate" and effective_at is not None:
+        return as_business_time(effective_at) + timedelta(hours=24)
     operation = as_business_time(operation_time) if operation_time else business_now()
     return datetime.combine(operation.date() + timedelta(days=1), time.min)
 
@@ -43,16 +50,18 @@ def validate_person_policy_dates(
     if not plan:
         return None
     operation = as_business_time(operation_time) if operation_time else business_now()
+    member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == person.id).order_by(PolicyMember.id.desc())) if person.id else None
     if effective_at is not None:
         earliest = earliest_effective_at(plan, operation)
         if as_business_time(effective_at) < earliest:
-            rule = "操作时间后 1 小时" if plan.effective_mode == "immediate" else "操作日次日 00:00"
+            rule = "参保（操作）时间" if plan.effective_mode == "immediate" else "操作日次日 00:00"
             raise HTTPException(400, f"生效时间不合理：该方案最早可于{rule}生效（{earliest.strftime('%Y-%m-%d %H:%M')}）")
     if terminated_at is not None:
-        earliest = earliest_termination_at(operation)
+        candidate_effective_for_term = effective_at or (member.effective_at if member else None)
+        earliest = earliest_termination_at(plan, candidate_effective_for_term, operation)
         if as_business_time(terminated_at) < earliest:
-            raise HTTPException(400, f"停保时间不合理：最早可于操作日次日 00:00 停保（{earliest.strftime('%Y-%m-%d %H:%M')}）")
-    member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == person.id).order_by(PolicyMember.id.desc())) if person.id else None
+            rule = "生效时间往后 24 小时" if plan.effective_mode == "immediate" else "操作日次日 00:00"
+            raise HTTPException(400, f"停保时间不合理：最早可于{rule}停保（{earliest.strftime('%Y-%m-%d %H:%M')}）")
     candidate_effective = effective_at or (member.effective_at if member else None)
     candidate_termination = terminated_at or (member.terminated_at if member else None)
     if candidate_effective is not None and candidate_termination is not None and as_business_time(candidate_termination) <= as_business_time(candidate_effective):
@@ -109,14 +118,16 @@ def terminate_person_policy(session: Session, person: InsuredPerson, terminated_
     member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == person.id, PolicyMember.status == "active", PolicyMember.terminated_at.is_(None)).order_by(PolicyMember.id.desc()))
     if member:
         operation = business_now()
+        plan = _plan_for_person(session, person)
         if terminated_at is not None:
             validate_person_policy_dates(session, person, None, terminated_at, operation)
             target_terminated_at = terminated_at
         else:
-            target_terminated_at = earliest_termination_at(operation)
+            # 即时生效方案默认停保时间为生效时间往后 24 小时；次日生效方案为
+            # 操作日次日零点，如与生效时间冲突则顺延到生效当天的次日零点，
+            # 保证最短保障周期为一个完整自然日。
+            target_terminated_at = earliest_termination_at(plan, member.effective_at, operation)
             if as_business_time(target_terminated_at) <= as_business_time(member.effective_at):
-                # Minimum coverage period is one full day: bump to the day
-                # after effective_at at 00:00, not an arbitrary +1 hour.
                 target_terminated_at = datetime.combine(as_business_time(member.effective_at).date() + timedelta(days=1), time.min)
         member.terminated_at = target_terminated_at
         member.status = "terminated"

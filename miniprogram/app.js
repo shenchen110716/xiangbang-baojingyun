@@ -127,5 +127,18 @@ App({
 
   statusText(value) {
     return ({ pending: '待审核', active: '在保', stopped: '已停保', paused: '已暂停', approved: '已通过', rejected: '已驳回', supplement: '待补材料', reported: '已报案', collecting: '材料收集中', submitted: '已提交保司', insurer_review: '保司审核中', paid: '已赔付', closed: '已结案' })[value] || value || '未知';
+  },
+
+  // 次日生效方案的生效/停保时间总是落在自然日边界上，只显示日期；
+  // 即时生效方案精确到分钟才有意义（24 小时倒计时），显示完整时间。
+  formatCoverageDate(value, effectiveMode) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (effectiveMode === 'immediate') {
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   }
 });

@@ -51,7 +51,7 @@ def insured(q: str = "", user: User = Depends(current_user), session: Session = 
     for x in session.scalars(stmt):
         item=_person_payload(session,x);enterprise=session.get(Enterprise,x.enterprise_id);position=session.get(WorkPosition,x.position_id) if x.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None;plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None;policy=session.get(Policy,x.policy_id) if x.policy_id else None
         relation=session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id==x.enterprise_id,AgentCommission.plan_id==plan.id,AgentCommission.status=='active').order_by(AgentCommission.id.desc())) if plan else None
-        item.update(enterprise_name=enterprise.name if enterprise else '',position_name=position.name if position else x.occupation,actual_employer_name=employer.name if employer else (position.actual_employer if position else ''),plan_id=plan.id if plan else None,plan_name=plan.name if plan else '',insurer=plan.insurer if plan else '',policy_no=policy.policy_no if policy else '',policy_status=policy.status if policy else '',**(pricing_snapshot(plan,relation,plan_price_for_class(session,plan,x.occupation_class)) if plan else {}))
+        item.update(enterprise_name=enterprise.name if enterprise else '',position_name=position.name if position else x.occupation,actual_employer_name=employer.name if employer else (position.actual_employer if position else ''),plan_id=plan.id if plan else None,plan_name=plan.name if plan else '',insurer=plan.insurer if plan else '',policy_no=policy.policy_no if policy else '',policy_status=policy.status if policy else '',effective_mode=plan.effective_mode if plan else '',billing_mode=plan.billing_mode if plan else '',**(pricing_snapshot(plan,relation,plan_price_for_class(session,plan,x.occupation_class)) if plan else {}))
         result.append(item)
     return result
 
@@ -117,7 +117,7 @@ def insured_policy_members(item_id: int, user: User = Depends(current_user), ses
         policy = session.get(Policy, pm.policy_id)
         plan = session.get(InsurancePlan, policy.plan_id) if policy else None
         entry = serialize(pm)
-        entry.update(policy_no=policy.policy_no if policy else "", insurer=plan.insurer if plan else "", plan_name=plan.name if plan else "")
+        entry.update(policy_no=policy.policy_no if policy else "", insurer=plan.insurer if plan else "", plan_name=plan.name if plan else "", effective_mode=plan.effective_mode if plan else "")
         result.append(entry)
     return result
 

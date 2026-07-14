@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import type { InsuredPerson, PolicyMemberHistory } from '@/api/types'
 import { getPolicyMembers } from '@/api/insured'
-import { money, formatDateTime, insuredStatusLabel } from '@/utils/format'
+import { money, formatCoverageDate, insuredStatusLabel } from '@/utils/format'
 import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{ person: InsuredPerson | null }>()
@@ -60,10 +60,10 @@ watch(
             <template #default="{ row }">{{ row.insurer }} · {{ row.plan_name }}</template>
           </el-table-column>
           <el-table-column label="生效时间" min-width="140">
-            <template #default="{ row }">{{ formatDateTime(row.effective_at) }}</template>
+            <template #default="{ row }">{{ formatCoverageDate(row.effective_at, row.effective_mode) }}</template>
           </el-table-column>
           <el-table-column label="终止时间" min-width="140">
-            <template #default="{ row }">{{ row.terminated_at ? formatDateTime(row.terminated_at) : '—' }}</template>
+            <template #default="{ row }">{{ formatCoverageDate(row.terminated_at, row.effective_mode) }}</template>
           </el-table-column>
           <el-table-column label="状态" width="90">
             <template #default="{ row }">

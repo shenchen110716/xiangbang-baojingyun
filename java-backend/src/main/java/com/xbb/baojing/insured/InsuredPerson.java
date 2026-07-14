@@ -27,6 +27,8 @@ public class InsuredPerson {
     private String insurer;
     private String policyNo;
     private String policyStatus;
+    private String effectiveMode = "";
+    private String billingMode = "";
     // 生效时间/停保时间 — from the person's most recent PolicyMember row
     // (backend/services/policy_members.py's activate/terminate bridge),
     // not columns on insured_people itself.
@@ -72,6 +74,10 @@ public class InsuredPerson {
     public void setPolicyNo(String v) { this.policyNo = v; }
     public String getPolicyStatus() { return policyStatus; }
     public void setPolicyStatus(String v) { this.policyStatus = v; }
+    public String getEffectiveMode() { return effectiveMode; }
+    public void setEffectiveMode(String v) { this.effectiveMode = v; }
+    public String getBillingMode() { return billingMode; }
+    public void setBillingMode(String v) { this.billingMode = v; }
     public LocalDateTime getEffectiveAt() { return effectiveAt; }
     public void setEffectiveAt(LocalDateTime v) { this.effectiveAt = v; }
     public LocalDateTime getTerminatedAt() { return terminatedAt; }

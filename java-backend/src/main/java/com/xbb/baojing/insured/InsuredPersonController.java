@@ -84,6 +84,8 @@ public class InsuredPersonController {
         x.setInsurer(plan != null ? plan.getInsurer() : "");
         x.setPolicyNo(policy != null ? policy.getPolicyNo() : "");
         x.setPolicyStatus(policy != null ? policy.getStatus() : "");
+        x.setEffectiveMode(plan != null ? plan.getEffectiveMode() : "");
+        x.setBillingMode(plan != null ? plan.getBillingMode() : "");
         PolicyMember latestMember = policyMemberMapper.findLatestForPerson(x.getId());
         if (latestMember != null) {
             x.setEffectiveAt(latestMember.getEffectiveAt());
@@ -213,6 +215,7 @@ public class InsuredPersonController {
             pm.setPolicyNo(policy != null ? policy.getPolicyNo() : "");
             pm.setInsurer(plan != null ? plan.getInsurer() : "");
             pm.setPlanName(plan != null ? plan.getName() : "");
+            pm.setEffectiveMode(plan != null ? plan.getEffectiveMode() : "");
         }
         return rows;
     }
