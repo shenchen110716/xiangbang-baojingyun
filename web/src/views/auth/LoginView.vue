@@ -10,7 +10,7 @@ const auth = useAuthStore()
 const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname)
 
 const form = reactive({
-  portal: 'admin' as 'admin' | 'enterprise',
+  portal: (route.query.portal === 'enterprise' ? 'enterprise' : 'admin') as 'admin' | 'enterprise',
   username: isLocal ? 'admin' : '',
   password: isLocal ? 'admin123' : '',
 })
