@@ -6,7 +6,7 @@
     </view>
     <view class="row between" style="margin-top:30rpx"><text class="hero-sub">账号 {{user.username}}</text><text class="tag">企业用户</text></view>
   </view>
-  <view class="grid-2 section"><view class="stat"><text class="stat-label">保费余额</text><text class="stat-value">¥{{dashboard.premium_balance||0}}</text></view><view class="stat"><text class="stat-label">使用费余额</text><text class="stat-value">¥{{dashboard.usage_balance||0}}</text></view></view>
+  <view class="grid-2 section"><view class="stat"><text class="stat-label">保费余额</text><text class="stat-value">¥{{dashboard.premium_balance_total||0}}</text></view><view class="stat"><text class="stat-label">使用费余额</text><text class="stat-value">¥{{dashboard.usage_balance||0}}</text></view></view>
   <view class="card section">
     <view class="menu-item" data-url="/pages/employers/employers" bindtap="go"><view class="menu-icon">企</view><text class="grow">工作单位管理</text><text class="chevron">›</text></view>
     <view class="menu-item" data-url="/pages/positions/positions" bindtap="go"><view class="menu-icon">岗</view><text class="grow">投保岗位与视频</text><text class="chevron">›</text></view>

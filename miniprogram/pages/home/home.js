@@ -3,7 +3,7 @@ const app = getApp();
 Page({
   data: {
     loading: true,
-    dashboard: { enterprises: 0, people: 0, pending_people: 0, premium_balance: 0, usage_balance: 0, claims_open: 0, balance_alerts: [] },
+    dashboard: { enterprises: 0, people: 0, pending_people: 0, premium_balance_total: 0, usage_balance: 0, claims_open: 0, balance_alerts: [] },
     messages: [],
     user: {},
     enterprise: {},
@@ -18,7 +18,10 @@ Page({
     const today = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
     this.setData({ loading: true, greeting, today });
     return Promise.all([app.request('/dashboard', { silent: true }), app.request('/messages', { silent: true }), app.loadProfile()])
-      .then(([dashboard, messages, user]) => this.setData({ dashboard, messages: messages.slice(0, 3), user, enterprise: app.globalData.enterprise || {}, loading: false }))
+      .then(([dashboard, messages, user]) => {
+        dashboard.premium_balance_total = (dashboard.premium_accounts || []).reduce((sum, item) => sum + (item.balance || 0), 0);
+        this.setData({ dashboard, messages: messages.slice(0, 3), user, enterprise: app.globalData.enterprise || {}, loading: false });
+      })
       .catch((error) => { this.setData({ loading: false }); wx.showToast({ title: error.message, icon: 'none' }); });
   },
   go(e) { wx.navigateTo({ url: e.currentTarget.dataset.url }); },
