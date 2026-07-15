@@ -14,6 +14,7 @@ public class LedgerEntry {
     private String idempotencyKey = "";
     private Integer createdBy;
     private LocalDateTime occurredAt;
+    private Integer accountId;
 
     // response-only, joined
     private String operator;
@@ -38,6 +39,8 @@ public class LedgerEntry {
     public void setCreatedBy(Integer v) { this.createdBy = v; }
     public LocalDateTime getOccurredAt() { return occurredAt; }
     public void setOccurredAt(LocalDateTime v) { this.occurredAt = v; }
+    public Integer getAccountId() { return accountId; }
+    public void setAccountId(Integer v) { this.accountId = v; }
     public String getOperator() { return operator; }
     public void setOperator(String v) { this.operator = v; }
 }

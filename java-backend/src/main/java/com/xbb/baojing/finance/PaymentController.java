@@ -34,6 +34,7 @@ public class PaymentController {
         Rbac.requireRole(user, "无权创建充值订单", "admin", "enterprise");
         Rbac.assertEnterpriseScope(user, data.enterpriseId(), "无权为该单位充值");
         if (enterpriseMapper.findById(data.enterpriseId()) == null) throw ApiException.notFound("投保单位不存在");
+        if ("premium".equals(data.account())) throw ApiException.badRequest("保费账户充值请使用「账户充值」页面提交充值申请，走审核流程");
         String orderNo = "PAY-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + "-" + randomHex(3);
         var result = providers.paymentProvider().createPayment(data.amount(), orderNo);
         PaymentRecord row = new PaymentRecord();

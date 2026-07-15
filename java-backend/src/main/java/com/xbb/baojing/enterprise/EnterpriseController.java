@@ -13,6 +13,7 @@ import com.xbb.baojing.finance.LedgerEntry;
 import com.xbb.baojing.finance.LedgerMapper;
 import com.xbb.baojing.finance.LedgerService;
 import com.xbb.baojing.position.WorkPositionMapper;
+import com.xbb.baojing.recharge.RechargeService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,12 +36,13 @@ public class EnterpriseController {
     private final PricingService pricingService;
     private final AuditService auditService;
     private final PasswordEncoder passwordEncoder;
+    private final RechargeService rechargeService;
 
     public EnterpriseController(EnterpriseMapper enterpriseMapper, ActualEmployerMapper actualEmployerMapper,
                                  AgentCommissionMapper commissionMapper, UserMapper userMapper, InsuredPersonMapper personMapper,
                                  PolicyMapper policyMapper, InsurancePlanMapper planMapper, WorkPositionMapper positionMapper,
                                  LedgerMapper ledgerMapper, LedgerService ledgerService, PricingService pricingService,
-                                 AuditService auditService, PasswordEncoder passwordEncoder) {
+                                 AuditService auditService, PasswordEncoder passwordEncoder, RechargeService rechargeService) {
         this.enterpriseMapper = enterpriseMapper;
         this.actualEmployerMapper = actualEmployerMapper;
         this.commissionMapper = commissionMapper;
@@ -54,6 +56,7 @@ public class EnterpriseController {
         this.pricingService = pricingService;
         this.auditService = auditService;
         this.passwordEncoder = passwordEncoder;
+        this.rechargeService = rechargeService;
     }
 
     public record EnterpriseIn(String name, String kind, String contact, String phone, String creditCode,
@@ -77,6 +80,9 @@ public class EnterpriseController {
             e.setAgentId(agentId);
             User agent = agentId != null ? userMapper.findById(agentId) : null;
             e.setAgentName(agent != null ? agent.getName() : "未分配");
+            double premiumTotal = rechargeService.premiumAccountsForEnterprise(e.getId()).stream()
+                    .mapToDouble(RechargeService.PremiumAccountRow::balance).sum();
+            e.setPremiumBalanceTotal(premiumTotal);
         }
         return rows;
     }
@@ -160,12 +166,19 @@ public class EnterpriseController {
         Enterprise e = enterpriseMapper.findById(id);
         if (e == null) throw ApiException.notFound("投保单位不存在");
         if (!Set.of("premium", "usage").contains(data.account())) throw ApiException.badRequest("账户类型不合法");
-        if ("premium".equals(data.account())) e.setPremiumBalance(e.getPremiumBalance() + data.amount());
-        else e.setUsageBalance(e.getUsageBalance() + data.amount());
+        if ("premium".equals(data.account())) throw ApiException.badRequest("保费账户充值请使用「账户充值」页面提交充值申请，走审核流程");
+        e.setUsageBalance(e.getUsageBalance() + data.amount());
         ledgerService.postEntry(e, data.account(), "credit", data.amount(), "manual_recharge", String.valueOf(id), user);
         enterpriseMapper.update(e);
         auditService.log(user, "recharge", "enterprise", String.valueOf(id), data.account() + ":" + data.amount());
         return e;
+    }
+
+    @GetMapping("/enterprises/{id}/premium-accounts")
+    public List<RechargeService.PremiumAccountRow> premiumAccounts(@PathVariable int id, User user) {
+        if ("enterprise".equals(user.getRole()) && !Integer.valueOf(id).equals(user.getEnterpriseId())) throw ApiException.forbidden("无权查看该单位账户");
+        if (enterpriseMapper.findById(id) == null) throw ApiException.notFound("投保单位不存在");
+        return rechargeService.premiumAccountsForEnterprise(id);
     }
 
     public record LedgerResponse(List<LedgerEntry> entries, List<LedgerService.Mismatch> reconciliation) {}

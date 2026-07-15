@@ -21,6 +21,7 @@ import com.xbb.baojing.plan.InsurancePlanMapper;
 import com.xbb.baojing.plan.PricingService;
 import com.xbb.baojing.position.WorkPosition;
 import com.xbb.baojing.position.WorkPositionMapper;
+import com.xbb.baojing.recharge.RechargeService;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -58,12 +59,13 @@ public class ReportsController {
     private final ActualEmployerMapper actualEmployerMapper;
     private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
+    private final RechargeService rechargeService;
 
     public ReportsController(PolicyMapper policyMapper, InsuredPersonMapper personMapper, ClaimMapper claimMapper,
                               EnterpriseMapper enterpriseMapper, PolicyPricingService policyPricingService,
                               PolicyMemberMapper policyMemberMapper, InsurancePlanMapper planMapper,
                               WorkPositionMapper positionMapper, ActualEmployerMapper actualEmployerMapper,
-                              UserMapper userMapper, ObjectMapper objectMapper) {
+                              UserMapper userMapper, ObjectMapper objectMapper, RechargeService rechargeService) {
         this.policyMapper = policyMapper;
         this.personMapper = personMapper;
         this.claimMapper = claimMapper;
@@ -75,6 +77,7 @@ public class ReportsController {
         this.actualEmployerMapper = actualEmployerMapper;
         this.userMapper = userMapper;
         this.objectMapper = objectMapper;
+        this.rechargeService = rechargeService;
     }
 
     public record ReportRow(String id, String name, String period, double value, String detail) {}
@@ -320,8 +323,10 @@ public class ReportsController {
         return new UsageSummary(personDays, activePeople);
     }
 
-    public record BillingRow(int id, String enterpriseName, String account, double balance, String status,
-                              double dailyRate, double estimatedDaily, Double monthlyEstimate,
+    /** accountType/accountId are populated for premium rows only (one row per pooled
+     * account); both null for the single usage row. */
+    public record BillingRow(int id, String enterpriseName, String account, String accountType, Integer accountId,
+                              double balance, String status, double dailyRate, double estimatedDaily, Double monthlyEstimate,
                               long activePeople, long monthPersonDays, double monthAccrued,
                               long totalPersonDays, double totalAccrued, String asOfDate) {}
 
@@ -337,8 +342,12 @@ public class ReportsController {
             UsageSummary month = usageSummary(e.getId(), today.withDayOfMonth(1), today);
             UsageSummary lifetime = usageSummary(e.getId(), null, today);
             double dailyUsage = month.activePeople() * rate;
-            rows.add(new BillingRow(e.getId(), e.getName(), "保费账户", e.getPremiumBalance(), "正常", 0, 0, 0.0, 0, 0, 0, 0, 0, today.toString()));
-            rows.add(new BillingRow(e.getId(), e.getName(), "平台使用费账户", e.getUsageBalance(), "正常",
+            for (RechargeService.PremiumAccountRow acc : rechargeService.premiumAccountsForEnterprise(e.getId())) {
+                String label = acc.label() == null || acc.label().isBlank() ? "未命名账户" : acc.label();
+                rows.add(new BillingRow(e.getId(), e.getName(), "保费账户（" + label + "）", "premium", acc.accountId(),
+                        acc.balance(), "正常", 0, 0, 0.0, 0, 0, 0, 0, 0, today.toString()));
+            }
+            rows.add(new BillingRow(e.getId(), e.getName(), "平台使用费账户", null, null, e.getUsageBalance(), "正常",
                     rate, PricingService.amount(dailyUsage), PricingService.amount(month.personDays() * rate),
                     month.activePeople(), month.personDays(), PricingService.amount(month.personDays() * rate),
                     lifetime.personDays(), PricingService.amount(lifetime.personDays() * rate), today.toString()));

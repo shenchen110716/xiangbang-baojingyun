@@ -3,6 +3,7 @@ package com.xbb.baojing.finance;
 import com.xbb.baojing.common.User;
 import com.xbb.baojing.enterprise.Enterprise;
 import com.xbb.baojing.plan.PricingService;
+import com.xbb.baojing.recharge.RechargeService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -17,14 +18,22 @@ import java.util.List;
 @Service
 public class LedgerService {
     private final LedgerMapper ledgerMapper;
+    private final RechargeService rechargeService;
 
-    public LedgerService(LedgerMapper ledgerMapper) { this.ledgerMapper = ledgerMapper; }
+    public LedgerService(LedgerMapper ledgerMapper, RechargeService rechargeService) {
+        this.ledgerMapper = ledgerMapper;
+        this.rechargeService = rechargeService;
+    }
 
     public void postEntry(Enterprise enterprise, String account, String direction, double value, String businessType, String businessId, User user) {
-        postEntry(enterprise, account, direction, value, businessType, businessId, user, "");
+        postEntry(enterprise, account, direction, value, businessType, businessId, user, "", null);
     }
 
     public void postEntry(Enterprise enterprise, String account, String direction, double value, String businessType, String businessId, User user, String idempotencyKey) {
+        postEntry(enterprise, account, direction, value, businessType, businessId, user, idempotencyKey, null);
+    }
+
+    public void postEntry(Enterprise enterprise, String account, String direction, double value, String businessType, String businessId, User user, String idempotencyKey, Integer accountId) {
         LedgerEntry entry = new LedgerEntry();
         entry.setEnterpriseId(enterprise.getId());
         entry.setAccount(account);
@@ -35,6 +44,7 @@ public class LedgerService {
         entry.setIdempotencyKey(idempotencyKey == null ? "" : idempotencyKey);
         entry.setCreatedBy(user != null ? user.getId() : null);
         entry.setOccurredAt(LocalDateTime.now());
+        entry.setAccountId(accountId);
         ledgerMapper.insert(entry);
     }
 
@@ -42,7 +52,9 @@ public class LedgerService {
 
     public List<Mismatch> reconcile(Enterprise enterprise) {
         List<Mismatch> mismatches = new ArrayList<>();
-        checkAccount(mismatches, enterprise, "premium", enterprise.getPremiumBalance());
+        double pooledPremiumBalance = rechargeService.premiumAccountsForEnterprise(enterprise.getId()).stream()
+                .mapToDouble(RechargeService.PremiumAccountRow::balance).sum();
+        checkAccount(mismatches, enterprise, "premium", pooledPremiumBalance);
         checkAccount(mismatches, enterprise, "usage", enterprise.getUsageBalance());
         return mismatches;
     }
