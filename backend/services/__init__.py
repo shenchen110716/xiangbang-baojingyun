@@ -6,6 +6,7 @@ from .policies import policy_dict
 from .ledger import post_ledger_entry, ledger_dict, reconcile_enterprise_ledger
 from .participation_lock import require_usage_funded
 from .termination_scan import scan_premium_shortfalls
+from .notify import notify_enterprise
 from .recharge import (
     resolve_account_for_insurer, insurers_for_account, insurer_account_dict,
     get_or_create_premium_account, premium_accounts_for_enterprise,
@@ -23,6 +24,7 @@ __all__ = [
     "policy_dict",
     "post_ledger_entry", "ledger_dict", "reconcile_enterprise_ledger", "require_usage_funded",
     "scan_premium_shortfalls",
+    "notify_enterprise",
     "resolve_account_for_insurer", "insurers_for_account", "insurer_account_dict",
     "get_or_create_premium_account", "premium_accounts_for_enterprise",
     "activate_person_policy", "correct_person_policy_dates", "terminate_person_policy",

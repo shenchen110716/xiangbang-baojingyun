@@ -8,6 +8,7 @@ ID-checksum validation bug unrelated to this feature.
 import os
 import sys
 import tempfile
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -31,7 +32,9 @@ def run():
         from backend.routers.insured import add_person, insured_status
         from backend.schemas import PersonIn
         from backend.models import EnterprisePremiumAccount, InsurerAccount, InsurerAccountLink
-        from backend.services import scan_premium_shortfalls
+        from backend.models import AuditLog
+        from backend.providers import ProviderResult
+        from backend.services import notify_enterprise, scan_premium_shortfalls
 
         startup()
         with SessionLocal() as session:
@@ -182,6 +185,49 @@ def run():
             assert created_3 == []
             dismissed = session.scalar(select(PendingTermination).where(PendingTermination.enterprise_id == scan_ent.id))
             assert dismissed.status == "dismissed" and dismissed.dismissed_at is not None
+
+            # notify_enterprise: all active enterprise users with nonblank
+            # phones receive the exact template and parameters. A rejected
+            # provider result and a thrown provider error are fire-and-forget
+            # failures: they create recipient-safe audit records, never leak
+            # a phone into the audit detail, and never raise to the caller.
+            notify_ent = Enterprise(name="通知测试企业", kind="企业", contact="", phone="", status="active")
+            session.add(notify_ent); session.commit(); session.refresh(notify_ent)
+            owner = User(username="notify_owner", password_hash="x", name="主管", role="enterprise", enterprise_id=notify_ent.id, is_owner=True, phone="13800000001")
+            operator = User(username="notify_operator", password_hash="x", name="操作员", role="enterprise", enterprise_id=notify_ent.id, is_owner=False, phone="13800000002")
+            no_phone = User(username="notify_nophone", password_hash="x", name="无手机号", role="enterprise", enterprise_id=notify_ent.id, is_owner=False, phone="   ")
+            session.add_all([owner, operator, no_phone]); session.commit()
+
+            class RecordingSmsProvider:
+                def __init__(self):
+                    self.calls = []
+
+                def send_sms(self, phone, template, params):
+                    self.calls.append((phone, template, params))
+                    if len(self.calls) == 1:
+                        return ProviderResult(False, "sms", "REJECTED", {}, "provider rejected")
+                    raise RuntimeError("provider unavailable")
+
+            provider = RecordingSmsProvider()
+            template = "recharge_confirmed"
+            params = {"amount": 100}
+            with patch("backend.services.notify.sms_provider", return_value=provider):
+                notify_enterprise(session, notify_ent.id, template, params)  # must not raise
+
+            assert provider.calls == [
+                (owner.phone, template, params),
+                (operator.phone, template, params),
+            ], provider.calls
+            failure_audits = session.scalars(select(AuditLog).where(
+                AuditLog.action == "sms_failed",
+                AuditLog.object_type == "enterprise_notification",
+                AuditLog.object_id == str(notify_ent.id),
+            )).all()
+            assert {entry.user_id for entry in failure_audits} == {owner.id, operator.id}, failure_audits
+            assert all(template in entry.detail for entry in failure_audits)
+            assert all(f"recipient_user_id={entry.user_id}" in entry.detail for entry in failure_audits)
+            assert all(owner.phone not in entry.detail and operator.phone not in entry.detail for entry in failure_audits)
+            assert all("provider rejected" not in entry.detail for entry in failure_audits)
 
     print("participation lock smoke: ok")
 
