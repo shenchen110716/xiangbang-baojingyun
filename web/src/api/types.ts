@@ -373,18 +373,63 @@ export interface DashboardData {
   pending_enterprises: number
   pending_people: number
   claims_open: number
-  premium_balance: number
+  premium_accounts: PremiumAccountRow[]
   usage_balance: number
   balance_alerts: Array<{
     enterprise_id: number
     enterprise_name: string
     account: string
+    account_id?: number
+    label?: string
     balance: number
     daily_burn: number
     days_left: number
     alert_days: number
     level: 'critical' | 'warning'
   }>
+}
+
+export interface PremiumAccountRow {
+  account_id: number
+  label: string
+  insurers: string[]
+  balance: number
+}
+
+export interface InsurerAccount {
+  id: number
+  label: string
+  bank_name: string
+  account_no: string
+  account_holder: string
+  status: 'active' | 'paused'
+  created_at: string
+  insurers: string[]
+}
+
+export interface InsurerAccountLink {
+  id: number
+  insurer: string
+  account_id: number
+  created_at: string
+}
+
+export interface RechargeRequest {
+  id: number
+  enterprise_id: number
+  enterprise_name: string
+  account_type: 'premium' | 'usage'
+  insurer: string | null
+  account_id: number | null
+  amount: number
+  receipt_file_url: string
+  receipt_download_url?: string
+  status: 'pending' | 'confirmed' | 'rejected'
+  reject_reason: string
+  created_by: number
+  confirmed_by: number | null
+  confirmed_at: string | null
+  created_at: string
 }
 
 export interface ScreenProduct {
