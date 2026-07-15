@@ -10,7 +10,7 @@ from ..core.rbac import require_role
 from ..core.security import current_user, pwd
 from ..models import AgentCommission, Enterprise, InsurancePlan, InsuredPerson, LedgerEntry, Policy, User, WorkPosition
 from ..schemas import AgentIn, EnterpriseIn, EnterpriseUpdate, RechargeIn
-from ..services import ledger_dict, post_ledger_entry, pricing_snapshot, reconcile_enterprise_ledger, serialize, strip_internal_pricing
+from ..services import ledger_dict, post_ledger_entry, premium_accounts_for_enterprise, pricing_snapshot, reconcile_enterprise_ledger, serialize, strip_internal_pricing
 
 router = APIRouter(prefix="/api", tags=["enterprises"])
 
@@ -79,6 +79,12 @@ def recharge_enterprise(item_id: int, data: RechargeIn, user: User = Depends(cur
     else: item.usage_balance += data.amount
     post_ledger_entry(session, item, data.account, "credit", data.amount, "manual_recharge", str(item_id), user)
     session.commit(); audit(session, user, "recharge", "enterprise", str(item_id), f"{data.account}:{data.amount}"); return serialize(item)
+
+@router.get("/enterprises/{item_id}/premium-accounts")
+def enterprise_premium_accounts(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):
+    if user.role == "enterprise" and user.enterprise_id != item_id: raise HTTPException(403, "无权查看该单位账户")
+    if not session.get(Enterprise, item_id): raise HTTPException(404, "投保单位不存在")
+    return premium_accounts_for_enterprise(session, item_id)
 
 @router.get("/enterprises/{item_id}/ledger")
 def enterprise_ledger(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):

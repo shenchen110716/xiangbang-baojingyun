@@ -40,6 +40,7 @@ def run():
         from backend.routers.recharge_requests import (
             create_recharge_request, list_recharge_requests, confirm_recharge_request, reject_recharge_request,
         )
+        from backend.routers.enterprises import enterprise_premium_accounts
         from backend.schemas import InsurerAccountIn, InsurerAccountUpdate, InsurerAccountLinkIn
 
         startup()
@@ -151,6 +152,9 @@ def run():
             assert confirmed["status"] == "confirmed"
             balance_after = get_or_create_premium_account(session, enterprise_id, account.id).balance
             assert balance_after - balance_before == 30.0
+
+            premium_rows = enterprise_premium_accounts(enterprise_id, admin, session)
+            assert any(row["account_id"] == account.id and row["balance"] == balance_after for row in premium_rows)
 
             try:
                 confirm_recharge_request(submitted["id"], admin, session)
