@@ -221,6 +221,42 @@ def run():
             status, _ = call_json("GET", "/api/auth/me", token_c)
             assert status == 401, "token must be invalidated immediately after admin deactivates the account"
 
+            # --- salesperson accounts must be scoped to their self-service
+            # endpoints only, never falling through this codebase's pervasive
+            # "if enterprise: restrict, else: full access" negative-scoping
+            # pattern into admin-equivalent access. This regressed once
+            # already (current_user()'s own role allowlist didn't include
+            # "salesperson", so every request 403'd before reaching any
+            # endpoint) and the fix for that regressed a second time (widening
+            # that allowlist alone let salespeople fall through every
+            # negatively-scoped router as if they were admin) — direct
+            # function-call tests like tests/salesperson_portal_smoke.py
+            # cannot catch either failure mode since they bypass FastAPI's
+            # Depends() chain entirely, which is why this lives here instead.
+            sp_agent = call_json("POST", "/api/agents", admin, {"username": "sec_sp_a", "password": "pass1234", "name": "安全测试业务员"})[1]
+            sp_token = call_json("POST", "/api/auth/login", body={"username": "sec_sp_a", "password": "pass1234", "portal": "salesperson"})[1]["access_token"]
+            assert call("GET", "/api/agents/me", sp_token)[0] == 200, "salesperson must be able to read their own commission summary"
+            assert call("GET", "/api/auth/me", sp_token)[0] == 200, "salesperson must be able to read their own profile"
+            for method, path in [
+                ("GET", "/api/enterprises"),
+                ("GET", "/api/dashboard"),
+                ("GET", "/api/reports"),
+                ("GET", "/api/billing"),
+                ("GET", "/api/messages"),
+                ("GET", "/api/claims"),
+                ("GET", "/api/insured"),
+                ("GET", "/api/policies"),
+                ("GET", f"/api/enterprises/{ent_a['id']}/ledger"),
+            ]:
+                status, resp = call_json(method, path, sp_token)
+                assert status == 403, f"salesperson must not reach {method} {path}, got {status}: {resp}"
+            status, insured_attempt = call_json("POST", "/api/insured", sp_token, {"enterprise_id": ent_a["id"], "name": "越权测试", "id_number": "110101199001011234"})
+            assert status == 403, f"salesperson must not be able to create insured records at any enterprise, got {status}: {insured_attempt}"
+            # non-salesperson accounts must still be rejected by the
+            # salesperson portal, and vice versa
+            assert call_json("POST", "/api/auth/login", body={"username": "admin", "password": "admin123", "portal": "salesperson"})[0] == 403
+            assert call_json("POST", "/api/auth/login", body={"username": "sec_sp_a", "password": "pass1234", "portal": "admin"})[0] == 403
+
             print("security smoke: ok")
         finally:
             proc.terminate()

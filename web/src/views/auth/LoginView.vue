@@ -10,7 +10,11 @@ const auth = useAuthStore()
 const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname)
 
 const form = reactive({
-  portal: (route.query.portal === 'enterprise' ? 'enterprise' : 'admin') as 'admin' | 'enterprise',
+  portal: (route.query.portal === 'enterprise'
+    ? 'enterprise'
+    : route.query.portal === 'salesperson'
+      ? 'salesperson'
+      : 'admin') as 'admin' | 'enterprise' | 'salesperson',
   username: isLocal ? 'admin' : '',
   password: isLocal ? 'admin123' : '',
 })
@@ -30,6 +34,12 @@ const portals = [
     title: '企业 / HR 后台',
     desc: '批量参停保、员工报表、多单位切换',
   },
+  {
+    key: 'salesperson' as const,
+    eyebrow: '03 · 业务员端',
+    title: '业务员',
+    desc: '查看本人绑定单位、产品与佣金明细',
+  },
 ]
 
 const activeCopy = computed(() => portals.find((p) => p.key === form.portal)!)
@@ -39,8 +49,12 @@ async function submit() {
   loading.value = true
   try {
     await auth.login(form.username, form.password, form.portal)
-    const redirect = (route.query.redirect as string) || '/home'
-    router.push(redirect)
+    if (auth.user?.role === 'salesperson') {
+      router.push('/agent-portal')
+    } else {
+      const redirect = (route.query.redirect as string) || '/home'
+      router.push(redirect)
+    }
   } catch (err) {
     errorText.value = err instanceof Error ? err.message : '登录失败'
   } finally {
@@ -281,7 +295,7 @@ p {
 
 .portal-picker {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   margin-bottom: 28px;
 }
