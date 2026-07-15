@@ -26,6 +26,9 @@ def run():
         from backend.core.db import SessionLocal
         from backend.models import Enterprise, PendingTermination, User
         from backend.services import require_usage_funded
+        from backend.models import InsuredPerson, WorkPosition
+        from backend.routers.insured import add_person, insured_status
+        from backend.schemas import PersonIn
 
         startup()
         with SessionLocal() as session:
@@ -63,6 +66,31 @@ def run():
             unfunded_ent.usage_balance = 10.0
             session.commit()
             require_usage_funded(session, unfunded_ent, admin_user)  # must not raise now
+
+            # add_person is blocked when the target enterprise has no usage balance
+            # (admin_user was already fetched in Task 2's test block above, reused here)
+            locked_ent = Enterprise(name="锁定集成测试企业", kind="企业", contact="", phone="", status="active", usage_balance=0.0)
+            session.add(locked_ent); session.commit(); session.refresh(locked_ent)
+            try:
+                add_person(PersonIn(enterprise_id=locked_ent.id, name="测试", id_number="110101199003070038"), admin_user, session)
+                assert False, "expected 403 for unfunded enterprise"
+            except HTTPException as e:
+                assert e.status_code == 403 and "使用费余额不足" in e.detail
+
+            # unlocks on the very next call after a recharge, no separate step
+            locked_ent.usage_balance = 100.0
+            session.commit()
+            created = add_person(PersonIn(enterprise_id=locked_ent.id, name="测试", id_number="110101199003070038"), admin_user, session)
+            assert created["id"] is not None
+
+            # PATCH .../status is also gated
+            locked_ent.usage_balance = 0.0
+            session.commit()
+            try:
+                insured_status(created["id"], status_value="active", user=admin_user, session=session)
+                assert False, "expected 403 for unfunded enterprise on status change"
+            except HTTPException as e:
+                assert e.status_code == 403
 
     print("participation lock smoke: ok")
 

@@ -16,7 +16,7 @@ from ..core.id_number import is_valid_id_number
 from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
 from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
-from ..services import activate_person_policy, correct_person_policy_dates, effective_person_status, plan_price_for_class, pricing_snapshot, serialize, strip_internal_pricing, terminate_person_policy
+from ..services import activate_person_policy, correct_person_policy_dates, effective_person_status, plan_price_for_class, pricing_snapshot, require_usage_funded, serialize, strip_internal_pricing, terminate_person_policy
 
 router = APIRouter(prefix="/api", tags=["insured"])
 MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024
@@ -70,8 +70,10 @@ def insured(q: str = "", user: User = Depends(current_user), session: Session = 
 
 @router.post("/insured")
 def add_person(data: PersonIn, user: User = Depends(current_user), session: Session = Depends(db)):
-    if not session.get(Enterprise, data.enterprise_id): raise HTTPException(404, "企业不存在")
+    enterprise = session.get(Enterprise, data.enterprise_id)
+    if not enterprise: raise HTTPException(404, "企业不存在")
     if user.role=="enterprise" and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,"无权操作该单位")
+    require_usage_funded(session, enterprise, user)
     if not is_valid_id_number(data.id_number): raise HTTPException(400,'身份证号格式不正确')
     if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==data.enterprise_id,InsuredPerson.id_number==data.id_number).limit(1)): raise HTTPException(409,'该身份证号已在本单位参保，请勿重复添加')
     effective_at = _parse_business_time(data.effective_at, "生效")
@@ -91,6 +93,7 @@ def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),
     item=session.get(InsuredPerson,item_id)
     if not item: raise HTTPException(404,'参保员工不存在')
     if user.role=='enterprise' and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,'无权操作该员工')
+    require_usage_funded(session, session.get(Enterprise, item.enterprise_id), user)
     values=data.model_dump(exclude_unset=True)
     if 'id_number' in values and values['id_number']!=item.id_number:
         if not is_valid_id_number(values['id_number']): raise HTTPException(400,'身份证号格式不正确')
@@ -113,6 +116,7 @@ def insured_status(item_id:int,status_value:Literal["active","stopped","pending"
     item=session.get(InsuredPerson,item_id)
     if not item: raise HTTPException(404,"参保员工不存在")
     if user.role=="enterprise" and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,"无权操作该员工")
+    require_usage_funded(session, session.get(Enterprise, item.enterprise_id), user)
     previous_status=item.status
     if status_value=="active" and previous_status!="active": activate_person_policy(session,item)
     elif previous_status=="active" and status_value!="active": terminate_person_policy(session,item)
@@ -184,6 +188,7 @@ def _read_import_rows(content: bytes, filename: str) -> list[list[str]]:
 @router.post("/insured/bulk")
 def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Session=Depends(db)):
     if user.role=='enterprise' and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,'无权操作该单位')
+    require_usage_funded(session, session.get(Enterprise, data.enterprise_id), user)
     position=session.get(WorkPosition,data.position_id)
     if not position or position.enterprise_id!=data.enterprise_id or position.status!='approved': raise HTTPException(400,'只能选择本单位已审核通过的岗位')
     errors=[];created=[];seen=set()
@@ -201,7 +206,9 @@ def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Se
 @router.post("/insured/import-file")
 async def import_insured_file(kind:Literal['enrollment','termination']=Form(...),enterprise_id:int=Form(...),position_id:int=Form(0),file:UploadFile=File(...),user:User=Depends(current_user),session:Session=Depends(db)):
     if user.role=='enterprise' and user.enterprise_id!=enterprise_id: raise HTTPException(403,'无权操作该单位')
-    if not session.get(Enterprise,enterprise_id): raise HTTPException(404,'投保单位不存在')
+    primary_enterprise=session.get(Enterprise,enterprise_id)
+    if not primary_enterprise: raise HTTPException(404,'投保单位不存在')
+    require_usage_funded(session, primary_enterprise, user)
     default_position=None
     if kind=='enrollment' and position_id:
         default_position=session.get(WorkPosition,position_id)
@@ -228,6 +235,7 @@ async def import_insured_file(kind:Literal['enrollment','termination']=Form(...)
         found=enterprise_cache[raw_name]
         if not found: return None,f'投保单位"{raw_name}"不存在'
         if user.role=='enterprise' and found.id!=user.enterprise_id: return None,'无权为其他投保单位导入数据'
+        if found.usage_balance<=0: return None,f'投保单位"{raw_name}"使用费余额不足，请先充值'
         return found.id,None
 
     errors=[];pending=[];seen=set()

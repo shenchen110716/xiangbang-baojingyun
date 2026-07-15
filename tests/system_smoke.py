@@ -30,7 +30,7 @@ def run():
         from backend.core.business_time import business_now, business_today
         from backend.core.db import SessionLocal
         from backend.core.security import pwd
-        from backend.models import AgentCommission, InsurancePlan, Policy, PolicyMember, User, WorkPosition
+        from backend.models import AgentCommission, Enterprise, InsurancePlan, Policy, PolicyMember, User, WorkPosition
         from backend.schemas import (
             ActualEmployerIn, ActualEmployerUpdate, AgentIn,
             ClaimDocumentIn, ClaimIn, ClaimStatusIn,
@@ -65,6 +65,13 @@ def run():
             admin = session.scalar(select(User).where(User.username == "admin"))
             enterprise = add_enterprise(EnterpriseIn(name="冒烟测试企业"), admin, session)
             enterprise_id = enterprise["id"]
+            # require_usage_funded (usage-fee locking) gates every participation-changing
+            # endpoint on enterprise.usage_balance > 0; this fixture predates that feature
+            # and must be funded here (not in production code) so the rest of this smoke
+            # test can exercise add_person/update_person/insured_status as before.
+            enterprise_row = session.get(Enterprise, enterprise_id)
+            enterprise_row.usage_balance = 999999.0
+            session.commit()
             operator = add_operator(OperatorIn(enterprise_id=enterprise_id, username="smoke_operator", password="smoke123", name="测试操作员"), admin, session)
             user = session.get(User, operator["id"])
 
