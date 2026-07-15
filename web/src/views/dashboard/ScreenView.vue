@@ -97,6 +97,29 @@ const totalPremium = computed(() => products.value.reduce((sum, p) => sum + p.pr
       </section>
     </div>
 
+    <div class="panel-row">
+      <section class="panel">
+        <h2>账户余额健康度</h2>
+        <div v-if="dashboard?.premium_accounts.length" class="balance-list">
+          <div v-for="row in dashboard.premium_accounts" :key="row.account_id" class="balance-row">
+            <span class="balance-label">{{ row.label || '未命名账户' }}<small>{{ row.insurers.join('、') }}</small></span>
+            <span class="balance-amount">{{ money(row.balance) }}</span>
+          </div>
+        </div>
+        <p v-else class="empty">暂无数据</p>
+      </section>
+      <section class="panel">
+        <h2>低余额预警</h2>
+        <div v-if="dashboard?.balance_alerts.length" class="balance-list">
+          <div v-for="alert in dashboard.balance_alerts" :key="`${alert.enterprise_id}-${alert.account}-${alert.account_id ?? ''}`" class="balance-row">
+            <span class="balance-label">{{ alert.enterprise_name }}<small>{{ alert.account === 'premium' ? (alert.label || '保费账户') : '服务费账户' }}</small></span>
+            <span :class="['balance-amount', alert.level === 'critical' ? 'critical' : 'warning']">{{ alert.days_left }} 天</span>
+          </div>
+        </div>
+        <p v-else class="empty">暂无预警</p>
+      </section>
+    </div>
+
     <section class="panel">
       <h2>产品明细</h2>
       <table class="product-table">
@@ -193,6 +216,38 @@ const totalPremium = computed(() => products.value.reduce((sum, p) => sum + p.pr
   font-size: 12px;
   text-align: center;
   padding: 60px 0;
+}
+.balance-list {
+  display: grid;
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.balance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.balance-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.balance-label small {
+  color: var(--el-text-color-placeholder, #8a94a6);
+  font-size: 11px;
+}
+.balance-amount {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.balance-amount.critical {
+  color: #ef6e76;
+}
+.balance-amount.warning {
+  color: #f39b50;
 }
 .product-table {
   width: 100%;
