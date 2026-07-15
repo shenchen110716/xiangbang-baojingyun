@@ -22,6 +22,7 @@ export interface Enterprise {
   agent_id: number | null
   agent_name?: string
   premium_balance: number
+  premium_balance_total?: number
   usage_balance: number
   usage_fee_daily: number
   alert_days: number
@@ -323,6 +324,8 @@ export interface BillingRow {
   id: number
   enterprise_name: string
   account: string
+  account_type?: 'premium' | 'usage'
+  account_id?: number
   balance: number
   status: string
   daily_rate: number

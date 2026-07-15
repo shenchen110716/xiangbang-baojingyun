@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import Enterprise, LedgerEntry, User
+from .recharge import premium_accounts_for_enterprise
 from .serialization import amount, serialize
 
 
@@ -57,7 +58,8 @@ def reconcile_enterprise_ledger(session: Session, enterprise: Enterprise) -> lis
     wiring it into an actual scheduled job is Phase 3 (Outbox/Worker)
     scope, which doesn't exist in this codebase yet."""
     mismatches = []
-    for account, cached in (("premium", enterprise.premium_balance), ("usage", enterprise.usage_balance)):
+    pooled_premium_balance = sum(row["balance"] for row in premium_accounts_for_enterprise(session, enterprise.id))
+    for account, cached in (("premium", pooled_premium_balance), ("usage", enterprise.usage_balance)):
         credit = session.scalar(select(func.coalesce(func.sum(LedgerEntry.amount), 0)).where(LedgerEntry.enterprise_id == enterprise.id, LedgerEntry.account == account, LedgerEntry.direction == "credit")) or Decimal(0)
         debit = session.scalar(select(func.coalesce(func.sum(LedgerEntry.amount), 0)).where(LedgerEntry.enterprise_id == enterprise.id, LedgerEntry.account == account, LedgerEntry.direction == "debit")) or Decimal(0)
         ledger_balance = amount(float(credit - debit))

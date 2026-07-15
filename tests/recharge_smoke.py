@@ -40,14 +40,17 @@ def run():
         from backend.routers.recharge_requests import (
             create_recharge_request, list_recharge_requests, confirm_recharge_request, reject_recharge_request,
         )
-        from backend.routers.enterprises import enterprise_premium_accounts
+        from backend.routers.enterprises import enterprise_premium_accounts, recharge_enterprise
+        from backend.routers.payments import create_payment
         from backend.routers.dashboard import dashboard as dashboard_endpoint
         from backend.routers.plans import add_plan
         from backend.routers.positions import add_position, add_actual_employer
         from backend.routers.insured import add_person, insured_status
+        from backend.services.ledger import reconcile_enterprise_ledger
         from backend.schemas import (
             InsurerAccountIn, InsurerAccountUpdate, InsurerAccountLinkIn,
             PlanIn, PositionIn, ActualEmployerIn, PersonIn,
+            RechargeIn, PaymentIn,
         )
 
         startup()
@@ -233,6 +236,62 @@ def run():
             # must sum to exactly 350, proving both insurers' active policies are
             # attributed to the one shared account with no double-counting.
             assert alert["daily_burn"] == 350.0
+
+            # --- Final review finding: two legacy endpoints could still write to the
+            # orphaned Enterprise.premium_balance column, which nothing displays
+            # anymore once balances live in EnterprisePremiumAccount. Both must now
+            # reject "premium" with a 400 pointing operators at the recharge-request
+            # flow, while "usage" (a single unsplit field, out of this fix's scope)
+            # keeps working exactly as before.
+            premium_balance_before_reject = enterprise.premium_balance
+            try:
+                recharge_enterprise(enterprise_id, RechargeIn(account="premium", amount=100.0), admin, session)
+                raise AssertionError("premium recharge via the legacy endpoint should be rejected")
+            except HTTPException as error:
+                assert error.status_code == 400
+            assert enterprise.premium_balance == premium_balance_before_reject  # rejected: no write occurred
+
+            usage_balance_before = enterprise.usage_balance
+            usage_recharge_result = recharge_enterprise(enterprise_id, RechargeIn(account="usage", amount=100.0), admin, session)
+            assert usage_recharge_result["usage_balance"] == usage_balance_before + 100.0
+            assert enterprise.usage_balance == usage_balance_before + 100.0
+
+            try:
+                create_payment(PaymentIn(enterprise_id=enterprise_id, account="premium", amount=50.0), admin, session)
+                raise AssertionError("premium payment order creation via /api/payments should be rejected")
+            except HTTPException as error:
+                assert error.status_code == 400
+
+            payment_result = create_payment(PaymentIn(enterprise_id=enterprise_id, account="usage", amount=50.0), admin, session)
+            assert payment_result["status"] == "pending"  # usage payment orders are still creatable
+
+            # Final review finding: reconcile_enterprise_ledger() used to compare the
+            # ledger sum against the orphaned enterprise.premium_balance column, which
+            # a normal confirm-flow recharge never touches, guaranteeing a false
+            # "premium" mismatch. It must now compare against the pooled
+            # premium_accounts_for_enterprise() total instead, so a normal confirmed
+            # recharge reconciles cleanly. Uses a brand-new enterprise AND a brand-new
+            # insurer account (rather than reusing enterprise_id=1 / account.id) so
+            # this check is fully isolated from earlier fixtures in this file that
+            # deliberately left enterprise_id=1's books out of sync (a balance=100.0
+            # EnterprisePremiumAccount row created directly with no matching ledger
+            # entry, plus a raw 50.0 ledger entry with no matching balance bump) to
+            # exercise unrelated assertions above, and from the shared-account
+            # aggregation math the dashboard test just verified.
+            recon_account = InsurerAccount(label="对账测试账户", bank_name="测试银行", account_no="1111222233", account_holder="对账测试收款方", status="active")
+            session.add(recon_account); session.commit(); session.refresh(recon_account)
+            recon_link = InsurerAccountLink(insurer="对账测试保司", account_id=recon_account.id)
+            session.add(recon_link); session.commit()
+            recon_enterprise = Enterprise(name="对账测试企业", kind="企业", contact="", phone="", status="active")
+            session.add(recon_enterprise); session.commit(); session.refresh(recon_enterprise)
+            fake_receipt_recon = UploadFile(file=io.BytesIO(b"fake-recon-receipt"), filename="recon.png")
+            recon_submission = asyncio.run(create_recharge_request(
+                enterprise_id=recon_enterprise.id, account_type="premium", insurer="对账测试保司", amount=40.0,
+                file=fake_receipt_recon, user=admin, session=session,
+            ))
+            confirm_recharge_request(recon_submission["id"], admin, session)
+            recon_mismatches = reconcile_enterprise_ledger(session, recon_enterprise)
+            assert not any(m["account"] == "premium" for m in recon_mismatches), recon_mismatches
 
     print("recharge smoke: ok")
 

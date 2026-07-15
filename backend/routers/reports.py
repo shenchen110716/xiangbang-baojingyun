@@ -21,7 +21,7 @@ from ..models import (
     ActualEmployer, AgentCommission, Claim, Enterprise, InsurancePlan,
     InsuredPerson, Policy, PolicyMember, User, WorkPosition,
 )
-from ..services import amount, billable_date_range, period_amount, plan_price_for_class, policy_dict, pricing_snapshot, strip_internal_pricing, usage_person_days
+from ..services import amount, billable_date_range, period_amount, plan_price_for_class, policy_dict, premium_accounts_for_enterprise, pricing_snapshot, strip_internal_pricing, usage_person_days
 
 router = APIRouter(prefix="/api", tags=["reports"])
 
@@ -240,7 +240,9 @@ def billing(user: User = Depends(current_user), session: Session = Depends(db)):
         month = usage_person_days(session, x.id, today.replace(day=1), today)
         lifetime = usage_person_days(session, x.id, requested_end=today)
         common={"active_people":month["active_people"],"month_person_days":month["person_days"],"month_accrued":amount(month["person_days"]*rate),"total_person_days":lifetime["person_days"],"total_accrued":amount(lifetime["person_days"]*rate),"as_of_date":today.isoformat()}
-        rows.append({"id":x.id,"enterprise_name":x.name,"account":"保费账户","balance":x.premium_balance,"status":"正常","daily_rate":0,"estimated_daily":0,"monthly_estimate":0,**{key:0 if key != "as_of_date" else today.isoformat() for key in common}})
+        zeroed={key:0 if key != "as_of_date" else today.isoformat() for key in common}
+        for acc in premium_accounts_for_enterprise(session, x.id):
+            rows.append({"id":x.id,"enterprise_name":x.name,"account":f"保费账户（{acc['label'] or '未命名账户'}）","account_type":"premium","account_id":acc["account_id"],"balance":acc["balance"],"status":"正常","daily_rate":0,"estimated_daily":0,"monthly_estimate":0,**zeroed})
         rows.append({"id":x.id,"enterprise_name":x.name,"account":"平台使用费账户","balance":x.usage_balance,"status":"正常","daily_rate":rate,"estimated_daily":amount(month["active_people"]*rate),"monthly_estimate":amount(month["person_days"]*rate),**common})
     return rows
 

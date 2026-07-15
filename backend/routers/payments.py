@@ -20,6 +20,7 @@ router = APIRouter(prefix="/api", tags=["payments"])
 def create_payment(data:PaymentIn,user:User=Depends(current_user),session:Session=Depends(db)):
     assert_enterprise_scope(user, data.enterprise_id, "无权为该单位充值")
     if not session.get(Enterprise,data.enterprise_id): raise HTTPException(404,"投保单位不存在")
+    if data.account == "premium": raise HTTPException(400, "保费账户充值请使用「账户充值」页面提交充值申请，走审核流程")
     order=f"PAY-{datetime.now().strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(3).upper()}"; result=payment_provider().create_payment(data.amount,order)
     row=PaymentRecord(order_no=order,enterprise_id=data.enterprise_id,account=data.account,amount=data.amount,status="pending",provider=result.provider);session.add(row);session.commit();return {"order_no":order,"status":row.status,"pay_url":result.data.get("pay_url",""),"request_id":result.request_id}
 
