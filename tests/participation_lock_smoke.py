@@ -229,6 +229,18 @@ def run():
             assert all(owner.phone not in entry.detail and operator.phone not in entry.detail for entry in failure_audits)
             assert all("provider rejected" not in entry.detail for entry in failure_audits)
 
+            # An audit persistence failure is also fire-and-forget: the
+            # notifier must roll the failed transaction back so the shared
+            # request Session remains usable for response serialization.
+            def failing_audit(audit_session, *args, **kwargs):
+                audit_session.add(AuditLog(user_id=None, action="invalid", object_type="test", object_id=""))
+                audit_session.commit()
+
+            rejected_provider = RecordingSmsProvider()
+            with patch("backend.services.notify.sms_provider", return_value=rejected_provider), patch("backend.services.notify.audit", side_effect=failing_audit):
+                notify_enterprise(session, notify_ent.id, "audit_failure", {})
+            assert session.scalar(select(User.id).where(User.id == owner.id)) == owner.id
+
     print("participation lock smoke: ok")
 
 

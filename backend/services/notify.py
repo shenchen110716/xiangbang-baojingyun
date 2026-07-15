@@ -40,4 +40,4 @@ def notify_enterprise(session: Session, enterprise_id: int, template: str, param
         except Exception:
             # Notification and audit failures must not affect the completed
             # business operation that triggered this best-effort helper.
-            pass
+            session.rollback()
