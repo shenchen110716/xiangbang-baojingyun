@@ -37,6 +37,10 @@ def agent_status(item_id: int, status_value: str = Query(..., alias="status"), u
     if not item or item.role != "salesperson": raise HTTPException(404, "业务员不存在")
     item.status = status_value; item.active = status_value == "active"; session.commit(); audit(session, user, "status_change", "salesperson", str(item.id), status_value); return {"ok": True, "status": item.status}
 
+@router.get("/agents/me", dependencies=[Depends(require_role("salesperson", detail="仅业务员账号可查看"))])
+def my_commissions(user: User = Depends(current_user), session: Session = Depends(db)):
+    return {"summary": agent_commission_summary(session, user.id), "rows": agent_commission_rows(session, user.id)}
+
 @router.get("/agent-commissions", dependencies=[Depends(require_role("admin", detail="仅总后台可查看业务员佣金"))])
 def agent_commissions(session: Session = Depends(db)):
     return [commission_dict(x,session) for x in session.scalars(select(AgentCommission).order_by(AgentCommission.id.desc()))]

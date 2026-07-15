@@ -27,6 +27,8 @@ def run():
         from backend.models import User
         from backend.routers.auth import login
         from backend.schemas import LoginIn
+        from backend.models import AgentCommission, Enterprise, InsurancePlan
+        from backend.routers.agents import my_commissions
 
         startup()
         with SessionLocal() as session:
@@ -59,6 +61,30 @@ def run():
                 assert False, "expected 403"
             except HTTPException as e:
                 assert e.status_code == 403
+
+            # GET /agents/me only returns this salesperson's own bound data
+            plan = InsurancePlan(insurer="测试保司", name="测试产品", price=100.0)
+            session.add(plan); session.commit(); session.refresh(plan)
+
+            bound_enterprise = Enterprise(name="业务员测试企业", kind="企业", contact="", phone="", status="active")
+            session.add(bound_enterprise); session.commit(); session.refresh(bound_enterprise)
+
+            commission = AgentCommission(agent_id=salesperson.id, enterprise_id=bound_enterprise.id, plan_id=plan.id, rate=0.1, mode="rebate", sale_price=100.0, status="active")
+            session.add(commission); session.commit()
+
+            result = my_commissions(salesperson, session)
+            assert result["summary"]["enterprise_count"] == 1, result
+            assert result["summary"]["product_count"] == 1, result
+            assert len(result["rows"]) == 1, result
+            assert result["rows"][0]["enterprise_name"] == "业务员测试企业", result
+            assert result["rows"][0]["plan_name"] == "测试产品", result
+
+            # a different salesperson with no bound commissions sees an empty result, never another agent's data
+            other_salesperson = User(username="other_salesperson", password_hash=pwd.hash("sp12345"), name="另一个业务员", role="salesperson")
+            session.add(other_salesperson); session.commit(); session.refresh(other_salesperson)
+            other_result = my_commissions(other_salesperson, session)
+            assert other_result["summary"]["enterprise_count"] == 0, other_result
+            assert other_result["rows"] == [], other_result
 
     print("salesperson portal smoke: ok")
 
