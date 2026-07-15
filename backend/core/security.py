@@ -19,5 +19,5 @@ def current_user(creds: HTTPAuthorizationCredentials = Depends(security), sessio
     user = session.get(User, uid)
     if not user or not user.active: raise HTTPException(status_code=401, detail="用户无效")
     if token_sv != user.session_version: raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
-    if user.role not in {"admin","enterprise"}: raise HTTPException(status_code=403, detail="该账号暂未开通管理端权限")
+    if user.role not in {"admin","enterprise","salesperson"}: raise HTTPException(status_code=403, detail="该账号暂未开通管理端权限")
     return user
