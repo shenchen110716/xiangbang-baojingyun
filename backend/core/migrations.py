@@ -40,3 +40,5 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     policy_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(policies)")}
     if "document_url" not in policy_columns: s.connection().exec_driver_sql("ALTER TABLE policies ADD COLUMN document_url TEXT DEFAULT ''")
     if "document_name" not in policy_columns: s.connection().exec_driver_sql("ALTER TABLE policies ADD COLUMN document_name VARCHAR(200) DEFAULT ''")
+    ledger_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(ledger_entries)")}
+    if "account_id" not in ledger_columns: s.connection().exec_driver_sql("ALTER TABLE ledger_entries ADD COLUMN account_id INTEGER")
