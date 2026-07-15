@@ -15,10 +15,10 @@
     <view wx:if="{{!id && isDailyBilling}}" class="field">
       <view class="field-label">日结方式</view>
       <view class="row" style="gap:20rpx">
-        <view class="chip {{dailyMode==='temporary'?'active':''}}" data-value="temporary" bindtap="dailyModeChange">临时日结（当天有效）</view>
+        <view class="chip {{dailyMode==='temporary'?'active':''}}" data-value="temporary" bindtap="dailyModeChange">临时日结（即时生效）</view>
         <view class="chip {{dailyMode==='custom'?'active':''}}" data-value="custom" bindtap="dailyModeChange">自定义日结</view>
       </view>
-      <view class="list-meta">临时日结次日零时自动到期，无需再手动停保</view>
+      <view class="list-meta">临时日结 24 小时后自动到期，无需再手动停保</view>
     </view>
     <label class="field">
       <view class="field-label">生效时间</view>

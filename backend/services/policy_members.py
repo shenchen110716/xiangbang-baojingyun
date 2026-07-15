@@ -135,6 +135,22 @@ def terminate_person_policy(session: Session, person: InsuredPerson, terminated_
     return member
 
 
+def effective_person_status(person: InsuredPerson, terminated_at: datetime | None) -> str:
+    """A person whose stored status is already 'stopped' can still be
+    genuinely covered right now: 临时日结 (temporary daily) coverage sets
+    terminated_at to effective_at + 24h and flips status to 'stopped'
+    immediately at creation time, since there's no scheduler to flip it
+    later at the actual expiry moment. Without this, someone who just
+    enrolled shows as already-stopped for the next 24 hours. Returns the
+    status that should actually be shown/used, without touching the
+    stored value (billing already reads PolicyMember.terminated_at
+    directly, not person.status, so this is purely a display/reporting
+    correction)."""
+    if person.status == "stopped" and terminated_at is not None and as_business_time(terminated_at) > business_now():
+        return "active"
+    return person.status
+
+
 def correct_person_policy_dates(session: Session, person: InsuredPerson, effective_at: datetime | None, terminated_at: datetime | None) -> PolicyMember | None:
     """Apply explicitly entered business dates without changing created_at.
 

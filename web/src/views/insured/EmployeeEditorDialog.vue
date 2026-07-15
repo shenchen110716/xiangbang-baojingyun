@@ -123,7 +123,7 @@ async function submit() {
       <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
       <el-form-item v-if="showDailyModeToggle" label="日结方式">
         <el-radio-group v-model="dailyMode">
-          <el-radio value="temporary">临时日结（当天有效，次日零时自动到期）</el-radio>
+          <el-radio value="temporary">临时日结（即时生效，24 小时后自动到期）</el-radio>
           <el-radio value="custom">自定义日结（手动选择起止时间）</el-radio>
         </el-radio-group>
       </el-form-item>

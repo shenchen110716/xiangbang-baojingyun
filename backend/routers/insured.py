@@ -16,7 +16,7 @@ from ..core.id_number import is_valid_id_number
 from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
 from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
-from ..services import activate_person_policy, correct_person_policy_dates, plan_price_for_class, pricing_snapshot, serialize, strip_internal_pricing, terminate_person_policy
+from ..services import activate_person_policy, correct_person_policy_dates, effective_person_status, plan_price_for_class, pricing_snapshot, serialize, strip_internal_pricing, terminate_person_policy
 
 router = APIRouter(prefix="/api", tags=["insured"])
 
@@ -38,7 +38,9 @@ def _coverage_dates(session: Session, person_id: int) -> tuple[datetime | None, 
 
 def _person_payload(session: Session, item: InsuredPerson) -> dict:
     payload = serialize(item)
-    payload["effective_at"], payload["terminated_at"] = _coverage_dates(session, item.id)
+    effective_at, terminated_at = _coverage_dates(session, item.id)
+    payload["effective_at"], payload["terminated_at"] = effective_at, terminated_at
+    payload["status"] = effective_person_status(item, terminated_at)
     return payload
 
 
@@ -49,7 +51,17 @@ def insured(q: str = "", user: User = Depends(current_user), session: Session = 
     if q: stmt = stmt.where(or_(InsuredPerson.name.contains(q), InsuredPerson.phone.contains(q)))
     result=[]
     for x in session.scalars(stmt):
-        item=_person_payload(session,x);enterprise=session.get(Enterprise,x.enterprise_id);position=session.get(WorkPosition,x.position_id) if x.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None;plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None;policy=session.get(Policy,x.policy_id) if x.policy_id else None
+        item=_person_payload(session,x)
+        # x.policy_id is cleared the moment a stop is scheduled (even a
+        # future-dated 临时日结 auto-expiry) — once effective_person_status
+        # has decided the person is still actually active, fall back to the
+        # still-open PolicyMember's policy_id so 保险产品/保单号 don't go
+        # blank while the row still says 在保.
+        policy_id=x.policy_id
+        if policy_id is None and item['status']=='active':
+            latest_member=session.scalar(select(PolicyMember).where(PolicyMember.person_id==x.id).order_by(PolicyMember.id.desc()))
+            policy_id=latest_member.policy_id if latest_member else None
+        enterprise=session.get(Enterprise,x.enterprise_id);position=session.get(WorkPosition,x.position_id) if x.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None;plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None;policy=session.get(Policy,policy_id) if policy_id else None
         relation=session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id==x.enterprise_id,AgentCommission.plan_id==plan.id,AgentCommission.status=='active').order_by(AgentCommission.id.desc())) if plan else None
         item.update(enterprise_name=enterprise.name if enterprise else '',position_name=position.name if position else x.occupation,actual_employer_name=employer.name if employer else (position.actual_employer if position else ''),plan_id=plan.id if plan else None,plan_name=plan.name if plan else '',insurer=plan.insurer if plan else '',policy_no=policy.policy_no if policy else '',policy_status=policy.status if policy else '',effective_mode=plan.effective_mode if plan else '',billing_mode=plan.billing_mode if plan else '',**(pricing_snapshot(plan,relation,plan_price_for_class(session,plan,x.occupation_class)) if plan else {}))
         result.append(strip_internal_pricing(item,user))

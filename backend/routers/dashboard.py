@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from ..core.business_time import business_today
 from ..core.db import db
 from ..core.security import current_user
-from ..models import Claim, Enterprise, InsurancePlan, InsuredPerson, Policy, User, WorkPosition
-from ..services import amount, policy_dict, pricing_snapshot, strip_internal_pricing, usage_person_days
+from ..models import Claim, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
+from ..services import amount, effective_person_status, policy_dict, pricing_snapshot, strip_internal_pricing, usage_person_days
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
@@ -16,7 +16,11 @@ def dashboard(user: User = Depends(current_user), session: Session = Depends(db)
     enterprise_filter = [user.enterprise_id] if user.role == "enterprise" and user.enterprise_id else None
     enterprises = session.query(Enterprise).filter(Enterprise.id.in_(enterprise_filter)).all() if enterprise_filter else session.query(Enterprise).all()
     people = session.query(InsuredPerson).filter(InsuredPerson.enterprise_id.in_(enterprise_filter)).all() if enterprise_filter else session.query(InsuredPerson).all()
-    active_people=[x for x in people if x.status in {'active','pending'}]
+    def _status(x):
+        if x.status!='stopped': return x.status
+        member=session.scalar(select(PolicyMember).where(PolicyMember.person_id==x.id).order_by(PolicyMember.id.desc()))
+        return effective_person_status(x,member.terminated_at if member else None)
+    active_people=[x for x in people if _status(x) in {'active','pending'}]
     alerts=[]
     for ent in enterprises:
         today=business_today(); enterprise_active_count=usage_person_days(session,ent.id,today,today)['active_people']
