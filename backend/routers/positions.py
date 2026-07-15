@@ -2,7 +2,7 @@ import secrets
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,6 +21,15 @@ from ..schemas import (
 from ..services import serialize
 
 router = APIRouter(prefix="/api", tags=["positions"])
+
+VIDEO_SUFFIXES = {'.mp4', '.mov', '.m4v'}
+VIDEO_SUFFIX_BY_CONTENT_TYPE = {
+    'video/mp4': '.mp4',
+    'video/quicktime': '.mov',
+    'video/x-m4v': '.m4v',
+    'video/m4v': '.m4v',
+}
+MAX_VIDEO_BYTES = 100 * 1024 * 1024
 
 
 def _video_dict(item: PositionVideo) -> dict:
@@ -92,15 +101,29 @@ def add_position_video(item_id:int,data:PositionVideoIn,user:User=Depends(curren
     item=PositionVideo(position_id=item_id,**data.model_dump());session.add(item);pos.status='pending';pos.occupation_class='待定';pos.plan_id=None;session.commit();session.refresh(item);audit(session,user,'upload','position_video',str(item.id));return _video_dict(item)
 
 @router.post("/positions/{item_id}/videos/upload")
-async def upload_position_video(item_id:int,file:UploadFile=File(...),user:User=Depends(current_user),session:Session=Depends(db)):
+async def upload_position_video(item_id:int,file:UploadFile=File(...),file_ext:str=Form(''),user:User=Depends(current_user),session:Session=Depends(db)):
     pos=session.get(WorkPosition,item_id)
     if not pos: raise HTTPException(404,'岗位不存在')
     if user.role=='enterprise' and user.enterprise_id!=pos.enterprise_id: raise HTTPException(403,'无权上传')
     suffix=Path(file.filename or '').suffix.lower()
-    if suffix not in {'.mp4','.mov','.m4v'}: raise HTTPException(400,'仅支持 MP4、MOV 或 M4V 视频')
-    content=await file.read()
-    if len(content)>100*1024*1024: raise HTTPException(400,'岗位视频不能超过 100MB')
-    folder=ROOT/'uploads'/'positions'/str(item_id);folder.mkdir(parents=True,exist_ok=True);stored=f'{secrets.token_hex(8)}{suffix}';(folder/stored).write_bytes(content)
+    requested_suffix=f'.{file_ext.strip().lower().lstrip(".")}' if file_ext.strip() else ''
+    if suffix not in VIDEO_SUFFIXES:
+        suffix=VIDEO_SUFFIX_BY_CONTENT_TYPE.get((file.content_type or '').split(';',1)[0].lower(), requested_suffix)
+    if suffix not in VIDEO_SUFFIXES: raise HTTPException(400,'无法识别视频格式，请选择 MP4、MOV 或 M4V 视频')
+    folder=ROOT/'uploads'/'positions'/str(item_id);folder.mkdir(parents=True,exist_ok=True);stored=f'{secrets.token_hex(8)}{suffix}';path=folder/stored
+    size=0
+    try:
+        with path.open('wb') as output:
+            while chunk:=await file.read(1024*1024):
+                size+=len(chunk)
+                if size>MAX_VIDEO_BYTES: raise HTTPException(400,'岗位视频不能超过 100MB')
+                output.write(chunk)
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    if size==0:
+        path.unlink(missing_ok=True)
+        raise HTTPException(400,'视频文件为空，请重新选择')
     item=PositionVideo(position_id=item_id,name=file.filename or stored,url=f'/uploads/positions/{item_id}/{stored}',status='pending');session.add(item);pos.status='pending';pos.occupation_class='待定';pos.plan_id=None;session.commit();session.refresh(item);audit(session,user,'upload','position_video',str(item.id));return _video_dict(item)
 
 @router.get("/positions/{item_id}/videos/{video_id}/download")
@@ -130,9 +153,15 @@ def delete_position_video(item_id:int,user:User=Depends(current_user),session:Se
     item=session.get(PositionVideo,item_id)
     if not item: raise HTTPException(404,'岗位视频不存在')
     if not (item.url.startswith('http://') or item.url.startswith('https://')):
-        path=ROOT/item.url.lstrip('/')
+        folder=ROOT/'uploads'/'positions'/str(item.position_id)
+        path=folder/Path(item.url).name
         if path.is_file(): path.unlink()
-    session.delete(item);session.commit();audit(session,user,'delete','position_video',str(item_id));return {'ok':True}
+    position=session.get(WorkPosition,item.position_id)
+    session.delete(item);session.flush()
+    remaining=session.scalar(select(PositionVideo.id).where(PositionVideo.position_id==item.position_id).limit(1))
+    if position and not remaining:
+        position.status='pending';position.occupation_class='待定';position.plan_id=None
+    session.commit();audit(session,user,'delete','position_video',str(item_id));return {'ok':True}
 
 @router.patch("/positions/{item_id}/review", dependencies=[Depends(require_role("admin", detail="仅平台端可确定岗位职业类别"))])
 def review_position(item_id:int,data:PositionReviewIn,user:User=Depends(current_user),session:Session=Depends(db)):

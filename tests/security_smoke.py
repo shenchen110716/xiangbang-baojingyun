@@ -63,6 +63,24 @@ def run():
         status, raw = call(method, path, token, body)
         return status, (json.loads(raw) if raw else None)
 
+    def upload_video(path, token, content=b"video-test"):
+        boundary = "----xbb-video-upload-test"
+        data = (
+            f"--{boundary}\r\nContent-Disposition: form-data; name=\"file_ext\"\r\n\r\nmp4\r\n"
+            f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"wx-temp-file\"\r\n"
+            "Content-Type: application/octet-stream\r\n\r\n"
+        ).encode() + content + f"\r\n--{boundary}--\r\n".encode()
+        req = urllib.request.Request(
+            f"{base}{path}", data=data, method="POST",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": f"multipart/form-data; boundary={boundary}"},
+        )
+        try:
+            with default_opener.open(req, timeout=10) as resp:
+                return resp.status, json.loads(resp.read())
+        except urllib.error.HTTPError as error:
+            raw = error.read()
+            return error.code, (json.loads(raw) if raw else None)
+
     with tempfile.TemporaryDirectory(prefix="xbb-security-smoke-") as folder:
         env = os.environ.copy()
         env["DATABASE_URL"] = f"sqlite:///{Path(folder) / 'test.db'}"
@@ -140,6 +158,22 @@ def run():
             status, body = call_json("GET", tampered)
             assert status == 403, f"tampered download token must be rejected, got {status}: {body}"
 
+            # --- WeChat position-video upload + admin deletion ---
+            # wx.uploadFile may send a temporary filename with no extension
+            # and application/octet-stream. The explicit file_ext form field
+            # must keep this valid video upload from being rejected.
+            upload_pos = call_json("POST", "/api/positions", token_a, {"actual_employer_id": emp["id"], "actual_employer": emp["name"], "name": "视频上传测试岗位"})[1]
+            status, uploaded_video = upload_video(f"/api/positions/{upload_pos['id']}/videos/upload", token_a)
+            assert status == 200, f"extensionless WeChat upload should succeed, got {status}: {uploaded_video}"
+            assert call("GET", uploaded_video["url"])[0] == 200, "newly uploaded video must be downloadable"
+            status, _ = call_json("DELETE", f"/api/position-videos/{uploaded_video['id']}", token_a)
+            assert status == 403, "enterprise users must not delete reviewed video records"
+            status, deleted = call_json("DELETE", f"/api/position-videos/{uploaded_video['id']}", admin)
+            assert status == 200 and deleted["ok"], f"platform video deletion failed: {status}, {deleted}"
+            assert call_json("GET", f"/api/positions/{upload_pos['id']}/videos", admin)[1] == []
+            deleted_position = next(item for item in call_json("GET", "/api/positions", admin)[1] if item["id"] == upload_pos["id"])
+            assert deleted_position["status"] == "pending" and deleted_position["video_count"] == 0
+
             # --- payment callback idempotency -> exactly one ledger entry ---
             pay = call_json("POST", "/api/payments", admin, {"enterprise_id": ent_a["id"], "account": "usage", "amount": 40})[1]
             r1 = call_json("POST", "/api/payments/callback", body={"order_no": pay["order_no"], "status": "paid"})[1]
@@ -160,13 +194,15 @@ def run():
             pm_pos = call_json("POST", "/api/positions", admin, {"enterprise_id": ent_a["id"], "actual_employer_id": emp["id"], "actual_employer": emp["name"], "name": "参保测试岗位", "occupation_class": "1-3类"})[1]
             call_json("POST", f"/api/positions/{pm_pos['id']}/videos", admin, {"name": "v", "url": "http://example.com/x.mp4"})
             call_json("PATCH", f"/api/positions/{pm_pos['id']}/review", admin, {"status": "approved", "occupation_class": "1-3类", "plan_id": pm_plan["id"]})
-            pm_person = call_json("POST", "/api/insured", admin, {"enterprise_id": ent_a["id"], "name": "参保测试员工", "id_number": "340123199001010099", "position_id": pm_pos["id"]})[1]
+            pm_person = call_json("POST", "/api/insured", admin, {"enterprise_id": ent_a["id"], "name": "参保测试员工", "id_number": "340123199001010091", "position_id": pm_pos["id"]})[1]
             status, _ = call_json("PATCH", f"/api/insured/{pm_person['id']}/status?status=active", admin)
             assert status == 200
             status, policies_resp = call_json("GET", "/api/policies", admin)
             assert status == 200 and len(policies_resp) >= 1, f"policies endpoint must return real data now, got {policies_resp}"
             matching = [p for p in policies_resp if p["plan_id"] == pm_plan["id"]]
-            assert matching and matching[0]["insured_count"] >= 1, f"policy must count the newly-activated person, got {matching}"
+            assert matching and matching[0]["insured_count"] == 0, f"next-day coverage must not count as active before its effective time, got {matching}"
+            status, periods = call_json("GET", f"/api/insured/{pm_person['id']}/policy-members", admin)
+            assert status == 200 and periods, "activation must still create a future PolicyMember coverage period"
 
             # --- session invalidation on password change ---
             status, _ = call_json("GET", "/api/auth/me", token_a)

@@ -1,9 +1,11 @@
 """Isolated backend smoke test for critical permissions and money workflows."""
+import asyncio
 import json
 import os
 import sys
 import tempfile
 from datetime import date, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -15,7 +17,7 @@ def run():
         os.environ["ADMIN_PASSWORD"] = "admin123"
         os.environ["ENTERPRISE_PASSWORD"] = "enterprise123"
 
-        from fastapi import HTTPException
+        from fastapi import HTTPException, UploadFile
         from sqlalchemy import select
 
         from backend.app import startup
@@ -45,7 +47,8 @@ def run():
         from backend.routers.payments import create_payment, payment_callback
         from backend.routers.plans import add_plan
         from backend.routers.positions import (
-            add_actual_employer, add_position, delete_actual_employer, update_actual_employer,
+            add_actual_employer, add_position, delete_actual_employer, delete_position_video,
+            position_videos, update_actual_employer, upload_position_video,
         )
         from backend.routers.reports import _period_premium, billing, premium_details
         from backend.routers.reports import export_policy
@@ -82,14 +85,9 @@ def run():
 
             position = add_position(PositionIn(enterprise_id=enterprise_id, actual_employer_id=employer_id, actual_employer="实际工作单位 A", name="测试岗位", occupation_class="1-3类", plan_id=plan["id"]), admin, session)
             position_row = session.get(WorkPosition, position["id"]); position_row.status="approved"; session.commit()
-            person = add_person(PersonIn(enterprise_id=enterprise_id, name="测试员工", id_number="340123199001019999", position_id=position["id"]), user, session)
+            person = add_person(PersonIn(enterprise_id=enterprise_id, name="测试员工", id_number="340123199001019993", position_id=position["id"]), user, session)
             added_at = person["created_at"]
-            try:
-                update_person(person["id"], PersonUpdate(effective_at=(business_now() + timedelta(minutes=30)).isoformat()), user, session)
-                raise AssertionError("immediate coverage must start at least one hour after operation")
-            except HTTPException as error:
-                assert error.status_code == 400 and "1 小时" in error.detail
-            future_effective = business_now() + timedelta(hours=2)
+            future_effective = business_now() + timedelta(minutes=30)
             person = update_person(person["id"], PersonUpdate(effective_at=future_effective.isoformat()), user, session)
             assert person["created_at"] == added_at
             assert person["effective_at"] >= future_effective.replace(microsecond=0)
@@ -113,16 +111,17 @@ def run():
 
             operation = datetime(2026, 7, 14, 10, 30)
             immediate_plan = session.get(InsurancePlan, plan["id"])
-            assert earliest_effective_at(immediate_plan, operation) == operation + timedelta(hours=1)
+            assert earliest_effective_at(immediate_plan, operation) == operation
             monthly_plan = InsurancePlan(effective_mode="next_day", billing_mode="monthly")
             assert earliest_effective_at(monthly_plan, operation) == datetime(2026, 7, 15)
-            assert earliest_termination_at(operation) == datetime(2026, 7, 15)
+            assert earliest_termination_at(immediate_plan, operation, operation) == operation + timedelta(hours=24)
+            assert earliest_termination_at(monthly_plan, None, operation) == datetime(2026, 7, 15)
             assert last_billable_date(datetime(2026, 7, 15)) == date(2026, 7, 14)
             try:
-                update_person(person["id"], PersonUpdate(terminated_at=business_now().isoformat()), user, session)
-                raise AssertionError("termination must not start before next-day midnight")
+                update_person(person["id"], PersonUpdate(terminated_at=(member.effective_at + timedelta(hours=23)).isoformat()), user, session)
+                raise AssertionError("immediate coverage must last at least 24 hours")
             except HTTPException as error:
-                assert error.status_code == 400 and "次日 00:00" in error.detail
+                assert error.status_code == 400 and "24 小时" in error.detail
 
             rows = list_policies(user, session)
             assert len(rows) == 1 and rows[0]["insured_count"] == 1 and rows[0]["premium"] > 0
@@ -136,11 +135,6 @@ def run():
             # stop then re-enroll must produce TWO separate coverage periods, not
             # overwrite the first one (SYSTEM-DESIGN-V4.md 16.2 "两个保障期间")
             insured_status(person["id"], "stopped", user, session)
-            try:
-                insured_status(person["id"], "active", user, session)
-                raise AssertionError("a new immediate period must not overlap a scheduled termination")
-            except HTTPException as error:
-                assert error.status_code == 400 and "上一保障期间" in error.detail
             first_period = session.scalar(select(PolicyMember).where(PolicyMember.person_id == person["id"]).order_by(PolicyMember.id))
             first_period.terminated_at = datetime(2026, 2, 1)
             session.commit()
@@ -149,6 +143,10 @@ def run():
             assert len(members) == 2
             assert members[0].status == "terminated" and members[0].terminated_at is not None
             assert members[1].status == "active" and members[1].terminated_at is None
+            # Keep the new period just ahead of the current clock so the
+            # historical January accrual assertions remain deterministic.
+            members[1].effective_at = business_now() + timedelta(hours=2)
+            session.commit()
 
             premium_report = premium_details("2026-01-01", "2026-01-31", enterprise_id=None, insurer="", user=user, session=session)
             assert premium_report["detail_count"] == 1
@@ -191,9 +189,22 @@ def run():
             assert usage_row["total_person_days"] == 30 and usage_row["total_accrued"] == 3
             assert usage_row["month_person_days"] == 0 and usage_row["month_accrued"] == 0
 
+            # WeChat may upload a temporary video filename without an
+            # extension or useful Content-Type. file_ext must provide the
+            # trusted, allowlisted fallback and platform deletion must remove
+            # both the row and stored file.
+            video_position = add_position(PositionIn(enterprise_id=enterprise_id, actual_employer_id=employer_id, actual_employer="实际工作单位 A", name="视频上传测试岗位"), admin, session)
+            upload = UploadFile(filename="wx-temp-file", file=BytesIO(b"video-test"))
+            video = asyncio.run(upload_position_video(video_position["id"], upload, "mp4", user, session))
+            assert video["name"] == "wx-temp-file" and position_videos(video_position["id"], user, session)
+            assert delete_position_video(video["id"], admin, session)["ok"]
+            assert position_videos(video_position["id"], admin, session) == []
+            reset_position = session.get(WorkPosition, video_position["id"])
+            assert reset_position.status == "pending" and reset_position.plan_id is None
+
             # a person with no position/plan yet must activate without error and
             # simply skip Policy/PolicyMember creation (same permissiveness as today)
-            unpositioned = add_person(PersonIn(enterprise_id=enterprise_id, name="待定岗位员工", id_number="340123199001019998"), user, session)
+            unpositioned = add_person(PersonIn(enterprise_id=enterprise_id, name="待定岗位员工", id_number="340123199001019985"), user, session)
             insured_status(unpositioned["id"], "active", user, session)
             assert session.query(PolicyMember).filter_by(person_id=unpositioned["id"]).count() == 0
 

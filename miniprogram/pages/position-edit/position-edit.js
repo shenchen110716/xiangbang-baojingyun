@@ -20,11 +20,13 @@ Page({
         const file = res.tempFiles && res.tempFiles[0];
         if (!file || !file.tempFilePath) { wx.showToast({ title: '未获取到视频文件，请重新选择', icon: 'none' }); return; }
         if (file.size && file.size > 100 * 1024 * 1024) { wx.showToast({ title: '视频不能超过 100MB', icon: 'none' }); return; }
+        const extensionMatch = file.tempFilePath.match(/\.(mp4|mov|m4v)(?:\?|$)/i);
+        const fileExt = extensionMatch ? extensionMatch[1].toLowerCase() : 'mp4';
         this.setData({ uploading: true });
         // app.upload() already surfaces a toast for both the server-rejected
         // and network-failure cases internally, so this .catch is only
         // resetting local state, not re-showing the message.
-        app.upload(`/positions/${this.data.id}/videos/upload`, file.tempFilePath)
+        app.upload(`/positions/${this.data.id}/videos/upload`, file.tempFilePath, 'file', { file_ext: fileExt })
           .then(() => { wx.showToast({ title: '视频已提交' }); this.setData({ uploading: false }); this.load(); })
           .catch(() => this.setData({ uploading: false }));
       },

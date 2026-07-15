@@ -120,6 +120,7 @@ async function removePosition(item: WorkPosition) {
 const videosVisible = ref(false)
 const videosList = ref<PositionVideo[]>([])
 const videosTargetId = ref<number | null>(null)
+const deletingVideoId = ref<number | null>(null)
 async function openVideos(item: WorkPosition) {
   videosVisible.value = true
   videosTargetId.value = item.id
@@ -132,12 +133,15 @@ async function removeVideo(video: PositionVideo) {
     return
   }
   try {
+    deletingVideoId.value = video.id
     await positionsApi.deletePositionVideo(video.id)
     ElMessage.success('已删除')
     if (videosTargetId.value) videosList.value = await positionsApi.listPositionVideos(videosTargetId.value)
     load()
   } catch (e) {
     ElMessage.error((e as Error).message)
+  } finally {
+    deletingVideoId.value = null
   }
 }
 
@@ -190,7 +194,7 @@ async function submitReview() {
         </el-table-column>
         <el-table-column label="岗位视频" width="110">
           <template #default="{ row }">
-            <el-button v-if="row.video_count" link type="primary" size="small" @click="openVideos(row)">查看（{{ row.video_count }}）</el-button>
+            <el-button v-if="row.video_count" link type="primary" size="small" @click="openVideos(row)">{{ isEnterprise ? '查看' : '管理视频' }}（{{ row.video_count }}）</el-button>
             <span v-else class="muted">未上传</span>
           </template>
         </el-table-column>
@@ -252,7 +256,7 @@ async function submitReview() {
           </el-tag>
           <span v-if="v.review_note" class="muted">{{ v.review_note }}</span>
           <span class="muted">{{ formatDateTime(v.created_at) }}</span>
-          <el-button v-if="!isEnterprise" link type="danger" size="small" @click="removeVideo(v)">删除</el-button>
+          <el-button v-if="!isEnterprise" link type="danger" size="small" :loading="deletingVideoId === v.id" @click="removeVideo(v)">删除无效视频</el-button>
         </div>
       </div>
       <el-empty v-if="!videosList.length" description="暂无视频" />

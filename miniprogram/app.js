@@ -84,6 +84,10 @@ App({
   },
 
   upload(path, filePath, name = 'file', formData = {}) {
+    if (!this.globalData.token) {
+      this.logout(true);
+      return Promise.reject(new Error('登录已过期，请重新登录'));
+    }
     return new Promise((resolve, reject) => {
       wx.uploadFile({
         url: `${this.globalData.apiBase}${path}`,
@@ -91,19 +95,25 @@ App({
         name,
         formData,
         header: { Authorization: `Bearer ${this.globalData.token}` },
-        timeout: 120000,
+        timeout: 600000,
         success: (res) => {
           let data = {};
           try { data = JSON.parse(res.data || '{}'); } catch (error) { data = {}; }
           if (res.statusCode >= 200 && res.statusCode < 300) resolve(data);
           else {
-            const message = data.detail || '文件上传失败';
+            if (res.statusCode === 401) this.logout(true);
+            const message = data.detail || (res.statusCode === 413 ? '视频文件过大，请压缩后重试' : `文件上传失败（${res.statusCode}）`);
             wx.showToast({ title: message, icon: 'none' });
             reject(new Error(message));
           }
         },
-        fail: () => {
-          const error = new Error('文件上传失败，请重试');
+        fail: (detail) => {
+          const reason = (detail && detail.errMsg) || '';
+          let message = '文件上传失败，请重试';
+          if (reason.includes('timeout')) message = '上传超时，请压缩视频或切换网络后重试';
+          else if (reason.includes('domain')) message = '上传域名未配置，请联系平台管理员';
+          else if (reason.includes('abort')) message = '上传已取消';
+          const error = new Error(message);
           wx.showToast({ title: error.message, icon: 'none' });
           reject(error);
         }

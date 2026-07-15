@@ -178,23 +178,28 @@ public class PositionController {
     }
 
     @PostMapping("/positions/{id}/videos/upload")
-    public PositionVideo uploadVideo(@PathVariable int id, @RequestParam MultipartFile file, User user) throws IOException {
+    public PositionVideo uploadVideo(@PathVariable int id, @RequestParam MultipartFile file,
+                                     @RequestParam(name = "file_ext", required = false, defaultValue = "") String fileExt,
+                                     User user) throws IOException {
         WorkPosition pos = positionMapper.findById(id);
         if (pos == null) throw ApiException.notFound("岗位不存在");
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(pos.getEnterpriseId())) throw ApiException.forbidden("无权上传");
         String original = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
         String suffix = original.contains(".") ? original.substring(original.lastIndexOf('.')).toLowerCase() : "";
-        if (suffix.isBlank()) {
+        if (!Set.of(".mp4", ".mov", ".m4v").contains(suffix)) {
             String contentType = file.getContentType();
             if ("video/mp4".equalsIgnoreCase(contentType)) suffix = ".mp4";
             else if ("video/quicktime".equalsIgnoreCase(contentType)) suffix = ".mov";
+            else if ("video/x-m4v".equalsIgnoreCase(contentType) || "video/m4v".equalsIgnoreCase(contentType)) suffix = ".m4v";
+            else if (!fileExt.isBlank()) suffix = "." + fileExt.toLowerCase().replace(".", "");
         }
         if (!Set.of(".mp4", ".mov", ".m4v").contains(suffix)) throw ApiException.badRequest("仅支持 MP4、MOV 或 M4V 视频");
         if (file.getSize() > 100L * 1024 * 1024) throw ApiException.badRequest("岗位视频不能超过 100MB");
+        if (file.isEmpty()) throw ApiException.badRequest("视频文件为空，请重新选择");
         Path folder = Paths.get(uploadsDir, "positions", String.valueOf(id));
         Files.createDirectories(folder);
         String stored = randomHex(8) + suffix;
-        Files.write(folder.resolve(stored), file.getBytes());
+        file.transferTo(folder.resolve(stored));
         PositionVideo v = new PositionVideo();
         v.setPositionId(id);
         v.setName(original.isBlank() ? stored : original);
@@ -238,10 +243,19 @@ public class PositionController {
         PositionVideo item = videoMapper.findById(id);
         if (item == null) throw ApiException.notFound("岗位视频不存在");
         if (!item.getUrl().startsWith("http://") && !item.getUrl().startsWith("https://")) {
-            Path path = Paths.get(".", item.getUrl());
+            Path path = Paths.get(uploadsDir, "positions", String.valueOf(item.getPositionId()), Paths.get(item.getUrl()).getFileName().toString());
             Files.deleteIfExists(path);
         }
         videoMapper.delete(id);
+        if (videoMapper.countForPosition(item.getPositionId()) == 0) {
+            WorkPosition position = positionMapper.findById(item.getPositionId());
+            if (position != null) {
+                position.setStatus("pending");
+                position.setOccupationClass("待定");
+                position.setPlanId(null);
+                positionMapper.update(position);
+            }
+        }
         auditService.log(user, "delete", "position_video", String.valueOf(id));
         return Map.of("ok", true);
     }
