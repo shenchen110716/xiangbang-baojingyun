@@ -90,6 +90,10 @@ onMounted(async () => {
   if (!auth.user) {
     await auth.loadProfile().catch(() => {})
   }
+  if (auth.user?.role === 'salesperson') {
+    router.replace({ name: 'agent-portal' })
+    return
+  }
   loadMessageCount()
   loadLinkedAccounts()
 })
