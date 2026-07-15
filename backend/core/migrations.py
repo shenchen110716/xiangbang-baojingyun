@@ -1,3 +1,4 @@
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 
@@ -42,3 +43,21 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     if "document_name" not in policy_columns: s.connection().exec_driver_sql("ALTER TABLE policies ADD COLUMN document_name VARCHAR(200) DEFAULT ''")
     ledger_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(ledger_entries)")}
     if "account_id" not in ledger_columns: s.connection().exec_driver_sql("ALTER TABLE ledger_entries ADD COLUMN account_id INTEGER")
+
+
+def migrate_premium_balances(s: Session) -> None:
+    # SYSTEM-DESIGN-V4.md 之外的补充设计（保司分账户充值 spec）：Enterprise.
+    # premium_balance 停止读写，历史余额一次性回填到一个占位 InsurerAccount
+    # 下，之后由管理员在后台手动改配到具体保司账户。幂等：已经有
+    # EnterprisePremiumAccount 记录的企业跳过，可以在每次启动时安全重跑。
+    from ..models import Enterprise, EnterprisePremiumAccount, InsurerAccount
+
+    placeholder = s.scalar(select(InsurerAccount).where(InsurerAccount.label == "未分类（历史余额）"))
+    for enterprise in s.scalars(select(Enterprise).where(Enterprise.premium_balance != 0)):
+        if s.scalar(select(EnterprisePremiumAccount).where(EnterprisePremiumAccount.enterprise_id == enterprise.id)):
+            continue
+        if not placeholder:
+            placeholder = InsurerAccount(label="未分类（历史余额）", bank_name="", account_no="", account_holder="", status="paused")
+            s.add(placeholder); s.flush()
+        s.add(EnterprisePremiumAccount(enterprise_id=enterprise.id, account_id=placeholder.id, balance=enterprise.premium_balance))
+    s.commit()

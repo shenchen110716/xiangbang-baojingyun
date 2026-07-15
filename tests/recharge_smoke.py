@@ -13,6 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from backend.core.migrations import migrate_premium_balances
+
 
 def run():
     with tempfile.TemporaryDirectory(prefix="xbb-recharge-smoke-") as folder:
@@ -48,6 +50,21 @@ def run():
             session.add(entry); session.commit()
             reloaded = session.scalar(select(LedgerEntry).where(LedgerEntry.id == entry.id))
             assert reloaded.account_id == account.id
+
+            from backend.models import Enterprise
+            legacy_enterprise = Enterprise(name="历史余额企业", kind="企业", contact="", phone="", status="active", premium_balance=88.0)
+            session.add(legacy_enterprise); session.commit(); session.refresh(legacy_enterprise)
+
+            migrate_premium_balances(session)
+            migrated = session.scalar(select(EnterprisePremiumAccount).where(EnterprisePremiumAccount.enterprise_id == legacy_enterprise.id))
+            assert migrated is not None and migrated.balance == 88.0
+            placeholder_account = session.get(InsurerAccount, migrated.account_id)
+            assert placeholder_account.label == "未分类（历史余额）"
+
+            # idempotent: running it again must not create a second row
+            migrate_premium_balances(session)
+            count = len(session.scalars(select(EnterprisePremiumAccount).where(EnterprisePremiumAccount.enterprise_id == legacy_enterprise.id)).all())
+            assert count == 1
 
     print("recharge smoke: ok")
 

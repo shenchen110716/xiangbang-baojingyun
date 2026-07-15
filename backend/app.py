@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .core.config import ROOT, DATABASE_URL
 from .core.db import Base, engine, SessionLocal
-from .core.migrations import run_sqlite_bridge_migrations
+from .core.migrations import run_sqlite_bridge_migrations, migrate_premium_balances
 from .core.seed import seed_default_accounts
 
 app = FastAPI(title="响帮帮保经云 API", version="3.6.0")
@@ -29,6 +29,7 @@ def startup():
     with SessionLocal() as s:
         run_sqlite_bridge_migrations(s, DATABASE_URL)
         seed_default_accounts(s)
+        migrate_premium_balances(s)
 
 
 from .routers.health import router as health_router
