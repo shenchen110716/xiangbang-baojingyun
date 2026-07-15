@@ -14,6 +14,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.core.migrations import migrate_premium_balances
+from backend.services.recharge import (
+    resolve_account_for_insurer, insurers_for_account, insurer_account_dict,
+    get_or_create_premium_account, premium_accounts_for_enterprise,
+)
 
 
 def run():
@@ -65,6 +69,24 @@ def run():
             migrate_premium_balances(session)
             count = len(session.scalars(select(EnterprisePremiumAccount).where(EnterprisePremiumAccount.enterprise_id == legacy_enterprise.id)).all())
             assert count == 1
+
+            second_link = InsurerAccountLink(insurer="第二保司", account_id=account.id)
+            session.add(second_link); session.commit()
+
+            resolved = resolve_account_for_insurer(session, "测试保司")
+            assert resolved is not None and resolved.id == account.id
+
+            names = insurers_for_account(session, account.id)
+            assert set(names) == {"测试保司", "第二保司"}
+
+            account_payload = insurer_account_dict(account, session)
+            assert set(account_payload["insurers"]) == {"测试保司", "第二保司"}
+
+            fetched_again = get_or_create_premium_account(session, 1, account.id)
+            assert fetched_again.id == premium_account.id  # get_or_create must not duplicate
+
+            rows = premium_accounts_for_enterprise(session, 1)
+            assert len(rows) == 1 and rows[0]["balance"] == 100.0 and set(rows[0]["insurers"]) == {"测试保司", "第二保司"}
 
     print("recharge smoke: ok")
 

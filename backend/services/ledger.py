@@ -18,12 +18,17 @@ def post_ledger_entry(
     business_id: str = "",
     user: Optional[User] = None,
     idempotency_key: str = "",
+    account_id: Optional[int] = None,
 ) -> LedgerEntry:
     # Caller is responsible for updating enterprise.premium_balance /
     # enterprise.usage_balance and calling session.commit() in the SAME
     # transaction as this insert — that's what keeps the cached balance
     # (BalanceSnapshot) and the ledger from drifting apart. See
     # reconcile_enterprise_ledger() below for the periodic cross-check.
+    #
+    # account_id (added for the insurer-scoped recharge feature) records
+    # which InsurerAccount a premium-type entry belongs to; usage-type
+    # entries leave it None since the usage account is not insurer-scoped.
     entry = LedgerEntry(
         enterprise_id=enterprise.id,
         account=account,
@@ -33,6 +38,7 @@ def post_ledger_entry(
         business_id=business_id,
         idempotency_key=idempotency_key,
         created_by=user.id if user else None,
+        account_id=account_id,
     )
     session.add(entry)
     return entry
