@@ -29,6 +29,8 @@ def run():
         from backend.models import InsuredPerson, WorkPosition
         from backend.routers.insured import add_person, insured_status
         from backend.schemas import PersonIn
+        from backend.models import EnterprisePremiumAccount, InsurerAccount, InsurerAccountLink
+        from backend.services import scan_premium_shortfalls
 
         startup()
         with SessionLocal() as session:
@@ -91,6 +93,35 @@ def run():
                 assert False, "expected 403 for unfunded enterprise on status change"
             except HTTPException as e:
                 assert e.status_code == 403
+
+            # scan_premium_shortfalls: creates a pending record for a shortfall account
+            scan_account = InsurerAccount(label="扫描测试账户", bank_name="", account_no="", account_holder="", status="active")
+            session.add(scan_account); session.commit(); session.refresh(scan_account)
+            scan_link = InsurerAccountLink(insurer="扫描测试保司", account_id=scan_account.id)
+            session.add(scan_link); session.commit()
+            scan_ent = Enterprise(name="扫描测试企业", kind="企业", contact="", phone="", status="active")
+            session.add(scan_ent); session.commit(); session.refresh(scan_ent)
+            shortfall = EnterprisePremiumAccount(enterprise_id=scan_ent.id, account_id=scan_account.id, balance=-10.0)
+            session.add(shortfall); session.commit()
+
+            created_1 = scan_premium_shortfalls(session, enterprise_id=scan_ent.id)
+            assert len(created_1) == 1, created_1
+            assert created_1[0].affected_insurers == "扫描测试保司"
+            assert created_1[0].status == "pending"
+
+            # idempotent: scanning again does not create a duplicate
+            created_2 = scan_premium_shortfalls(session, enterprise_id=scan_ent.id)
+            assert created_2 == [], "must not create a duplicate pending record"
+            still_one_pending = session.scalar(select(PendingTermination).where(PendingTermination.enterprise_id == scan_ent.id, PendingTermination.status == "pending"))
+            assert still_one_pending is not None
+
+            # auto-dismiss: recharging the account clears the pending record without admin action
+            shortfall.balance = 50.0
+            session.commit()
+            created_3 = scan_premium_shortfalls(session, enterprise_id=scan_ent.id)
+            assert created_3 == []
+            dismissed = session.scalar(select(PendingTermination).where(PendingTermination.enterprise_id == scan_ent.id))
+            assert dismissed.status == "dismissed" and dismissed.dismissed_at is not None
 
     print("participation lock smoke: ok")
 
