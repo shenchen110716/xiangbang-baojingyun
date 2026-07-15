@@ -1,5 +1,5 @@
 import { client } from './client'
-import type { Agent, AgentCommission } from './types'
+import type { Agent, AgentCommission, AgentMeResponse } from './types'
 
 export function listAgents() {
   return client.get<Agent[]>('/agents').then((r) => r.data)
@@ -31,4 +31,8 @@ export function updateAgentCommission(id: number, data: Partial<AgentCommission>
 
 export function deleteAgentCommission(id: number) {
   return client.delete<{ ok: boolean }>(`/agent-commissions/${id}`).then((r) => r.data)
+}
+
+export function getMyCommissions() {
+  return client.get<AgentMeResponse>('/agents/me').then((r) => r.data)
 }

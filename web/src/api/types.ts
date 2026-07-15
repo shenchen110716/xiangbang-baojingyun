@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'enterprise'
+export type Role = 'admin' | 'enterprise' | 'salesperson'
 
 export interface User {
   id: number
@@ -277,6 +277,16 @@ export interface AgentCommission extends Partial<PricingSnapshot> {
   accrued_person_count?: number
   accrual_as_of?: string
   created_at: string
+}
+
+export interface AgentMeResponse {
+  summary: {
+    enterprise_count: number
+    product_count: number
+    insured_count: number
+    total_commission: number
+  }
+  rows: AgentCommission[]
 }
 
 export interface Agent {
