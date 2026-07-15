@@ -3,6 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..models import EnterprisePremiumAccount, InsuredPerson, InsurerAccountLink, PendingTermination
+from .notify import notify_enterprise
 
 
 def scan_premium_shortfalls(session: Session, enterprise_id: int | None = None) -> list[PendingTermination]:
@@ -70,4 +71,10 @@ def scan_premium_shortfalls(session: Session, enterprise_id: int | None = None) 
     session.commit()
     for item in created:
         session.refresh(item)
+        notify_enterprise(
+            session,
+            item.enterprise_id,
+            "premium_shortfall_warning",
+            {"insurers": item.affected_insurers, "affected_count": item.affected_count},
+        )
     return created

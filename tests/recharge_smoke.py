@@ -198,6 +198,7 @@ def run():
             position_b = add_position(PositionIn(enterprise_id=enterprise_id, actual_employer_id=shared_employer["id"], actual_employer=shared_employer["name"], name="共享账户岗位B", occupation_class="1-3类", plan_id=plan_b["id"]), admin, session)
             session.get(WorkPosition, position_a["id"]).status = "approved"
             session.get(WorkPosition, position_b["id"]).status = "approved"
+            enterprise.usage_balance = 1000.0
             session.commit()
 
             person_a = add_person(PersonIn(enterprise_id=enterprise_id, name="共享账户员工A", id_number="340123199001019993", position_id=position_a["id"]), admin, session)

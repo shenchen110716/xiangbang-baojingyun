@@ -15,7 +15,7 @@ from ..core.file_tokens import make_download_token, verify_download_token
 from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import Enterprise, RechargeRequest, User
-from ..services import get_or_create_premium_account, post_ledger_entry, resolve_account_for_insurer, serialize
+from ..services import get_or_create_premium_account, notify_enterprise, post_ledger_entry, resolve_account_for_insurer, serialize
 
 router = APIRouter(prefix="/api", tags=["recharge-requests"])
 
@@ -92,6 +92,7 @@ def confirm_recharge_request(item_id: int, user: User = Depends(current_user), s
         post_ledger_entry(session, enterprise, "usage", "credit", item.amount, "recharge_request", str(item.id), user)
     item.status = "confirmed"; item.confirmed_by = user.id; item.confirmed_at = business_now()
     session.commit(); audit(session, user, "confirm", "recharge_request", str(item.id))
+    notify_enterprise(session, item.enterprise_id, "recharge_confirmed", {"amount": item.amount, "account_type": item.account_type})
     return _recharge_dict(item, session)
 
 
@@ -103,6 +104,7 @@ def reject_recharge_request(item_id: int, reason: str = Query(...), user: User =
     if not reason.strip(): raise HTTPException(400, "驳回时必须填写原因")
     item.status = "rejected"; item.reject_reason = reason.strip(); item.confirmed_by = user.id; item.confirmed_at = business_now()
     session.commit(); audit(session, user, "reject", "recharge_request", str(item.id), reason)
+    notify_enterprise(session, item.enterprise_id, "recharge_rejected", {"amount": item.amount, "reason": reason.strip()})
     return _recharge_dict(item, session)
 
 

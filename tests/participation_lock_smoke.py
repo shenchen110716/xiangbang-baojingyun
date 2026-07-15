@@ -26,11 +26,12 @@ def run():
 
         from backend.app import startup
         from backend.core.db import SessionLocal
-        from backend.models import Enterprise, PendingTermination, User
+        from backend.models import Enterprise, PendingTermination, RechargeRequest, User
         from backend.services import require_usage_funded
         from backend.models import InsuredPerson, WorkPosition
         from backend.routers.insured import add_person, insured_status
         from backend.routers.pending_terminations import confirm_pending_termination, pending_terminations as list_pending_terminations
+        from backend.routers.recharge_requests import confirm_recharge_request, reject_recharge_request
         from backend.schemas import PersonIn
         from backend.models import EnterprisePremiumAccount, InsurerAccount, InsurerAccountLink
         from backend.models import AuditLog
@@ -267,6 +268,56 @@ def run():
                 assert False, "expected 400 for re-confirming an already processed task"
             except HTTPException as error:
                 assert error.status_code == 400
+
+            # All four business trigger families call notify_enterprise with
+            # stable templates and params. Usage locking is deduplicated once
+            # per business day; scanning notifies only newly-created tasks.
+            trigger_calls = []
+
+            def record_trigger(trigger_session, enterprise_id, template_name, template_params):
+                trigger_calls.append((enterprise_id, template_name, template_params))
+
+            lock_notify_ent = Enterprise(name="锁定短信企业", kind="企业", contact="", phone="", status="active", usage_balance=0.0)
+            session.add(lock_notify_ent); session.commit(); session.refresh(lock_notify_ent)
+            with patch("backend.services.participation_lock.notify_enterprise", side_effect=record_trigger):
+                for _ in range(2):
+                    try:
+                        require_usage_funded(session, lock_notify_ent, admin_user)
+                    except HTTPException as error:
+                        assert error.status_code == 403
+            assert [call[1] for call in trigger_calls].count("usage_locked") == 1, trigger_calls
+
+            warning_ent = Enterprise(name="保费预警短信企业", kind="企业", contact="", phone="", status="active")
+            warning_account = InsurerAccount(label="保费预警短信账户", bank_name="", account_no="", account_holder="", status="active")
+            session.add_all([warning_ent, warning_account]); session.commit(); session.refresh(warning_ent); session.refresh(warning_account)
+            session.add(InsurerAccountLink(insurer="保费预警短信保司", account_id=warning_account.id))
+            session.add(EnterprisePremiumAccount(enterprise_id=warning_ent.id, account_id=warning_account.id, balance=-1.0)); session.commit()
+            with patch("backend.services.termination_scan.notify_enterprise", side_effect=record_trigger):
+                warning_created = scan_premium_shortfalls(session, warning_ent.id)
+                assert len(warning_created) == 1
+                assert scan_premium_shortfalls(session, warning_ent.id) == []
+            assert [call[1] for call in trigger_calls].count("premium_shortfall_warning") == 1
+
+            confirm_sms_ent = Enterprise(name="停保确认短信企业", kind="企业", contact="", phone="", status="active")
+            confirm_sms_account = InsurerAccount(label="停保确认短信账户", bank_name="", account_no="", account_holder="", status="active")
+            session.add_all([confirm_sms_ent, confirm_sms_account]); session.commit(); session.refresh(confirm_sms_ent); session.refresh(confirm_sms_account)
+            session.add(InsurerAccountLink(insurer="停保确认短信保司", account_id=confirm_sms_account.id))
+            session.add(EnterprisePremiumAccount(enterprise_id=confirm_sms_ent.id, account_id=confirm_sms_account.id, balance=-1.0)); session.commit()
+            confirm_sms_pending = scan_premium_shortfalls(session, confirm_sms_ent.id)[0]
+            with patch("backend.routers.pending_terminations.notify_enterprise", side_effect=record_trigger):
+                confirm_pending_termination(confirm_sms_pending.id, admin_user, session)
+            assert [call[1] for call in trigger_calls].count("termination_confirmed") == 1
+
+            recharge_ent = Enterprise(name="充值短信企业", kind="企业", contact="", phone="", status="active")
+            session.add(recharge_ent); session.commit(); session.refresh(recharge_ent)
+            confirm_request = RechargeRequest(enterprise_id=recharge_ent.id, account_type="usage", amount=10.0, status="pending", created_by=admin_user.id)
+            reject_request = RechargeRequest(enterprise_id=recharge_ent.id, account_type="usage", amount=20.0, status="pending", created_by=admin_user.id)
+            session.add_all([confirm_request, reject_request]); session.commit(); session.refresh(confirm_request); session.refresh(reject_request)
+            with patch("backend.routers.recharge_requests.notify_enterprise", side_effect=record_trigger):
+                confirm_recharge_request(confirm_request.id, admin_user, session)
+                reject_recharge_request(reject_request.id, "凭证不清晰", admin_user, session)
+            assert [call[1] for call in trigger_calls].count("recharge_confirmed") == 1
+            assert [call[1] for call in trigger_calls].count("recharge_rejected") == 1
 
     print("participation lock smoke: ok")
 

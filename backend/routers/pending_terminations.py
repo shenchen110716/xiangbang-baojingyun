@@ -8,7 +8,7 @@ from ..core.db import db
 from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import InsuredPerson, PendingTermination, User
-from ..services import serialize, terminate_person_policy
+from ..services import notify_enterprise, serialize, terminate_person_policy
 
 router = APIRouter(prefix="/api", tags=["pending-terminations"])
 
@@ -55,4 +55,10 @@ def confirm_pending_termination(
     item.confirmed_at = terminated_at
     session.commit()
     audit(session, user, "confirm", "pending_termination", str(item.id), f"terminated={len(affected)}")
+    notify_enterprise(
+        session,
+        item.enterprise_id,
+        "termination_confirmed",
+        {"insurers": item.affected_insurers, "terminated_count": len(affected)},
+    )
     return {**serialize(item), "terminated_count": len(affected)}
