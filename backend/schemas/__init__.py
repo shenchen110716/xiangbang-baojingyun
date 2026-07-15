@@ -11,7 +11,7 @@ from .insured import PersonIn, PersonUpdate, BulkPersonRow, BulkPersonIn
 from .claim import (
     ClaimIn, ClaimUpdate, ClaimStatusIn, ClaimDocumentIn, ClaimDocumentReviewIn,
 )
-from .finance import PaymentIn, PaymentCallbackIn, InvoiceIn, InvoiceUpdate
+from .finance import PaymentIn, PaymentCallbackIn, InvoiceIn, InvoiceUpdate, InsurerAccountIn, InsurerAccountUpdate, InsurerAccountLinkIn
 from .notification import NotificationIn
 
 __all__ = [
@@ -24,6 +24,6 @@ __all__ = [
     "PlanTierIn", "PlanIn", "PlanUpdate",
     "PersonIn", "PersonUpdate", "BulkPersonRow", "BulkPersonIn",
     "ClaimIn", "ClaimUpdate", "ClaimStatusIn", "ClaimDocumentIn", "ClaimDocumentReviewIn",
-    "PaymentIn", "PaymentCallbackIn", "InvoiceIn", "InvoiceUpdate",
+    "PaymentIn", "PaymentCallbackIn", "InvoiceIn", "InvoiceUpdate", "InsurerAccountIn", "InsurerAccountUpdate", "InsurerAccountLinkIn",
     "NotificationIn",
 ]
