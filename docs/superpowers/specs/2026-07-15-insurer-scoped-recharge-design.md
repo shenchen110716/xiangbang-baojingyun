@@ -40,19 +40,36 @@
 
 ## 数据模型
 
+### 账户池化模型（重要：账户与保司是多对一，不是一对一）
+
+现实中会出现"几个保司共用同一个收款账户"的情况——比如同一家经纪公司代收多家中小保司的保费，都走同一个结算账户。这种情况下，余额天然是按账户池化的，不是按保司分别计算的：企业转一笔钱进这个账户，覆盖的是该账户名下所有保司的欠费，而不是需要企业自己把一笔钱拆成好几份分别对应每个保司。
+
+因此模型以 **账户（`InsurerAccount`）为主体**，`保司 → 账户` 是多对一映射（一个保司同一时间只能绑定一个账户，一个账户可以被多个保司绑定）：
+
 ### `InsurerAccount`（新增，admin 管理）
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | int, PK | |
-| insurer | string(100) | 对应 `InsurancePlan.insurer` |
+| label | string(100) | 账户备注名，如"平安/太平洋共用账户"，方便管理员识别 |
 | bank_name | string(100) | 开户行 |
 | account_no | string(60) | 银行账号 |
 | account_holder | string(100) | 账户名称 |
 | status | string(20) | active / paused |
 | created_at | datetime | |
 
-同一 `insurer` 只允许一条 `active` 记录（唯一性通过应用层校验，不加数据库唯一约束，参照本系统其它地方"暂停旧的、新增新的"的惯例）。
+### `InsurerAccountLink`（新增，admin 管理）
+
+保司名到收款账户的映射，多个保司可以指向同一个账户。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | int, PK | |
+| insurer | string(100) | 对应 `InsurancePlan.insurer` |
+| account_id | int, FK → InsurerAccount | |
+| created_at | datetime | |
+
+同一 `insurer` 只允许一条有效映射（应用层校验：新增映射前若该 insurer 已有映射，先要求管理员显式改掉旧的，避免一个保司同时挂在两个账户上导致余额判断歧义）。
 
 ### `EnterprisePremiumAccount`（新增）
 
@@ -60,19 +77,22 @@
 |---|---|---|
 | id | int, PK | |
 | enterprise_id | int, FK → enterprises | |
-| insurer | string(100) | |
+| account_id | int, FK → InsurerAccount | |
 | balance | float, default 0 | |
 
-`(enterprise_id, insurer)` 唯一。首次充值或首次消费预测时惰性创建（`get_or_create` 模式，参照 `_find_or_create_policy` 的既有写法）。
+`(enterprise_id, account_id)` 唯一——余额挂在"企业 + 账户"上，不是"企业 + 保司"，所以共用账户的保司自然共享同一笔余额。首次充值或首次消费预测时惰性创建（`get_or_create` 模式，参照 `_find_or_create_policy` 的既有写法）。
 
 ### `RechargeRequest`（新增）
+
+企业端选的是"保司"（这是他们实际认识的东西，账户是后台概念），提交时后端立刻按 `InsurerAccountLink` 解析出 `account_id` 存下来，充值确认时钱直接进那个账户的池子，跟企业选的是保司 A 还是保司 B（只要 A、B 共用账户）没有区别——这就是"金额不拆分，只判断一个账户余额是否够"的实现方式。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | int, PK | |
 | enterprise_id | int, FK | |
 | account_type | string(20) | premium / usage |
-| insurer | string(100), nullable | account_type=usage 时为 null |
+| insurer | string(100), nullable | 企业提交时选择的保司，仅用于展示/审计，account_type=usage 时为 null |
+| account_id | int, FK → InsurerAccount, nullable | 提交时由 `insurer` 解析得出，account_type=usage 时为 null |
 | amount | float | |
 | receipt_file_url | string(255) | 复用现有 uploads 短期签名下载模式（参照 `保单文件`/`claim document` 的做法） |
 | status | string(20) | pending / confirmed / rejected |
@@ -84,17 +104,18 @@
 
 ### `LedgerEntry`
 
-新增可空字段 `insurer: string(100), nullable`。premium 类型条目记录对应保司；usage 类型条目留空。`account` 字段仍是 `premium`/`usage`，语义不变。
+新增可空字段 `account_id: int, FK → InsurerAccount, nullable`。premium 类型条目记录对应账户；usage 类型条目留空。`account` 字段仍是 `premium`/`usage`，语义不变（这是"账户类型"，跟新的 `account_id` "具体哪个收款账户"是两个维度，命名上容易混，实现时用 `account_type`/`account_id` 两个不同字段名区分，避免混淆）。
 
 ### `PendingTermination`（新增）
 
-保费余额耗尽时，惰性扫描生成的待处理停保任务。
+保费余额耗尽时，惰性扫描生成的待处理停保任务，按账户池化——一个账户没钱了，挂在它上面的所有保司、所有在保人员都算受影响范围。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | int, PK | |
 | enterprise_id | int, FK | |
-| insurer | string(100) | |
+| account_id | int, FK → InsurerAccount | |
+| affected_insurers | string(255) | 该账户名下受影响的保司名，逗号分隔，供管理员快速了解范围 |
 | affected_count | int | 检测到时受影响的在保人数（快照，供管理员评估影响） |
 | status | string(20) | pending / confirmed / dismissed |
 | confirmed_by | int, FK → users, nullable | |
@@ -102,35 +123,38 @@
 | dismissed_at | datetime, nullable | 因企业及时充值而自动失效时写入 |
 | created_at | datetime | |
 
-`(enterprise_id, insurer, status='pending')` 同时只允许一条——扫描时如果已存在未处理的 pending 记录就不重复创建，避免管理员看到一堆重复任务。
+`(enterprise_id, account_id, status='pending')` 同时只允许一条——扫描时如果已存在未处理的 pending 记录就不重复创建，避免管理员看到一堆重复任务。
 
 ### `Enterprise.premium_balance` 的处理
 
 保留字段本身（历史数据字段，不删列，避免破坏性迁移），但**停止读写**：
 
-- 迁移脚本：为每个 `premium_balance != 0` 的企业创建一条 `EnterprisePremiumAccount(enterprise_id, insurer="未分类（历史余额）", balance=premium_balance)`，之后由管理员手动在后台把这笔历史余额拆分/改配到具体保司（改 `insurer` 字段值即可，不需要专门的拆分工具）。
-- 迁移后，所有读取入口（dashboard、报表、余额预警）改为从 `EnterprisePremiumAccount` 按企业 `SUM(balance)` 或按保司分组读取，不再读 `Enterprise.premium_balance` 列。
+- 迁移脚本：新建一个占位 `InsurerAccount(label="未分类（历史余额）", ...)`，为每个 `premium_balance != 0` 的企业创建一条 `EnterprisePremiumAccount(enterprise_id, account_id=占位账户, balance=premium_balance)`，之后由管理员手动在后台把这笔历史余额改配到具体账户（改 `account_id` 字段值即可，不需要专门的拆分工具）。
+- 迁移后，所有读取入口（dashboard、报表、余额预警）改为从 `EnterprisePremiumAccount` 按企业 `SUM(balance)` 或按账户分组读取，不再读 `Enterprise.premium_balance` 列。
 - `usage_balance` 不受影响，继续用 `Enterprise.usage_balance`。
 
 ## API 设计
 
 ### 收款账户管理（admin only）
 
-- `GET /api/insurer-accounts` — 列表
-- `POST /api/insurer-accounts` — 新增
+- `GET /api/insurer-accounts` — 列表，每条附带该账户当前绑定的保司名列表（join `InsurerAccountLink`）
+- `POST /api/insurer-accounts` — 新增账户
 - `PATCH /api/insurer-accounts/{id}` — 编辑/暂停
+- `GET /api/insurer-account-links` — 保司 → 账户映射列表
+- `POST /api/insurer-account-links` — 新增映射（若该保司已有映射，先报错要求先处理旧映射，避免歧义）
+- `DELETE /api/insurer-account-links/{id}` — 解绑（不影响已产生的历史余额/流水，只影响以后新提交的充值往哪个账户解析）
 
 ### 充值申请
 
-- `POST /api/recharge-requests` — 企业或管理员发起（企业只能填自己的 `enterprise_id`，与现有 `require_role("admin", "enterprise", ...)` 模式一致）。请求体：`account_type`, `insurer`(可选), `amount`, `receipt_file`（multipart）。校验：`account_type=premium` 时 `insurer` 必填且对应一条 `active` 的 `InsurerAccount`；金额 > 0。
+- `POST /api/recharge-requests` — 企业或管理员发起（企业只能填自己的 `enterprise_id`，与现有 `require_role("admin", "enterprise", ...)` 模式一致）。请求体：`account_type`, `insurer`(可选), `amount`, `receipt_file`（multipart）。校验：`account_type=premium` 时 `insurer` 必填且在 `InsurerAccountLink` 中有对应的 `active` 账户，后端据此解析出 `account_id` 一并存下；金额 > 0。
 - `GET /api/recharge-requests` — 列表，企业角色只看自己的，管理员看全部（复用现有 `user.role=="enterprise"` 过滤惯例）；支持 `status` 筛选。
-- `PATCH /api/recharge-requests/{id}/confirm` — admin only。写 `LedgerEntry`（credit）+ 更新 `EnterprisePremiumAccount.balance` 或 `Enterprise.usage_balance` + `status=confirmed`，事务内完成（参照现有 `recharge_enterprise` 的写法）。
+- `PATCH /api/recharge-requests/{id}/confirm` — admin only。写 `LedgerEntry`（credit）+ 更新 `EnterprisePremiumAccount(enterprise_id, account_id).balance` 或 `Enterprise.usage_balance` + `status=confirmed`，事务内完成（参照现有 `recharge_enterprise` 的写法）。
 - `PATCH /api/recharge-requests/{id}/reject` — admin only，需要 `reason`，不动余额。
 
 ### 余额查询
 
-- `GET /api/enterprises/{id}/premium-accounts` — 该企业按保司拆分的余额列表（企业本人 + admin 可查）。
-- `GET /api/dashboard` 现有响应体调整：`premium_balance` 改为按保司拆分的数组 `premium_accounts: [{insurer, balance, days_left}]`，而不是单一汇总数字（admin 视角为跨企业按保司汇总）。`balance_alerts` 的计算逻辑同步增加 `insurer` 维度（当前按 `('premium', balance, daily)` 二元组遍历，改为对每个 `EnterprisePremiumAccount` 行分别计算 days_left）。
+- `GET /api/enterprises/{id}/premium-accounts` — 该企业按账户拆分的余额列表，每条附带该账户名下的保司名列表（企业本人 + admin 可查）。
+- `GET /api/dashboard` 现有响应体调整：`premium_balance` 改为按账户拆分的数组 `premium_accounts: [{account_id, label, insurers: [...], balance, days_left}]`，而不是单一汇总数字（admin 视角为跨企业按账户汇总）。`balance_alerts` 的计算逻辑同步增加 `account_id` 维度（当前按 `('premium', balance, daily)` 二元组遍历，改为对每个 `EnterprisePremiumAccount` 行分别计算 days_left）。
 
 ### 旧接口
 
@@ -143,12 +167,12 @@
 ### 保费不足 → 待确认停保任务
 
 - 惰性扫描函数 `scan_premium_shortfalls(session, enterprise_id=None)`：遍历 `EnterprisePremiumAccount` 中 `balance <= 0` 的行，对每一行：
-  - 若已存在同 `(enterprise_id, insurer)` 的 `pending` `PendingTermination`，跳过。
-  - 若不存在，统计该 `(enterprise_id, insurer)` 下当前 `active` 的 `InsuredPerson` 数量，创建一条 `pending` 记录，触发预警短信（见下）。
+  - 若已存在同 `(enterprise_id, account_id)` 的 `pending` `PendingTermination`，跳过。
+  - 若不存在，找出该账户名下所有保司（`InsurerAccountLink`），统计该企业在这些保司名下当前 `active` 的 `InsuredPerson` 总数，创建一条 `pending` 记录（`affected_insurers` 记录保司名列表），触发预警短信（见下）。
   - 若存在 `pending` 记录但对应账户余额已经 > 0（企业充值了），把该记录标为 `dismissed`，不发短信（静默撤销，按确认过的方案）。
 - 触发点：`GET /api/dashboard`（admin 视角）和 `GET /api/pending-terminations` 页面加载时调用一次（企业规模小，全量扫描成本可忽略；若后续企业数变大，可以只扫 `scoped` 范围）。
 - `GET /api/pending-terminations` — admin only，列出所有 `pending` 任务。
-- `POST /api/pending-terminations/{id}/confirm` — admin only。找出该 `(enterprise_id, insurer)` 下所有 `active` 的 `InsuredPerson`，对每个人调用既有的 `terminate_person_policy(session, person, terminated_at=business_now())`（立即停保，不走"最早可停保时间"那套面向自愿停保设计的规则——这是被动断保，不是主动选择停保时间），并把 `person.status` 置为 `stopped`；`PendingTermination.status=confirmed`。触发短信通知（见下）。
+- `POST /api/pending-terminations/{id}/confirm` — admin only。找出该账户名下所有保司、这些保司下该企业所有 `active` 的 `InsuredPerson`，对每个人调用既有的 `terminate_person_policy(session, person, terminated_at=business_now())`（立即停保，不走"最早可停保时间"那套面向自愿停保设计的规则——这是被动断保，不是主动选择停保时间），并把 `person.status` 置为 `stopped`；`PendingTermination.status=confirmed`。触发短信通知（见下）。
 - 手动"驳回/忽略"暂不做——按确认过的方案，唯一的清除路径是充值后自动 dismiss；如果管理员判断不该停保，正确操作是先协调企业充值，而不是在系统里强行忽略一个真实的欠费状态。
 
 ### 短信通知
@@ -169,16 +193,16 @@
 
 ### 企业端（web）
 
-- 新页面「账户充值」：选账户类型 → （premium 时）选保司 → 显示该保司收款账户信息（可复制）→ 填金额 → 上传回单 → 提交。提交后展示自己的充值记录列表（状态：待确认/已到账/已驳回，驳回显示原因）。
-- `HomeView.vue`：原来的单一"保费账户余额" `StatTile` 改成按保司的小列表（每行：保司名、余额、预计可用天数），任一账户进入 warning/critical 时该行高亮并附「去充值」按钮，跳转到充值页并预选该保司。
-- `ScreenView.vue`：新增一块余额健康度展示——企业角色显示自己按保司的余额条；admin 角色显示全平台低余额账户数量（复用 dashboard 已有的 `balance_alerts` 聚合，不重新计算）。
+- 新页面「账户充值」：选账户类型 → （premium 时）选保司 → 显示该保司对应的收款账户信息（可复制；如果该账户还绑定了其他保司，附一句提示"该账户同时用于 XX、XX 保司"，避免企业困惑为什么账户名和自己选的保司对不上）→ 填金额 → 上传回单 → 提交。提交后展示自己的充值记录列表（状态：待确认/已到账/已驳回，驳回显示原因）。
+- `HomeView.vue`：原来的单一"保费账户余额" `StatTile` 改成按账户的小列表（每行：账户标签/保司名列表、余额、预计可用天数），任一账户进入 warning/critical 时该行高亮并附「去充值」按钮，跳转到充值页并预选该账户下任一保司。
+- `ScreenView.vue`：新增一块余额健康度展示——企业角色显示自己按账户的余额条；admin 角色显示全平台低余额账户数量（复用 dashboard 已有的 `balance_alerts` 聚合，不重新计算）。
 - 参停保相关操作（新增员工、参保、停保）如果后端返回使用费不足的 403，前端统一拦截显示一个明显的提示条/弹窗（"使用费余额不足，功能已锁定，请先充值"），带直达充值页的按钮，而不是让每个按钮各自弹一个普通错误 toast。
 
 ### 平台端（web，admin only）
 
-- 「保险公司」页（`PlansAdminView.vue`）新增一个 tab 或独立小模块管理 `InsurerAccount`（增/改/暂停）。
+- 「保险公司」页（`PlansAdminView.vue`）新增一个 tab 或独立小模块管理 `InsurerAccount`（增/改/暂停）+ `InsurerAccountLink`（哪些保司绑定这个账户）。
 - 新增「充值审核」页面（或挂在现有资金相关导航下）：待确认列表，点开看回单大图、确认/驳回操作。
-- 新增「待处理停保」页面：列出 `PendingTermination`，显示企业名、保司、受影响人数，点开可看具体人员名单，「确认停保」按钮需要二次确认弹窗（这是会真实停掉一批人保障的操作）。
+- 新增「待处理停保」页面：列出 `PendingTermination`，显示企业名、账户（附受影响的保司名列表）、受影响人数，点开可看具体人员名单，「确认停保」按钮需要二次确认弹窗（这是会真实停掉一批人保障的操作）。
 - `HomeView.vue`（admin 视角）新增一个"待处理停保"数量提示，跟现有"待处理理赔"`StatTile` 并列。
 
 ## 错误处理
