@@ -2,6 +2,8 @@ package com.xbb.baojing.common;
 
 import com.xbb.baojing.enterprise.Enterprise;
 import com.xbb.baojing.enterprise.EnterpriseMapper;
+import com.xbb.baojing.recharge.InsurerAccount;
+import com.xbb.baojing.recharge.RechargeService;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -22,12 +24,15 @@ public class StartupSeeder implements CommandLineRunner {
     private final EnterpriseMapper enterpriseMapper;
     private final PasswordEncoder passwordEncoder;
     private final AppProperties props;
+    private final RechargeService rechargeService;
 
-    public StartupSeeder(UserMapper userMapper, EnterpriseMapper enterpriseMapper, PasswordEncoder passwordEncoder, AppProperties props) {
+    public StartupSeeder(UserMapper userMapper, EnterpriseMapper enterpriseMapper, PasswordEncoder passwordEncoder,
+                          AppProperties props, RechargeService rechargeService) {
         this.userMapper = userMapper;
         this.enterpriseMapper = enterpriseMapper;
         this.passwordEncoder = passwordEncoder;
         this.props = props;
+        this.rechargeService = rechargeService;
     }
 
     @Override
@@ -75,6 +80,22 @@ public class StartupSeeder implements CommandLineRunner {
                     userMapper.update(owner);
                 }
             }
+        }
+
+        migratePremiumBalances();
+    }
+
+    /** Ports backend/core/migrations.py::migrate_premium_balances — Enterprise.premiumBalance
+     * stops being read/written; any legacy nonzero balance is backfilled once into a shared
+     * placeholder InsurerAccount so it isn't silently lost. Idempotent: enterprises that
+     * already have EnterprisePremiumAccount rows are skipped, safe to rerun every startup. */
+    private void migratePremiumBalances() {
+        InsurerAccount placeholder = null;
+        for (Enterprise enterprise : enterpriseMapper.search(null, null, null)) {
+            if (enterprise.getPremiumBalance() == 0) continue;
+            if (rechargeService.hasPremiumAccounts(enterprise.getId())) continue;
+            if (placeholder == null) placeholder = rechargeService.getOrCreatePlaceholderAccount();
+            rechargeService.seedLegacyBalance(enterprise.getId(), placeholder.getId(), enterprise.getPremiumBalance());
         }
     }
 }

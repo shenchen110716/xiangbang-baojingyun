@@ -9,14 +9,14 @@ import java.util.List;
 public interface LedgerMapper {
     String COLS = "l.id, l.enterprise_id as enterpriseId, l.account, l.direction, l.amount, l.business_type as businessType, " +
             "l.business_id as businessId, l.idempotency_key as idempotencyKey, l.created_by as createdBy, l.occurred_at as occurredAt, " +
-            "u.name as operator";
+            "l.account_id as accountId, u.name as operator";
 
     @Select("SELECT " + COLS + " FROM ledger_entries l LEFT JOIN users u ON u.id = l.created_by " +
             "WHERE l.enterprise_id = #{enterpriseId} ORDER BY l.id DESC")
     List<LedgerEntry> findByEnterprise(Integer enterpriseId);
 
-    @Insert("INSERT INTO ledger_entries (enterprise_id, account, direction, amount, business_type, business_id, idempotency_key, created_by, occurred_at) " +
-            "VALUES (#{enterpriseId}, #{account}, #{direction}, #{amount}, #{businessType}, #{businessId}, #{idempotencyKey}, #{createdBy}, #{occurredAt})")
+    @Insert("INSERT INTO ledger_entries (enterprise_id, account, direction, amount, business_type, business_id, idempotency_key, created_by, occurred_at, account_id) " +
+            "VALUES (#{enterpriseId}, #{account}, #{direction}, #{amount}, #{businessType}, #{businessId}, #{idempotencyKey}, #{createdBy}, #{occurredAt}, #{accountId})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(LedgerEntry e);
 

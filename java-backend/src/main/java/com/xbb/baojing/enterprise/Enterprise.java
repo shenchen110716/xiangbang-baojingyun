@@ -19,6 +19,7 @@ public class Enterprise {
 
     // response-only, joined
     private String agentName;
+    private Double premiumBalanceTotal;
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -48,4 +49,6 @@ public class Enterprise {
     public void setCreatedAt(LocalDateTime v) { this.createdAt = v; }
     public String getAgentName() { return agentName; }
     public void setAgentName(String v) { this.agentName = v; }
+    public Double getPremiumBalanceTotal() { return premiumBalanceTotal; }
+    public void setPremiumBalanceTotal(Double v) { this.premiumBalanceTotal = v; }
 }

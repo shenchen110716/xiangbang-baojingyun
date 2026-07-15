@@ -20,6 +20,7 @@ import com.xbb.baojing.plan.InsurancePlanMapper;
 import com.xbb.baojing.plan.PricingService;
 import com.xbb.baojing.position.WorkPosition;
 import com.xbb.baojing.position.WorkPositionMapper;
+import com.xbb.baojing.recharge.RechargeService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -40,11 +41,12 @@ public class DashboardController {
     private final PricingService pricingService;
     private final PolicyMemberMapper policyMemberMapper;
     private final PolicyMemberService policyMemberService;
+    private final RechargeService rechargeService;
 
     public DashboardController(EnterpriseMapper enterpriseMapper, InsuredPersonMapper personMapper, PolicyMapper policyMapper,
                                 ClaimMapper claimMapper, InsurancePlanMapper planMapper, AgentCommissionMapper commissionMapper,
                                 WorkPositionMapper positionMapper, PolicyPricingService policyPricingService, PricingService pricingService,
-                                PolicyMemberMapper policyMemberMapper, PolicyMemberService policyMemberService) {
+                                PolicyMemberMapper policyMemberMapper, PolicyMemberService policyMemberService, RechargeService rechargeService) {
         this.enterpriseMapper = enterpriseMapper;
         this.personMapper = personMapper;
         this.policyMapper = policyMapper;
@@ -56,6 +58,7 @@ public class DashboardController {
         this.pricingService = pricingService;
         this.policyMemberMapper = policyMemberMapper;
         this.policyMemberService = policyMemberService;
+        this.rechargeService = rechargeService;
     }
 
     private String effectiveStatus(InsuredPerson p) {
@@ -64,11 +67,13 @@ public class DashboardController {
         return policyMemberService.effectivePersonStatus(p, member != null ? member.getTerminatedAt() : null);
     }
 
-    public record BalanceAlert(int enterpriseId, String enterpriseName, String account, double balance, double dailyBurn,
-                                double daysLeft, int alertDays, String level) {}
+    /** accountId/label are populated for premium-type alerts only; both null for usage. */
+    public record BalanceAlert(int enterpriseId, String enterpriseName, String account, Integer accountId, String label,
+                                double balance, double dailyBurn, double daysLeft, int alertDays, String level) {}
 
     public record DashboardData(String portal, long enterprises, long people, long activePeople, long activePolicies,
-                                 long pendingEnterprises, long pendingPeople, long claimsOpen, double premiumBalance,
+                                 long pendingEnterprises, long pendingPeople, long claimsOpen,
+                                 List<RechargeService.PremiumAccountRow> premiumAccounts,
                                  double usageBalance, List<BalanceAlert> balanceAlerts) {}
 
     @GetMapping("/dashboard")
@@ -79,25 +84,41 @@ public class DashboardController {
         long activePeople = people.stream().filter(p -> Set.of("active", "pending").contains(effectiveStatus(p))).count();
 
         List<BalanceAlert> alerts = new ArrayList<>();
+        // account_id -> running total, mirrors Python's premium_agg dict so a collection
+        // account shared across multiple enterprises sums to one row, not one per enterprise.
+        Map<Integer, RechargeService.PremiumAccountRow> premiumAgg = new LinkedHashMap<>();
         for (Enterprise ent : enterprises) {
             long activeCount = personMapper.search(ent.getId(), null).stream().filter(p -> Set.of("active", "pending").contains(p.getStatus())).count();
             double dailyUsage = activeCount * (ent.getUsageFeeDaily() > 0 ? ent.getUsageFeeDaily() : 0.1);
-            double dailyPremium = 0;
-            for (Policy policy : policyMapper.search(ent.getId())) {
-                if (!"active".equals(policy.getStatus())) continue;
-                InsurancePlan plan = planMapper.findById(policy.getPlanId());
-                double premium = policyPricingService.calculatedPremium(policy);
-                boolean daily = plan != null && "daily".equals(plan.getBillingMode());
-                dailyPremium += premium / (daily ? 1 : 30);
-            }
-            record AccountCheck(String account, double balance, double daily) {}
-            for (AccountCheck check : List.of(new AccountCheck("premium", ent.getPremiumBalance(), dailyPremium), new AccountCheck("usage", ent.getUsageBalance(), dailyUsage))) {
-                double daysLeft = check.daily() <= 0 ? 999999 : check.balance() / check.daily();
+            List<Policy> activePolicies = policyMapper.search(ent.getId()).stream().filter(p -> "active".equals(p.getStatus())).toList();
+
+            for (RechargeService.PremiumAccountRow row : rechargeService.premiumAccountsForEnterprise(ent.getId())) {
+                Set<String> insurerSet = new HashSet<>(row.insurers());
+                double dailyPremium = 0;
+                for (Policy policy : activePolicies) {
+                    InsurancePlan plan = planMapper.findById(policy.getPlanId());
+                    if (plan == null || !insurerSet.contains(plan.getInsurer())) continue;
+                    double premium = policyPricingService.calculatedPremium(policy);
+                    boolean daily = "daily".equals(plan.getBillingMode());
+                    dailyPremium += premium / (daily ? 1 : 30);
+                }
+                double daysLeft = dailyPremium <= 0 ? 999999 : row.balance() / dailyPremium;
+                RechargeService.PremiumAccountRow existing = premiumAgg.get(row.accountId());
+                double aggBalance = (existing != null ? existing.balance() : 0) + row.balance();
+                premiumAgg.put(row.accountId(), new RechargeService.PremiumAccountRow(row.accountId(), row.label(), row.insurers(), aggBalance));
+
                 int alertDays = ent.getAlertDays() > 0 ? ent.getAlertDays() : 3;
                 if (daysLeft <= alertDays) {
-                    alerts.add(new BalanceAlert(ent.getId(), ent.getName(), check.account(), check.balance(), check.daily(),
-                            Math.round(daysLeft * 10) / 10.0, alertDays, daysLeft <= 1 ? "critical" : "warning"));
+                    alerts.add(new BalanceAlert(ent.getId(), ent.getName(), "premium", row.accountId(), row.label(),
+                            row.balance(), dailyPremium, Math.round(daysLeft * 10) / 10.0, alertDays, daysLeft <= 1 ? "critical" : "warning"));
                 }
+            }
+
+            double usageDaysLeft = dailyUsage <= 0 ? 999999 : ent.getUsageBalance() / dailyUsage;
+            int alertDays = ent.getAlertDays() > 0 ? ent.getAlertDays() : 3;
+            if (usageDaysLeft <= alertDays) {
+                alerts.add(new BalanceAlert(ent.getId(), ent.getName(), "usage", null, null,
+                        ent.getUsageBalance(), dailyUsage, Math.round(usageDaysLeft * 10) / 10.0, alertDays, usageDaysLeft <= 1 ? "critical" : "warning"));
             }
         }
 
@@ -107,11 +128,10 @@ public class DashboardController {
         long pendingEnterprises = scoped == null ? enterpriseMapper.search(null, null, "pending").size() : 0;
         long pendingPeople = people.stream().filter(p -> "pending".equals(p.getStatus())).count();
         long claimsOpen = claimMapper.search(scoped, null).stream().filter(c -> !Set.of("paid", "closed").contains(c.getStatus())).count();
-        double premiumBalance = enterprises.stream().mapToDouble(Enterprise::getPremiumBalance).sum();
         double usageBalance = enterprises.stream().mapToDouble(Enterprise::getUsageBalance).sum();
 
         return new DashboardData("enterprise".equals(user.getRole()) ? "enterprise" : "admin", enterprises.size(), people.size(),
-                activePeople, activePolicies, pendingEnterprises, pendingPeople, claimsOpen, premiumBalance, usageBalance, alerts);
+                activePeople, activePolicies, pendingEnterprises, pendingPeople, claimsOpen, new ArrayList<>(premiumAgg.values()), usageBalance, alerts);
     }
 
     public record ScreenProduct(int planId, String insurer, String product, long insuredCount, long enterpriseCount,
