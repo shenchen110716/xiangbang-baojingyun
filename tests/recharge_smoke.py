@@ -28,7 +28,7 @@ def run():
         from backend.app import startup
         from backend.core.db import SessionLocal
         from backend.core.migrations import migrate_premium_balances
-        from backend.models import InsurerAccount, InsurerAccountLink, EnterprisePremiumAccount, RechargeRequest, LedgerEntry
+        from backend.models import InsurerAccount, InsurerAccountLink, EnterprisePremiumAccount, RechargeRequest, LedgerEntry, InsuredPerson, WorkPosition
         from backend.services.recharge import (
             resolve_account_for_insurer, insurers_for_account, insurer_account_dict,
             get_or_create_premium_account, premium_accounts_for_enterprise,
@@ -42,7 +42,13 @@ def run():
         )
         from backend.routers.enterprises import enterprise_premium_accounts
         from backend.routers.dashboard import dashboard as dashboard_endpoint
-        from backend.schemas import InsurerAccountIn, InsurerAccountUpdate, InsurerAccountLinkIn
+        from backend.routers.plans import add_plan
+        from backend.routers.positions import add_position, add_actual_employer
+        from backend.routers.insured import add_person, insured_status
+        from backend.schemas import (
+            InsurerAccountIn, InsurerAccountUpdate, InsurerAccountLinkIn,
+            PlanIn, PositionIn, ActualEmployerIn, PersonIn,
+        )
 
         startup()
         with SessionLocal() as session:
@@ -173,11 +179,60 @@ def run():
             assert rejected["status"] == "rejected" and rejected["reject_reason"] == "回单金额与申请金额不符"
             assert enterprise.usage_balance == usage_before  # rejecting must not touch the balance
 
+            # --- Task 9 finding: the tests above never exercised the actual
+            # multi-insurer-per-account / cross-enterprise aggregation logic in
+            # dashboard(). "测试账户" (account) is already shared by "测试保司"
+            # (link) and "第二保司" (second_link). Build one active policy under
+            # each insurer for enterprise 1 and prove dashboard() sums both
+            # insurers' daily premium into that ONE shared account's alert —
+            # not just one of them, and not doubled.
+            plan_a = add_plan(PlanIn(insurer="测试保司", name="共享账户方案A", price=200, effective_mode="immediate"), admin, session)
+            plan_b = add_plan(PlanIn(insurer="第二保司", name="共享账户方案B", price=150, effective_mode="immediate"), admin, session)
+            assert plan_a["billing_mode"] == "daily" and plan_b["billing_mode"] == "daily"
+
+            shared_employer = add_actual_employer(ActualEmployerIn(name="共享账户测试工作单位", enterprise_id=enterprise_id), admin, session)
+            position_a = add_position(PositionIn(enterprise_id=enterprise_id, actual_employer_id=shared_employer["id"], actual_employer=shared_employer["name"], name="共享账户岗位A", occupation_class="1-3类", plan_id=plan_a["id"]), admin, session)
+            position_b = add_position(PositionIn(enterprise_id=enterprise_id, actual_employer_id=shared_employer["id"], actual_employer=shared_employer["name"], name="共享账户岗位B", occupation_class="1-3类", plan_id=plan_b["id"]), admin, session)
+            session.get(WorkPosition, position_a["id"]).status = "approved"
+            session.get(WorkPosition, position_b["id"]).status = "approved"
+            session.commit()
+
+            person_a = add_person(PersonIn(enterprise_id=enterprise_id, name="共享账户员工A", id_number="340123199001019993", position_id=position_a["id"]), admin, session)
+            person_b = add_person(PersonIn(enterprise_id=enterprise_id, name="共享账户员工B", id_number="340123199001019985", position_id=position_b["id"]), admin, session)
+            insured_status(person_a["id"], "active", admin, session)
+            insured_status(person_b["id"], "active", admin, session)
+
+            policy_a = session.get(InsuredPerson, person_a["id"]).policy_id
+            policy_b = session.get(InsuredPerson, person_b["id"]).policy_id
+            assert policy_a and policy_b and policy_a != policy_b  # two distinct policies, one per insurer, both funding the same shared account
+
+            # Force an alert regardless of the real balance/burn ratio so the alert's
+            # daily_burn (the only place dashboard() exposes the computed
+            # daily_premium) is observable and assertable below.
+            enterprise.alert_days = 999999
+            session.commit()
+
+            # Cross-enterprise aggregation: enterprise 2's row on this SAME shared
+            # account (created earlier via get_or_create_premium_account(session, 2,
+            # account.id) to exercise the "create" branch) must fold into the same
+            # admin-view entry as enterprise 1's, not appear as a duplicate row.
+            created.balance = 45.0
+            session.commit()
+
             dashboard_data = dashboard_endpoint(admin, session)
             assert "premium_accounts" in dashboard_data
             assert "premium_balance" not in dashboard_data  # replaced, not just supplemented
-            matching = next((row for row in dashboard_data["premium_accounts"] if row["account_id"] == account.id), None)
-            assert matching is not None and matching["balance"] == balance_after
+
+            matching_rows = [row for row in dashboard_data["premium_accounts"] if row["account_id"] == account.id]
+            assert len(matching_rows) == 1  # two enterprises on the same account_id must be ONE aggregated entry, not two
+            expected_total_balance = balance_after + 45.0
+            assert matching_rows[0]["balance"] == expected_total_balance
+
+            alert = next(a for a in dashboard_data["balance_alerts"] if a["enterprise_id"] == enterprise_id and a["account"] == "premium" and a["account_id"] == account.id)
+            # 200/day (测试保司) + 150/day (第二保司), both billing_mode="daily" ->
+            # must sum to exactly 350, proving both insurers' active policies are
+            # attributed to the one shared account with no double-counting.
+            assert alert["daily_burn"] == 350.0
 
     print("recharge smoke: ok")
 
