@@ -20,8 +20,10 @@ def run():
         os.environ["ADMIN_PASSWORD"] = "admin123"
         os.environ["ENTERPRISE_PASSWORD"] = "enterprise123"
 
+        import asyncio
+        import io
         from sqlalchemy import select
-        from fastapi import HTTPException
+        from fastapi import HTTPException, UploadFile
 
         from backend.app import startup
         from backend.core.db import SessionLocal
@@ -34,6 +36,9 @@ def run():
         from backend.routers.insurer_accounts import (
             insurer_accounts, add_insurer_account, update_insurer_account,
             insurer_account_links, add_insurer_account_link, delete_insurer_account_link,
+        )
+        from backend.routers.recharge_requests import (
+            create_recharge_request, list_recharge_requests, confirm_recharge_request, reject_recharge_request,
         )
         from backend.schemas import InsurerAccountIn, InsurerAccountUpdate, InsurerAccountLinkIn
 
@@ -126,6 +131,42 @@ def run():
 
             deleted = delete_insurer_account_link(new_link["id"], admin, session)
             assert deleted["ok"] is True
+
+            # id=1 is the demo enterprise seed_default_accounts() always creates on a fresh DB.
+            enterprise = session.get(Enterprise, 1)
+            enterprise_id = enterprise.id
+            balance_before = get_or_create_premium_account(session, enterprise_id, account.id).balance
+
+            fake_receipt = UploadFile(file=io.BytesIO(b"fake-image-bytes"), filename="receipt.png")
+            submitted = asyncio.run(create_recharge_request(
+                enterprise_id=enterprise_id, account_type="premium", insurer="测试保司", amount=30.0,
+                file=fake_receipt, user=admin, session=session,
+            ))
+            assert submitted["status"] == "pending" and submitted["account_id"] == account.id
+
+            listed = list_recharge_requests("", admin, session)
+            assert any(r["id"] == submitted["id"] for r in listed)
+
+            confirmed = confirm_recharge_request(submitted["id"], admin, session)
+            assert confirmed["status"] == "confirmed"
+            balance_after = get_or_create_premium_account(session, enterprise_id, account.id).balance
+            assert balance_after - balance_before == 30.0
+
+            try:
+                confirm_recharge_request(submitted["id"], admin, session)
+                raise AssertionError("confirming an already-confirmed request should fail")
+            except HTTPException as error:
+                assert error.status_code == 400
+
+            fake_receipt_2 = UploadFile(file=io.BytesIO(b"fake-image-bytes-2"), filename="receipt2.png")
+            second_submission = asyncio.run(create_recharge_request(
+                enterprise_id=enterprise_id, account_type="usage", insurer="", amount=15.0,
+                file=fake_receipt_2, user=admin, session=session,
+            ))
+            usage_before = enterprise.usage_balance
+            rejected = reject_recharge_request(second_submission["id"], "回单金额与申请金额不符", admin, session)
+            assert rejected["status"] == "rejected" and rejected["reject_reason"] == "回单金额与申请金额不符"
+            assert enterprise.usage_balance == usage_before  # rejecting must not touch the balance
 
     print("recharge smoke: ok")
 
