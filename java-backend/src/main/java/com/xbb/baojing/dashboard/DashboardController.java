@@ -3,6 +3,7 @@ package com.xbb.baojing.dashboard;
 import com.xbb.baojing.agent.AgentCommission;
 import com.xbb.baojing.agent.AgentCommissionMapper;
 import com.xbb.baojing.claim.ClaimMapper;
+import com.xbb.baojing.common.InternalPricingFilter;
 import com.xbb.baojing.common.User;
 import com.xbb.baojing.enterprise.Enterprise;
 import com.xbb.baojing.enterprise.EnterpriseMapper;
@@ -144,6 +145,7 @@ public class DashboardController {
             row.put("agent_commission_amount", snap.getAgentCommissionAmount());
             row.put("sale_price", snap.getSalePrice());
             row.put("platform_margin_amount", snap.getPlatformMarginAmount());
+            if ("enterprise".equals(user.getRole())) InternalPricingFilter.INTERNAL_FIELDS.forEach(row::remove);
             result.add(row);
         }
         return result;

@@ -242,6 +242,7 @@ public class EnterpriseController {
                 row.put("sale_price", snap.getSalePrice());
                 row.put("agent_commission_amount", snap.getAgentCommissionAmount());
             }
+            if ("enterprise".equals(user.getRole())) InternalPricingFilter.INTERNAL_FIELDS.forEach(row::remove);
             rows.add(row);
         }
         return rows;

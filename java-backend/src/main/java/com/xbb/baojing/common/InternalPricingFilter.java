@@ -22,7 +22,8 @@ public final class InternalPricingFilter {
             "commission_mode", "agent_commission_rate", "agent_commission_amount",
             "platform_margin_amount", "insurance_base_total", "policy_floor_total",
             "total_commission_total", "agent_commission_total",
-            "price", "commission_rate"
+            "price", "commission_rate",
+            "minimum_sale_price", "minimum_sale_total"
     );
 
     @SuppressWarnings("unchecked")

@@ -60,6 +60,17 @@ public class EnrollmentController {
     private static final String[] CSV_HEADER = {"投保单位", "实际工作单位", "岗位", "姓名", "身份证号", "手机号", "职业类别", "保险原价",
             "保司结算底价", "平台利润", "销售最低价", "实际销售价", "总返佣金额", "业务员佣金", "状态", "日期", "添加时间", "生效时间", "停保时间"};
 
+    // Enterprise-role callers only see what they're actually charged, not the
+    // platform's cost basis — mirrors backend/routers/enrollment.py's
+    // enterprise_export branch.
+    private static final String[] CSV_HEADER_ENTERPRISE = {"投保单位", "实际工作单位", "岗位", "姓名", "身份证号", "手机号", "职业类别",
+            "保费", "状态", "日期", "添加时间", "生效时间", "停保时间"};
+
+    private String[] rowForEnterprise(InsuredPerson p, Enterprise enterprise, String targetDate) {
+        String[] full = rowFor(p, enterprise, targetDate);
+        return new String[]{full[0], full[1], full[2], full[3], full[4], full[5], full[6], full[11], full[14], full[15], full[16], full[17], full[18]};
+    }
+
     private static final java.time.format.DateTimeFormatter DATE_TIME_FORMAT = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private String formatDateTime(LocalDateTime v) {
@@ -110,8 +121,12 @@ public class EnrollmentController {
     }
 
     private String toCsv(List<String[]> rows) {
+        return toCsv(rows, CSV_HEADER);
+    }
+
+    private String toCsv(List<String[]> rows, String[] header) {
         StringBuilder sb = new StringBuilder("﻿");
-        sb.append(String.join(",", CSV_HEADER)).append("\n");
+        sb.append(String.join(",", header)).append("\n");
         for (String[] row : rows) {
             sb.append(String.join(",", Arrays.stream(row).map(v -> "\"" + v.replace("\"", "\"\"") + "\"").toArray(String[]::new))).append("\n");
         }
@@ -122,11 +137,15 @@ public class EnrollmentController {
     public ResponseEntity<byte[]> export(@RequestParam String kind, @RequestParam(name = "date", defaultValue = "") String date,
                                           @RequestParam(name = "plan_id", required = false) Integer planId, User user) {
         String targetDate = date.isBlank() ? LocalDate.now().toString() : date;
-        Integer scoped = "enterprise".equals(user.getRole()) && user.getEnterpriseId() != null ? user.getEnterpriseId() : null;
+        boolean enterpriseExport = "enterprise".equals(user.getRole());
+        Integer scoped = enterpriseExport && user.getEnterpriseId() != null ? user.getEnterpriseId() : null;
         List<InsuredPerson> people = matchingPeople(scoped, planId, kind, targetDate);
         List<String[]> rows = new ArrayList<>();
-        for (InsuredPerson p : people) rows.add(rowFor(p, enterpriseMapper.findById(p.getEnterpriseId()), targetDate));
-        byte[] body = toCsv(rows).getBytes(StandardCharsets.UTF_8);
+        for (InsuredPerson p : people) {
+            Enterprise enterprise = enterpriseMapper.findById(p.getEnterpriseId());
+            rows.add(enterpriseExport ? rowForEnterprise(p, enterprise, targetDate) : rowFor(p, enterprise, targetDate));
+        }
+        byte[] body = toCsv(rows, enterpriseExport ? CSV_HEADER_ENTERPRISE : CSV_HEADER).getBytes(StandardCharsets.UTF_8);
         HttpHeaders headers = new HttpHeaders();
         headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + kind + "-" + targetDate + ".csv");
         return ResponseEntity.ok().headers(headers).contentType(MediaType.parseMediaType("text/csv")).body(body);

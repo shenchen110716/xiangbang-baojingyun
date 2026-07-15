@@ -1,10 +1,12 @@
 package com.xbb.baojing.insured;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.baojing.agent.AgentCommission;
 import com.xbb.baojing.agent.AgentCommissionMapper;
 import com.xbb.baojing.common.ApiException;
 import com.xbb.baojing.common.AuditService;
 import com.xbb.baojing.common.IdNumberValidator;
+import com.xbb.baojing.common.InternalPricingFilter;
 import com.xbb.baojing.common.User;
 import com.xbb.baojing.enterprise.ActualEmployer;
 import com.xbb.baojing.enterprise.ActualEmployerMapper;
@@ -40,11 +42,13 @@ public class InsuredPersonController {
     private final PricingService pricingService;
     private final PolicyMemberService policyMemberService;
     private final AuditService auditService;
+    private final ObjectMapper objectMapper;
 
     public InsuredPersonController(InsuredPersonMapper personMapper, EnterpriseMapper enterpriseMapper, WorkPositionMapper positionMapper,
                                     ActualEmployerMapper actualEmployerMapper, InsurancePlanMapper planMapper, PolicyMapper policyMapper,
                                     PolicyMemberMapper policyMemberMapper, AgentCommissionMapper commissionMapper,
-                                    PricingService pricingService, PolicyMemberService policyMemberService, AuditService auditService) {
+                                    PricingService pricingService, PolicyMemberService policyMemberService, AuditService auditService,
+                                    ObjectMapper objectMapper) {
         this.personMapper = personMapper;
         this.enterpriseMapper = enterpriseMapper;
         this.positionMapper = positionMapper;
@@ -56,6 +60,7 @@ public class InsuredPersonController {
         this.pricingService = pricingService;
         this.policyMemberService = policyMemberService;
         this.auditService = auditService;
+        this.objectMapper = objectMapper;
     }
 
     // effectiveAt/terminatedAt are plain strings, not LocalDateTime: both the
@@ -99,9 +104,9 @@ public class InsuredPersonController {
     }
 
     @GetMapping("/insured")
-    public List<InsuredPerson> list(@RequestParam(defaultValue = "") String q, User user) {
+    public List<Object> list(@RequestParam(defaultValue = "") String q, User user) {
         Integer scoped = "enterprise".equals(user.getRole()) && user.getEnterpriseId() != null ? user.getEnterpriseId() : null;
-        return personMapper.search(scoped, q).stream().map(this::enrich).toList();
+        return personMapper.search(scoped, q).stream().map(x -> InternalPricingFilter.strip(enrich(x), user, objectMapper)).toList();
     }
 
     @PostMapping("/insured")
