@@ -30,6 +30,7 @@ def run():
         from backend.services import require_usage_funded
         from backend.models import InsuredPerson, WorkPosition
         from backend.routers.insured import add_person, insured_status
+        from backend.routers.pending_terminations import confirm_pending_termination, pending_terminations as list_pending_terminations
         from backend.schemas import PersonIn
         from backend.models import EnterprisePremiumAccount, InsurerAccount, InsurerAccountLink
         from backend.models import AuditLog
@@ -240,6 +241,32 @@ def run():
             with patch("backend.services.notify.sms_provider", return_value=rejected_provider), patch("backend.services.notify.audit", side_effect=failing_audit):
                 notify_enterprise(session, notify_ent.id, "audit_failure", {})
             assert session.scalar(select(User.id).where(User.id == owner.id)) == owner.id
+
+            # Confirming a pending termination stops every active person in
+            # the enterprise, including legacy rows without a position.
+            confirm_account = InsurerAccount(label="确认停保账户", bank_name="", account_no="", account_holder="", status="active")
+            session.add(confirm_account); session.commit(); session.refresh(confirm_account)
+            session.add(InsurerAccountLink(insurer="确认停保保司", account_id=confirm_account.id)); session.commit()
+            confirm_ent = Enterprise(name="确认停保企业", kind="企业", contact="", phone="", status="active")
+            session.add(confirm_ent); session.commit(); session.refresh(confirm_ent)
+            session.add_all([
+                InsuredPerson(enterprise_id=confirm_ent.id, name="有岗位前状态员工", status="active"),
+                InsuredPerson(enterprise_id=confirm_ent.id, name="无岗位在保员工", status="active"),
+            ]); session.commit()
+            session.add(EnterprisePremiumAccount(enterprise_id=confirm_ent.id, account_id=confirm_account.id, balance=-20.0)); session.commit()
+            fresh_pending = scan_premium_shortfalls(session, enterprise_id=confirm_ent.id)
+            assert len(fresh_pending) == 1
+            assert any(row["id"] == fresh_pending[0].id for row in list_pending_terminations(session))
+
+            result = confirm_pending_termination(fresh_pending[0].id, admin_user, session)
+            assert result["status"] == "confirmed" and result["terminated_count"] == 2
+            statuses = session.scalars(select(InsuredPerson.status).where(InsuredPerson.enterprise_id == confirm_ent.id)).all()
+            assert statuses == ["stopped", "stopped"], statuses
+            try:
+                confirm_pending_termination(fresh_pending[0].id, admin_user, session)
+                assert False, "expected 400 for re-confirming an already processed task"
+            except HTTPException as error:
+                assert error.status_code == 400
 
     print("participation lock smoke: ok")
 
