@@ -6,7 +6,7 @@ from ..core.business_time import business_today
 from ..core.db import db
 from ..core.security import current_user
 from ..models import Claim, Enterprise, InsurancePlan, InsuredPerson, Policy, User, WorkPosition
-from ..services import amount, policy_dict, pricing_snapshot, usage_person_days
+from ..services import amount, policy_dict, pricing_snapshot, strip_internal_pricing, usage_person_days
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
@@ -36,5 +36,5 @@ def screen_products(user: User = Depends(current_user), session: Session = Depen
         policies=policy_query.all();insured_query=session.query(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).filter(WorkPosition.plan_id==plan.id,InsuredPerson.status.in_(['active','pending']))
         if user.role=="enterprise" and user.enterprise_id: insured_query=insured_query.filter(InsuredPerson.enterprise_id==user.enterprise_id)
         people=insured_query.all();enterprise_ids={x.enterprise_id for x in people}|{x.enterprise_id for x in policies};premium_total=sum(float(policy_dict(x,session)['premium'] or 0) for x in policies)
-        result.append({"plan_id":plan.id,"insurer":plan.insurer,"product":plan.name,"insured_count":len(people),"enterprise_count":len(enterprise_ids),"premium_total":amount(premium_total),"policy_count":len(policies),**pricing_snapshot(plan)})
+        result.append(strip_internal_pricing({"plan_id":plan.id,"insurer":plan.insurer,"product":plan.name,"insured_count":len(people),"enterprise_count":len(enterprise_ids),"premium_total":amount(premium_total),"policy_count":len(policies),**pricing_snapshot(plan)},user))
     return result

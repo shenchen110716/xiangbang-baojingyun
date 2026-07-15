@@ -1,7 +1,7 @@
 <view class="page">
   <view wx:if="{{loading}}" class="loading">正在加载…</view>
   <view wx:elif="{{item}}">
-    <view class="hero"><view class="hero-sub">{{item.insurer}}</view><view class="hero-title">{{item.name}}</view><view class="amount" style="margin-top:28rpx">¥{{item.minimum_sale_price}}<text class="small" style="color:#fff"> 保费 / 人 / {{item.billing_mode==='daily'?'天':'月'}}</text></view></view>
+    <view class="hero"><view class="hero-sub">{{item.insurer}}</view><view class="hero-title">{{item.name}}</view><view class="amount" style="margin-top:28rpx">¥{{item.sale_price}}<text class="small" style="color:#fff"> 保费 / 人 / {{item.billing_mode==='daily'?'天':'月'}}</text></view></view>
     <view class="card section"><view class="section-title">保障责任</view><view class="divider"></view><view style="line-height:1.8">{{item.coverage||'详细保障责任以保险公司正式条款为准'}}</view></view>
     <view class="card"><view class="row between"><text class="muted">适用职业</text><text>{{item.occupation_classes}}</text></view><view class="row between" style="margin-top:22rpx"><text class="muted">计费模式</text><text>{{item.billing_mode==='daily'?'按天计费':'按月折算'}}</text></view><view class="row between" style="margin-top:22rpx"><text class="muted">生效规则</text><text>{{item.effective_mode==='immediate'?'审核后即时生效（自动按天计费）':'次日 00:00 生效'}}</text></view><view class="row between" style="margin-top:22rpx"><text class="muted">保司邮箱</text><text>{{item.insurer_email||'未设置'}}</text></view></view>
     <view wx:if="{{tiers.length}}" class="card"><view class="section-title">职业类别费率</view><view class="divider"></view><view wx:for="{{tiers}}" wx:key="id" class="row between" style="margin-bottom:20rpx"><text>{{item.occupation_class}}</text><text class="strong">¥{{item.price}}</text></view></view>

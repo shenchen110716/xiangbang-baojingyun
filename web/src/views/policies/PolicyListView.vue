@@ -100,8 +100,8 @@ async function openDetail(item: Policy) {
     <div class="stat-grid">
       <StatTile label="保单数" :value="list.length" />
       <StatTile label="参保员工" :value="totalInsured" />
-      <StatTile label="销售保费" :value="money(totalSalePremium)" />
-      <StatTile label="总返佣金额" :value="money(totalCommission)" />
+      <StatTile label="保费" :value="money(totalSalePremium)" />
+      <StatTile v-if="auth.isAdmin()" label="总返佣金额" :value="money(totalCommission)" />
     </div>
 
     <PageCard title="保单管理" :count="filtered.length" hint="保单保费与产品、佣金使用同一价格计算口径">
@@ -120,11 +120,11 @@ async function openDetail(item: Policy) {
           </template>
         </el-table-column>
         <el-table-column prop="insured_count" label="人数" width="70" />
-        <el-table-column label="保司结算底价" width="110"><template #default="{ row }">{{ money(row.policy_floor_total) }}</template></el-table-column>
-        <el-table-column label="销售最低价" width="110"><template #default="{ row }">{{ money(row.minimum_sale_total) }}</template></el-table-column>
-        <el-table-column label="实际销售保费" width="110"><template #default="{ row }">{{ money(row.sale_total ?? row.premium) }}</template></el-table-column>
-        <el-table-column label="总返佣金额" width="110"><template #default="{ row }">{{ money(row.total_commission_total) }}</template></el-table-column>
-        <el-table-column label="业务员佣金" width="110"><template #default="{ row }">{{ money(row.agent_commission_total) }}</template></el-table-column>
+        <el-table-column v-if="auth.isAdmin()" label="保司结算底价" width="110"><template #default="{ row }">{{ money(row.policy_floor_total) }}</template></el-table-column>
+        <el-table-column v-if="auth.isAdmin()" label="销售最低价" width="110"><template #default="{ row }">{{ money(row.minimum_sale_total) }}</template></el-table-column>
+        <el-table-column :label="auth.isAdmin() ? '实际销售保费' : '保费'" width="110"><template #default="{ row }">{{ money(row.sale_total ?? row.premium) }}</template></el-table-column>
+        <el-table-column v-if="auth.isAdmin()" label="总返佣金额" width="110"><template #default="{ row }">{{ money(row.total_commission_total) }}</template></el-table-column>
+        <el-table-column v-if="auth.isAdmin()" label="业务员佣金" width="110"><template #default="{ row }">{{ money(row.agent_commission_total) }}</template></el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status }}</el-tag></template>
         </el-table-column>
@@ -152,12 +152,15 @@ async function openDetail(item: Policy) {
     <DetailModal v-model="detailVisible" title="保单详情">
       <template v-if="detailItem">
         <p>{{ detailItem.enterprise_name }} · {{ detailItem.insurer }} · {{ detailItem.plan_name }}</p>
-        <p>保险原价：{{ money(detailItem.insurance_base_total) }}</p>
-        <p>保司结算底价：{{ money(detailItem.policy_floor_total) }}</p>
-        <p>销售最低价：{{ money(detailItem.minimum_sale_total) }}</p>
-        <p>实际销售保费：{{ money(detailItem.sale_total ?? detailItem.premium) }}</p>
-        <p>总返佣金额：{{ money(detailItem.total_commission_total) }}</p>
-        <p>业务员佣金：{{ money(detailItem.agent_commission_total) }}</p>
+        <template v-if="auth.isAdmin()">
+          <p>保险原价：{{ money(detailItem.insurance_base_total) }}</p>
+          <p>保司结算底价：{{ money(detailItem.policy_floor_total) }}</p>
+          <p>销售最低价：{{ money(detailItem.minimum_sale_total) }}</p>
+          <p>实际销售保费：{{ money(detailItem.sale_total ?? detailItem.premium) }}</p>
+          <p>总返佣金额：{{ money(detailItem.total_commission_total) }}</p>
+          <p>业务员佣金：{{ money(detailItem.agent_commission_total) }}</p>
+        </template>
+        <p v-else>保费：{{ money(detailItem.sale_total ?? detailItem.premium) }}</p>
         <p>计费规则：{{ detailItem.effective_mode === 'immediate' ? '即时生效 · 按天计费' : detailItem.billing_mode === 'daily' ? '按天计费' : '按月计费' }}</p>
         <p>保障期限：{{ detailItem.start_date || '—' }} 至 {{ detailItem.end_date || '—' }}</p>
         <p v-for="p in detailPeople" :key="p.id"><b>{{ p.name }}</b> · {{ p.actual_employer_name }} · {{ p.position_name }} · {{ p.occupation_class }}</p>

@@ -10,7 +10,7 @@ from ..core.rbac import require_role
 from ..core.security import current_user, pwd
 from ..models import AgentCommission, Enterprise, InsurancePlan, InsuredPerson, LedgerEntry, Policy, User, WorkPosition
 from ..schemas import AgentIn, EnterpriseIn, EnterpriseUpdate, RechargeIn
-from ..services import ledger_dict, post_ledger_entry, pricing_snapshot, reconcile_enterprise_ledger, serialize
+from ..services import ledger_dict, post_ledger_entry, pricing_snapshot, reconcile_enterprise_ledger, serialize, strip_internal_pricing
 
 router = APIRouter(prefix="/api", tags=["enterprises"])
 
@@ -106,5 +106,5 @@ def enterprise_products(item_id:int,user:User=Depends(current_user),session:Sess
     if not session.get(Enterprise,item_id): raise HTTPException(404,"投保单位不存在")
     rows=[]
     for x in session.scalars(select(AgentCommission).where(AgentCommission.enterprise_id==item_id).order_by(AgentCommission.id.desc())):
-        plan=session.get(InsurancePlan,x.plan_id);agent=session.get(User,x.agent_id); people=session.query(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).filter(InsuredPerson.enterprise_id==item_id,WorkPosition.plan_id==x.plan_id,InsuredPerson.status!='stopped').count(); premium=session.query(Policy).filter(Policy.enterprise_id==item_id,Policy.plan_id==x.plan_id).with_entities(Policy.premium).all(); rows.append({"id":x.id,"product":plan.name if plan else "","insurer":plan.insurer if plan else "","agent":agent.name if agent else "","commission_rate":x.rate,"insured_count":people,"premium_total":sum(float(p[0] or 0) for p in premium),"status":x.status,**(pricing_snapshot(plan,x) if plan else {})})
+        plan=session.get(InsurancePlan,x.plan_id);agent=session.get(User,x.agent_id); people=session.query(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).filter(InsuredPerson.enterprise_id==item_id,WorkPosition.plan_id==x.plan_id,InsuredPerson.status!='stopped').count(); premium=session.query(Policy).filter(Policy.enterprise_id==item_id,Policy.plan_id==x.plan_id).with_entities(Policy.premium).all(); rows.append(strip_internal_pricing({"id":x.id,"product":plan.name if plan else "","insurer":plan.insurer if plan else "","agent":agent.name if agent else "","commission_rate":x.rate,"insured_count":people,"premium_total":sum(float(p[0] or 0) for p in premium),"status":x.status,**(pricing_snapshot(plan,x) if plan else {})},user))
     return rows

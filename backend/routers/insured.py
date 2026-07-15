@@ -16,7 +16,7 @@ from ..core.id_number import is_valid_id_number
 from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
 from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
-from ..services import activate_person_policy, correct_person_policy_dates, plan_price_for_class, pricing_snapshot, serialize, terminate_person_policy
+from ..services import activate_person_policy, correct_person_policy_dates, plan_price_for_class, pricing_snapshot, serialize, strip_internal_pricing, terminate_person_policy
 
 router = APIRouter(prefix="/api", tags=["insured"])
 
@@ -52,7 +52,7 @@ def insured(q: str = "", user: User = Depends(current_user), session: Session = 
         item=_person_payload(session,x);enterprise=session.get(Enterprise,x.enterprise_id);position=session.get(WorkPosition,x.position_id) if x.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None;plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None;policy=session.get(Policy,x.policy_id) if x.policy_id else None
         relation=session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id==x.enterprise_id,AgentCommission.plan_id==plan.id,AgentCommission.status=='active').order_by(AgentCommission.id.desc())) if plan else None
         item.update(enterprise_name=enterprise.name if enterprise else '',position_name=position.name if position else x.occupation,actual_employer_name=employer.name if employer else (position.actual_employer if position else ''),plan_id=plan.id if plan else None,plan_name=plan.name if plan else '',insurer=plan.insurer if plan else '',policy_no=policy.policy_no if policy else '',policy_status=policy.status if policy else '',effective_mode=plan.effective_mode if plan else '',billing_mode=plan.billing_mode if plan else '',**(pricing_snapshot(plan,relation,plan_price_for_class(session,plan,x.occupation_class)) if plan else {}))
-        result.append(item)
+        result.append(strip_internal_pricing(item,user))
     return result
 
 @router.post("/insured")

@@ -64,6 +64,9 @@ _INTERNAL_PRICING_FIELDS = {
     # different names (plan.price == insurance_base_price, plan.commission_rate
     # == total_commission_rate) once plan_dict() merges serialize(plan) in.
     'price', 'commission_rate',
+    # the platform's floor/reference price — enterprise and miniprogram UIs
+    # only ever display the actual charged price (sale_price/sale_total).
+    'minimum_sale_price', 'minimum_sale_total',
 }
 
 def strip_internal_pricing(data:dict,user) -> dict:
