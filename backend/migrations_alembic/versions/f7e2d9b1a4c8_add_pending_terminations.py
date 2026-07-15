@@ -27,7 +27,16 @@ def upgrade():
         sa.Column("dismissed_at", sa.DateTime(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
     )
+    op.create_index(
+        "uq_pending_terminations_live_enterprise_account",
+        "pending_terminations",
+        ["enterprise_id", "account_id"],
+        unique=True,
+        postgresql_where=sa.text("status = 'pending'"),
+        sqlite_where=sa.text("status = 'pending'"),
+    )
 
 
 def downgrade():
+    op.drop_index("uq_pending_terminations_live_enterprise_account", table_name="pending_terminations")
     op.drop_table("pending_terminations")

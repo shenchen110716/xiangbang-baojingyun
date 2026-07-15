@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, ForeignKey, String
+from sqlalchemy import DateTime, Float, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -70,6 +70,16 @@ class PendingTermination(Base):
     # 路径是企业充值后重新扫描发现余额已经 >0，自动 dismiss；管理员没有
     # 手动驳回/忽略的入口——如果不该停保，正确操作是协调企业充值。
     __tablename__ = "pending_terminations"
+    __table_args__ = (
+        Index(
+            "uq_pending_terminations_live_enterprise_account",
+            "enterprise_id",
+            "account_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     enterprise_id: Mapped[int] = mapped_column(ForeignKey("enterprises.id"))
     account_id: Mapped[int] = mapped_column(ForeignKey("insurer_accounts.id"))

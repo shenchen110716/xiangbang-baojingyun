@@ -1,7 +1,8 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..models import EnterprisePremiumAccount, InsuredPerson, InsurerAccountLink, PendingTermination, WorkPosition
+from ..models import EnterprisePremiumAccount, InsuredPerson, InsurerAccountLink, PendingTermination
 
 
 def scan_premium_shortfalls(session: Session, enterprise_id: int | None = None) -> list[PendingTermination]:
@@ -43,15 +44,27 @@ def scan_premium_shortfalls(session: Session, enterprise_id: int | None = None) 
         insurers = [x for x, in session.execute(select(InsurerAccountLink.insurer).where(InsurerAccountLink.account_id == row.account_id)).all()]
         if not insurers:
             continue
-        affected_count = session.query(InsuredPerson).join(WorkPosition, InsuredPerson.position_id == WorkPosition.id).filter(
-            InsuredPerson.enterprise_id == row.enterprise_id,
-            InsuredPerson.status == "active",
-        ).count()
+        affected_count = session.scalar(
+            select(func.count())
+            .select_from(InsuredPerson)
+            .where(
+                InsuredPerson.enterprise_id == row.enterprise_id,
+                InsuredPerson.status == "active",
+            )
+        ) or 0
         item = PendingTermination(
             enterprise_id=row.enterprise_id, account_id=row.account_id,
             affected_insurers=",".join(insurers), affected_count=affected_count,
         )
-        session.add(item)
+        try:
+            # The pre-insert lookup is only an optimization. The partial
+            # unique index is the concurrent-scan authority; contain a loser
+            # in a SAVEPOINT so other scan work can still commit.
+            with session.begin_nested():
+                session.add(item)
+                session.flush()
+        except IntegrityError:
+            continue
         created.append(item)
 
     session.commit()

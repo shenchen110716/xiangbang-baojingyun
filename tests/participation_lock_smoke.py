@@ -20,6 +20,7 @@ def run():
         os.environ["ENTERPRISE_PASSWORD"] = "enterprise123"
 
         from sqlalchemy import select
+        from sqlalchemy.exc import IntegrityError
         from fastapi import HTTPException
 
         from backend.app import startup
@@ -101,13 +102,72 @@ def run():
             session.add(scan_link); session.commit()
             scan_ent = Enterprise(name="扫描测试企业", kind="企业", contact="", phone="", status="active")
             session.add(scan_ent); session.commit(); session.refresh(scan_ent)
+            positionless_active_person = InsuredPerson(
+                enterprise_id=scan_ent.id,
+                name="无岗位在保人员",
+                status="active",
+            )
+            session.add(positionless_active_person); session.commit()
             shortfall = EnterprisePremiumAccount(enterprise_id=scan_ent.id, account_id=scan_account.id, balance=-10.0)
             session.add(shortfall); session.commit()
 
             created_1 = scan_premium_shortfalls(session, enterprise_id=scan_ent.id)
             assert len(created_1) == 1, created_1
             assert created_1[0].affected_insurers == "扫描测试保司"
+            assert created_1[0].affected_count == 1, "active people without a position must be counted"
             assert created_1[0].status == "pending"
+
+            # The database, not only the pre-insert lookup, forbids a second
+            # live pending task for the same enterprise/account pair.
+            session.add(PendingTermination(
+                enterprise_id=scan_ent.id,
+                account_id=scan_account.id,
+                affected_insurers="扫描测试保司",
+                affected_count=1,
+            ))
+            try:
+                session.commit()
+                assert False, "the live pending-task invariant must reject duplicates"
+            except IntegrityError:
+                session.rollback()
+
+            # A competing scanner can create the row after this scanner has
+            # checked for it. Inject that committed-in-the-outer-transaction
+            # competitor immediately before the scanner opens its savepoint;
+            # the losing insert must be contained and reported as no new task.
+            race_account = InsurerAccount(label="并发扫描账户", bank_name="", account_no="", account_holder="", status="active")
+            session.add(race_account); session.commit(); session.refresh(race_account)
+            session.add(InsurerAccountLink(insurer="并发扫描保司", account_id=race_account.id)); session.commit()
+            session.add(EnterprisePremiumAccount(enterprise_id=scan_ent.id, account_id=race_account.id, balance=-10.0)); session.commit()
+            original_begin_nested = session.begin_nested
+            injected_competitor = False
+
+            def begin_nested_after_competitor():
+                nonlocal injected_competitor
+                if not injected_competitor:
+                    session.execute(PendingTermination.__table__.insert().values(
+                        enterprise_id=scan_ent.id,
+                        account_id=race_account.id,
+                        affected_insurers="并发扫描保司",
+                        affected_count=1,
+                        status="pending",
+                    ))
+                    injected_competitor = True
+                return original_begin_nested()
+
+            session.begin_nested = begin_nested_after_competitor
+            try:
+                race_created = scan_premium_shortfalls(session, enterprise_id=scan_ent.id)
+            finally:
+                session.begin_nested = original_begin_nested
+            assert injected_competitor, "scanner must protect its insert with a savepoint"
+            assert race_created == [], "a competing live task must not make scanning fail or duplicate"
+            race_pending = session.scalar(select(PendingTermination).where(
+                PendingTermination.enterprise_id == scan_ent.id,
+                PendingTermination.account_id == race_account.id,
+                PendingTermination.status == "pending",
+            ))
+            assert race_pending is not None
 
             # idempotent: scanning again does not create a duplicate
             created_2 = scan_premium_shortfalls(session, enterprise_id=scan_ent.id)
