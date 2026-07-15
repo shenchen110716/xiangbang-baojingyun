@@ -36,6 +36,8 @@
 - 宽限期仅影响反馈及时率和责任解释，不改变保障结果主及时率。
 - 已确认业务员可查看全部在售保险产品及平台最低售价，但只可查看本人佣金和收款。
 - 完整独立设计基线：`SYSTEM-DESIGN-V4.2.md`。
+- 设计已由用户确认；实施总路线图：`docs/superpowers/plans/2026-07-16-role-timeliness-v42-roadmap.md`。
+- 第一阶段执行计划：`docs/superpowers/plans/2026-07-16-employer-scope-phase.md`。
 - 本轮仅更新设计和交接，不创建迁移或修改业务代码。
 
 ## 依赖解除条件
