@@ -388,6 +388,7 @@ export interface DashboardData {
   claims_open: number
   premium_accounts: PremiumAccountRow[]
   usage_balance: number
+  pending_terminations_count: number
   balance_alerts: Array<{
     enterprise_id: number
     enterprise_name: string
@@ -442,6 +443,19 @@ export interface RechargeRequest {
   created_by: number
   confirmed_by: number | null
   confirmed_at: string | null
+  created_at: string
+}
+
+export interface PendingTermination {
+  id: number
+  enterprise_id: number
+  account_id: number
+  affected_insurers: string
+  affected_count: number
+  status: 'pending' | 'confirmed' | 'dismissed'
+  confirmed_by: number | null
+  confirmed_at: string | null
+  dismissed_at: string | null
   created_at: string
 }
 
