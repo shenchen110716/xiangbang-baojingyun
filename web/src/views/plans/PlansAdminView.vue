@@ -2,7 +2,9 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as plansApi from '@/api/plans'
+import * as rechargeApi from '@/api/recharge'
 import type { InsurancePlan, PlanTier } from '@/api/types'
+import type { InsurerAccount, InsurerAccountLink } from '@/api/types'
 import { money } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
@@ -22,7 +24,83 @@ async function load() {
     loading.value = false
   }
 }
-onMounted(load)
+
+const insurerAccounts = ref<InsurerAccount[]>([])
+const insurerAccountLinks = ref<InsurerAccountLink[]>([])
+
+async function loadInsurerAccounts() {
+  const [accounts, links] = await Promise.all([rechargeApi.listInsurerAccounts(), rechargeApi.listInsurerAccountLinks()])
+  insurerAccounts.value = accounts
+  insurerAccountLinks.value = links
+}
+
+const accountFormVisible = ref(false)
+const accountEditingId = ref<number | null>(null)
+const accountForm = reactive({ label: '', bank_name: '', account_no: '', account_holder: '' })
+function openAccountCreate() {
+  accountEditingId.value = null
+  Object.assign(accountForm, { label: '', bank_name: '', account_no: '', account_holder: '' })
+  accountFormVisible.value = true
+}
+function openAccountEdit(item: InsurerAccount) {
+  accountEditingId.value = item.id
+  Object.assign(accountForm, { label: item.label, bank_name: item.bank_name, account_no: item.account_no, account_holder: item.account_holder })
+  accountFormVisible.value = true
+}
+async function submitAccountForm() {
+  if (!accountForm.bank_name || !accountForm.account_no || !accountForm.account_holder) { ElMessage.error('请填写开户行、账号、账户名称'); return }
+  try {
+    if (accountEditingId.value) await rechargeApi.updateInsurerAccount(accountEditingId.value, accountForm)
+    else await rechargeApi.createInsurerAccount(accountForm)
+    ElMessage.success('保存成功')
+    accountFormVisible.value = false
+    loadInsurerAccounts()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+async function toggleAccountStatus(item: InsurerAccount) {
+  try {
+    await rechargeApi.updateInsurerAccount(item.id, { status: item.status === 'active' ? 'paused' : 'active' })
+    ElMessage.success('已更新')
+    loadInsurerAccounts()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
+const linkFormVisible = ref(false)
+const linkForm = reactive({ insurer: '', account_id: null as number | null })
+function openLinkCreate(account: InsurerAccount) {
+  linkForm.insurer = ''
+  linkForm.account_id = account.id
+  linkFormVisible.value = true
+}
+async function submitLinkForm() {
+  if (!linkForm.insurer.trim() || !linkForm.account_id) { ElMessage.error('请填写保司名称'); return }
+  try {
+    await rechargeApi.createInsurerAccountLink({ insurer: linkForm.insurer.trim(), account_id: linkForm.account_id })
+    ElMessage.success('绑定成功')
+    linkFormVisible.value = false
+    loadInsurerAccounts()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+async function removeLink(link: InsurerAccountLink) {
+  try {
+    await ElMessageBox.confirm(`确定解绑保司「${link.insurer}」吗？不影响历史余额和流水，只影响之后新提交的充值往哪个账户解析。`, '解绑确认', { type: 'warning' })
+  } catch { return }
+  try {
+    await rechargeApi.deleteInsurerAccountLink(link.id)
+    ElMessage.success('已解绑')
+    loadInsurerAccounts()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
+onMounted(() => { load(); loadInsurerAccounts() })
 
 const filtered = computed(() => {
   if (!search.value) return list.value
@@ -201,6 +279,66 @@ async function submitTier() {
       </el-table>
       <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
+
+    <PageCard title="收款账户管理" hint="一个账户可以被多个保司共用，余额按账户池化">
+      <template #actions>
+        <el-button type="primary" @click="openAccountCreate">＋ 新增收款账户</el-button>
+      </template>
+      <el-table :data="insurerAccounts" size="small">
+        <el-table-column prop="label" label="账户备注名" min-width="140" />
+        <el-table-column label="开户行/账号" min-width="200">
+          <template #default="{ row }">{{ row.bank_name }} · {{ row.account_no }}</template>
+        </el-table-column>
+        <el-table-column prop="account_holder" label="账户名称" min-width="140" />
+        <el-table-column label="绑定保司" min-width="200">
+          <template #default="{ row }">
+            <el-tag v-for="name in row.insurers" :key="name" size="small" style="margin-right: 6px">{{ name }}</el-tag>
+            <span v-if="!row.insurers.length" class="muted">未绑定</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">{{ row.status === 'active' ? '启用' : '暂停' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="220" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="openAccountEdit(row)">编辑</el-button>
+            <el-button link type="primary" size="small" @click="toggleAccountStatus(row)">{{ row.status === 'active' ? '暂停' : '启用' }}</el-button>
+            <el-button link type="primary" size="small" @click="openLinkCreate(row)">绑定保司</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div v-if="insurerAccountLinks.length" style="padding: 16px 20px 0">
+        <p class="tier-hint">保司映射（点击解绑可改配到其他账户）：</p>
+        <el-tag v-for="link in insurerAccountLinks" :key="link.id" closable style="margin: 0 8px 8px 0" @close="removeLink(link)">
+          {{ link.insurer }}
+        </el-tag>
+      </div>
+    </PageCard>
+
+    <el-dialog v-model="accountFormVisible" :title="accountEditingId ? '编辑收款账户' : '新增收款账户'" width="480px">
+      <el-form :model="accountForm" label-width="120px">
+        <el-form-item label="账户备注名"><el-input v-model="accountForm.label" placeholder="如：平安/太平洋共用账户" /></el-form-item>
+        <el-form-item label="开户行" required><el-input v-model="accountForm.bank_name" /></el-form-item>
+        <el-form-item label="银行账号" required><el-input v-model="accountForm.account_no" /></el-form-item>
+        <el-form-item label="账户名称" required><el-input v-model="accountForm.account_holder" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="accountFormVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitAccountForm">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="linkFormVisible" title="绑定保司到该账户" width="420px">
+      <el-form :model="linkForm" label-width="100px">
+        <el-form-item label="保司名称" required><el-input v-model="linkForm.insurer" placeholder="需与保险产品里的保险公司名称一致" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="linkFormVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitLinkForm">绑定</el-button>
+      </template>
+    </el-dialog>
 
     <DetailModal v-model="detailVisible" title="保险方案计价详情">
       <template v-if="detailItem">

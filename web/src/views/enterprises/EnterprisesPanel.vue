@@ -74,10 +74,10 @@ async function submitForm() {
 // ---- recharge ----
 const rechargeVisible = ref(false)
 const rechargeTarget = ref<Enterprise | null>(null)
-const rechargeForm = reactive({ account: 'premium' as 'premium' | 'usage', amount: 0 })
+const rechargeForm = reactive({ account: 'usage' as 'premium' | 'usage', amount: 0 })
 function openRecharge(item: Enterprise) {
   rechargeTarget.value = item
-  Object.assign(rechargeForm, { account: 'premium', amount: 0 })
+  Object.assign(rechargeForm, { account: 'usage', amount: 0 })
   rechargeVisible.value = true
 }
 async function submitRecharge() {
@@ -165,7 +165,7 @@ async function removeEnterprise(item: Enterprise) {
           <template #default="{ row }">{{ row.agent_name || '未指定' }}</template>
         </el-table-column>
         <el-table-column label="保费账户" width="110">
-          <template #default="{ row }">{{ money(row.premium_balance) }}</template>
+          <template #default="{ row }">{{ money(row.premium_balance_total) }}</template>
         </el-table-column>
         <el-table-column label="服务费账户" width="110">
           <template #default="{ row }">{{ money(row.usage_balance) }}</template>
@@ -225,12 +225,14 @@ async function removeEnterprise(item: Enterprise) {
         <el-form-item label="投保单位"><span>{{ rechargeTarget.name }}</span></el-form-item>
         <el-form-item label="充值账户">
           <el-select v-model="rechargeForm.account" style="width: 100%">
-            <el-option label="保费账户" value="premium" />
             <el-option label="服务费账户" value="usage" />
           </el-select>
         </el-form-item>
         <el-form-item label="充值金额">
           <el-input-number v-model="rechargeForm.amount" :min="0.01" :step="100" />
+        </el-form-item>
+        <el-form-item>
+          <small class="muted">保费账户充值请前往「账户充值」页面提交充值申请</small>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -287,5 +289,8 @@ async function removeEnterprise(item: Enterprise) {
 }
 .filter-row {
   padding: 0 20px 14px;
+}
+.muted {
+  color: var(--el-text-color-placeholder);
 }
 </style>

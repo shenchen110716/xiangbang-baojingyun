@@ -10,7 +10,7 @@ from ..core.rbac import require_role
 from ..core.security import current_user, pwd
 from ..models import AgentCommission, Enterprise, InsurancePlan, InsuredPerson, LedgerEntry, Policy, User, WorkPosition
 from ..schemas import AgentIn, EnterpriseIn, EnterpriseUpdate, RechargeIn
-from ..services import ledger_dict, post_ledger_entry, pricing_snapshot, reconcile_enterprise_ledger, serialize, strip_internal_pricing
+from ..services import ledger_dict, post_ledger_entry, premium_accounts_for_enterprise, pricing_snapshot, reconcile_enterprise_ledger, serialize, strip_internal_pricing
 
 router = APIRouter(prefix="/api", tags=["enterprises"])
 
@@ -25,7 +25,7 @@ def enterprises(q: str = "", status_filter: Optional[str] = Query(None, alias="s
     for x in session.scalars(stmt):
         linked = session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id == x.id).order_by(AgentCommission.id.asc())) if not x.agent_id else None
         agent_id = x.agent_id or (linked.agent_id if linked else None)
-        item=serialize(x); agent=session.get(User,agent_id) if agent_id else None; item["agent_id"]=agent_id; item["agent_name"]=agent.name if agent else "未分配"; result.append(item)
+        item=serialize(x); agent=session.get(User,agent_id) if agent_id else None; item["agent_id"]=agent_id; item["agent_name"]=agent.name if agent else "未分配"; item["premium_balance_total"]=sum(row["balance"] for row in premium_accounts_for_enterprise(session, x.id)); result.append(item)
     return result
 
 @router.post("/enterprises", dependencies=[Depends(require_role("admin", detail="仅总后台可新增投保单位"))])
@@ -75,10 +75,16 @@ def recharge_enterprise(item_id: int, data: RechargeIn, user: User = Depends(cur
     item = session.get(Enterprise, item_id)
     if not item: raise HTTPException(404, "投保单位不存在")
     if data.account not in {"premium", "usage"}: raise HTTPException(400, "账户类型不合法")
-    if data.account == "premium": item.premium_balance += data.amount
-    else: item.usage_balance += data.amount
+    if data.account == "premium": raise HTTPException(400, "保费账户充值请使用「账户充值」页面提交充值申请，走审核流程")
+    item.usage_balance += data.amount
     post_ledger_entry(session, item, data.account, "credit", data.amount, "manual_recharge", str(item_id), user)
     session.commit(); audit(session, user, "recharge", "enterprise", str(item_id), f"{data.account}:{data.amount}"); return serialize(item)
+
+@router.get("/enterprises/{item_id}/premium-accounts")
+def enterprise_premium_accounts(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):
+    if user.role == "enterprise" and user.enterprise_id != item_id: raise HTTPException(403, "无权查看该单位账户")
+    if not session.get(Enterprise, item_id): raise HTTPException(404, "投保单位不存在")
+    return premium_accounts_for_enterprise(session, item_id)
 
 @router.get("/enterprises/{item_id}/ledger")
 def enterprise_ledger(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):

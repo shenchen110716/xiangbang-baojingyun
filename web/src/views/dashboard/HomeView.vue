@@ -84,9 +84,28 @@ const alertBarOption = computed(() => {
       <StatTile label="在保人数" :value="data?.active_people ?? '—'" :hint="data ? `待处理 ${data.pending_people}` : ''" hint-type="info" />
       <StatTile label="生效保单" :value="data?.active_policies ?? '—'" />
       <StatTile label="待处理理赔" :value="data?.claims_open ?? '—'" hint-type="danger" :hint="data && data.claims_open > 0 ? '需跟进' : ''" />
-      <StatTile label="保费账户余额" :value="data ? money(data.premium_balance) : '—'" />
       <StatTile label="服务费账户余额" :value="data ? money(data.usage_balance) : '—'" />
     </div>
+
+    <PageCard title="保费账户余额" :hint="isAdmin ? '按收款账户汇总' : ''">
+      <el-table :data="data?.premium_accounts ?? []" size="small" style="width: 100%">
+        <el-table-column label="账户/保司" min-width="200">
+          <template #default="{ row }">
+            <div>{{ row.label || '未命名账户' }}</div>
+            <small class="muted">{{ row.insurers.join('、') }}</small>
+          </template>
+        </el-table-column>
+        <el-table-column label="余额" width="140">
+          <template #default="{ row }">{{ money(row.balance) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="100">
+          <template #default>
+            <el-button link type="primary" size="small" @click="router.push({ name: 'recharge' })">去充值</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="data && !data.premium_accounts.length" description="暂无保费账户" :image-size="60" />
+    </PageCard>
 
     <div class="chart-grid">
       <PageCard title="人员状态分布">
@@ -156,5 +175,9 @@ const alertBarOption = computed(() => {
   .chart-grid {
     grid-template-columns: 1fr;
   }
+}
+.muted {
+  color: var(--el-text-color-placeholder);
+  font-size: 11.5px;
 }
 </style>

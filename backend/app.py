@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .core.config import ROOT, DATABASE_URL
 from .core.db import Base, engine, SessionLocal
-from .core.migrations import run_sqlite_bridge_migrations
+from .core.migrations import run_sqlite_bridge_migrations, migrate_premium_balances
 from .core.seed import seed_default_accounts
 
 app = FastAPI(title="响帮帮保经云 API", version="3.6.0")
@@ -29,6 +29,7 @@ def startup():
     with SessionLocal() as s:
         run_sqlite_bridge_migrations(s, DATABASE_URL)
         seed_default_accounts(s)
+        migrate_premium_balances(s)
 
 
 from .routers.health import router as health_router
@@ -49,6 +50,8 @@ from .routers.enrollment import router as enrollment_router
 from .routers.messages import router as messages_router
 from .routers.notifications import router as notifications_router
 from .routers.claims import router as claims_router
+from .routers.insurer_accounts import router as insurer_accounts_router
+from .routers.recharge_requests import router as recharge_requests_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
@@ -68,6 +71,8 @@ app.include_router(enrollment_router)
 app.include_router(messages_router)
 app.include_router(notifications_router)
 app.include_router(claims_router)
+app.include_router(insurer_accounts_router)
+app.include_router(recharge_requests_router)
 
 # SYSTEM-DESIGN-V4.md Phase 0 stop-loss item #1: the project root (source
 # code, data.db, .env, requirements.txt, ...) must never be reachable over

@@ -64,6 +64,7 @@ class LedgerEntry(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     business_type: Mapped[str] = mapped_column(String(40))
     business_id: Mapped[str] = mapped_column(String(80), default="")
+    account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("insurer_accounts.id"), nullable=True)
     idempotency_key: Mapped[str] = mapped_column(String(120), default="", unique=False, index=True)
     created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

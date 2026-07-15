@@ -32,7 +32,7 @@ async function load() {
 }
 onMounted(load)
 
-const totalPremium = computed(() => accounts.value.filter((x) => x.account === '保费账户').reduce((s, x) => s + x.balance, 0))
+const totalPremium = computed(() => accounts.value.filter((x) => x.account_type === 'premium').reduce((s, x) => s + x.balance, 0))
 const totalUsage = computed(() => accounts.value.filter((x) => x.account === '平台使用费账户').reduce((s, x) => s + x.balance, 0))
 const monthUsageAccrued = computed(() => accounts.value.filter((x) => x.account === '平台使用费账户').reduce((s, x) => s + x.month_accrued, 0))
 const totalUsageAccrued = computed(() => accounts.value.filter((x) => x.account === '平台使用费账户').reduce((s, x) => s + x.total_accrued, 0))
@@ -46,7 +46,7 @@ const rechargeForm = reactive({ enterpriseId: null as number | null, enterpriseN
 function openRecharge(row: BillingRow) {
   rechargeForm.enterpriseId = row.id
   rechargeForm.enterpriseName = row.enterprise_name
-  rechargeForm.account = row.account === '保费账户' ? 'premium' : 'usage'
+  rechargeForm.account = row.account_type === 'premium' ? 'premium' : 'usage'
   rechargeForm.amount = 0
   rechargeVisible.value = true
 }
@@ -130,7 +130,7 @@ async function setInvoiceStatus(item: Invoice, status: string) {
         <el-table-column label="历史累计" width="110"><template #default="{ row }">{{ row.account === '平台使用费账户' ? money(row.total_accrued) : '—' }}</template></el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="auth.isAdmin()" link type="primary" size="small" @click="openRecharge(row)">充值</el-button>
+            <el-button v-if="auth.isAdmin() && row.account_type !== 'premium'" link type="primary" size="small" @click="openRecharge(row)">充值</el-button>
             <el-button link type="primary" size="small" @click="openLedger(row)">账本明细</el-button>
           </template>
         </el-table-column>
