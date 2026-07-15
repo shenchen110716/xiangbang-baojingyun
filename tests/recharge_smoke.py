@@ -13,12 +13,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from backend.core.migrations import migrate_premium_balances
-from backend.services.recharge import (
-    resolve_account_for_insurer, insurers_for_account, insurer_account_dict,
-    get_or_create_premium_account, premium_accounts_for_enterprise,
-)
-
 
 def run():
     with tempfile.TemporaryDirectory(prefix="xbb-recharge-smoke-") as folder:
@@ -30,7 +24,12 @@ def run():
 
         from backend.app import startup
         from backend.core.db import SessionLocal
+        from backend.core.migrations import migrate_premium_balances
         from backend.models import InsurerAccount, InsurerAccountLink, EnterprisePremiumAccount, RechargeRequest, LedgerEntry
+        from backend.services.recharge import (
+            resolve_account_for_insurer, insurers_for_account, insurer_account_dict,
+            get_or_create_premium_account, premium_accounts_for_enterprise,
+        )
 
         startup()
         with SessionLocal() as session:
@@ -84,6 +83,13 @@ def run():
 
             fetched_again = get_or_create_premium_account(session, 1, account.id)
             assert fetched_again.id == premium_account.id  # get_or_create must not duplicate
+
+            # exercise the actual "create" branch: no existing row for this (enterprise_id, account_id) pair
+            created = get_or_create_premium_account(session, 2, account.id)
+            session.commit()
+            assert created.id is not None and created.balance == 0
+            created_again = get_or_create_premium_account(session, 2, account.id)
+            assert created_again.id == created.id  # second call must return the same row, not create a new one
 
             rows = premium_accounts_for_enterprise(session, 1)
             assert len(rows) == 1 and rows[0]["balance"] == 100.0 and set(rows[0]["insurers"]) == {"测试保司", "第二保司"}
