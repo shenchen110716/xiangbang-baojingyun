@@ -198,6 +198,24 @@ public class PolicyMemberService {
         }
     }
 
+    /** Ports backend/services/policy_members.py's effective_person_status().
+     * A person whose stored status is already 'stopped' can still be
+     * genuinely covered right now: 临时日结 (temporary daily) coverage sets
+     * terminatedAt to effectiveAt + 24h and flips status to 'stopped'
+     * immediately at creation time, since there's no scheduler to flip it
+     * later at the actual expiry moment. Without this, someone who just
+     * enrolled shows as already-stopped for the next 24 hours. Returns the
+     * status that should actually be shown/used, without touching the
+     * stored value (billing already reads PolicyMember.terminatedAt
+     * directly, not person.status, so this is purely a display/reporting
+     * correction). */
+    public String effectivePersonStatus(InsuredPerson person, LocalDateTime terminatedAt) {
+        if ("stopped".equals(person.getStatus()) && terminatedAt != null && terminatedAt.isAfter(LocalDateTime.now())) {
+            return "active";
+        }
+        return person.getStatus();
+    }
+
     /** Ports the "manually correct 生效时间/停保时间 on an existing coverage
      * period" flow requested for the workers list edit dialog — distinct from
      * activate()/terminate() (which are driven by the person's status

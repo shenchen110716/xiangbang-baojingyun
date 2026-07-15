@@ -11,6 +11,9 @@ import com.xbb.baojing.insured.InsuredPerson;
 import com.xbb.baojing.insured.InsuredPersonMapper;
 import com.xbb.baojing.insured.Policy;
 import com.xbb.baojing.insured.PolicyMapper;
+import com.xbb.baojing.insured.PolicyMember;
+import com.xbb.baojing.insured.PolicyMemberMapper;
+import com.xbb.baojing.insured.PolicyMemberService;
 import com.xbb.baojing.insured.PolicyPricingService;
 import com.xbb.baojing.plan.InsurancePlan;
 import com.xbb.baojing.plan.InsurancePlanMapper;
@@ -35,10 +38,13 @@ public class DashboardController {
     private final WorkPositionMapper positionMapper;
     private final PolicyPricingService policyPricingService;
     private final PricingService pricingService;
+    private final PolicyMemberMapper policyMemberMapper;
+    private final PolicyMemberService policyMemberService;
 
     public DashboardController(EnterpriseMapper enterpriseMapper, InsuredPersonMapper personMapper, PolicyMapper policyMapper,
                                 ClaimMapper claimMapper, InsurancePlanMapper planMapper, AgentCommissionMapper commissionMapper,
-                                WorkPositionMapper positionMapper, PolicyPricingService policyPricingService, PricingService pricingService) {
+                                WorkPositionMapper positionMapper, PolicyPricingService policyPricingService, PricingService pricingService,
+                                PolicyMemberMapper policyMemberMapper, PolicyMemberService policyMemberService) {
         this.enterpriseMapper = enterpriseMapper;
         this.personMapper = personMapper;
         this.policyMapper = policyMapper;
@@ -48,6 +54,14 @@ public class DashboardController {
         this.positionMapper = positionMapper;
         this.policyPricingService = policyPricingService;
         this.pricingService = pricingService;
+        this.policyMemberMapper = policyMemberMapper;
+        this.policyMemberService = policyMemberService;
+    }
+
+    private String effectiveStatus(InsuredPerson p) {
+        if (!"stopped".equals(p.getStatus())) return p.getStatus();
+        PolicyMember member = policyMemberMapper.findLatestForPerson(p.getId());
+        return policyMemberService.effectivePersonStatus(p, member != null ? member.getTerminatedAt() : null);
     }
 
     public record BalanceAlert(int enterpriseId, String enterpriseName, String account, double balance, double dailyBurn,
@@ -62,7 +76,7 @@ public class DashboardController {
         Integer scoped = "enterprise".equals(user.getRole()) && user.getEnterpriseId() != null ? user.getEnterpriseId() : null;
         List<Enterprise> enterprises = scoped != null ? List.of(enterpriseMapper.findById(scoped)) : enterpriseMapper.search(null, null, null);
         List<InsuredPerson> people = personMapper.search(scoped, null);
-        long activePeople = people.stream().filter(p -> Set.of("active", "pending").contains(p.getStatus())).count();
+        long activePeople = people.stream().filter(p -> Set.of("active", "pending").contains(effectiveStatus(p))).count();
 
         List<BalanceAlert> alerts = new ArrayList<>();
         for (Enterprise ent : enterprises) {

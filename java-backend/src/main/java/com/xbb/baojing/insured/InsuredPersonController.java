@@ -76,11 +76,25 @@ public class InsuredPersonController {
     public record BulkPersonIn(int enterpriseId, int positionId, List<BulkPersonRow> rows) {}
 
     private InsuredPerson enrich(InsuredPerson x) {
+        PolicyMember latestMember = policyMemberMapper.findLatestForPerson(x.getId());
+        if (latestMember != null) {
+            x.setEffectiveAt(latestMember.getEffectiveAt());
+            x.setTerminatedAt(latestMember.getTerminatedAt());
+        }
+        x.setStatus(policyMemberService.effectivePersonStatus(x, latestMember != null ? latestMember.getTerminatedAt() : null));
+        // x.getPolicyId() is cleared the moment a stop is scheduled (even a
+        // future-dated 临时日结 auto-expiry) — once effectivePersonStatus has
+        // decided the person is still actually active, fall back to the
+        // still-open PolicyMember's policyId so 保险产品/保单号 don't go
+        // blank while the row still says 在保.
+        Integer policyId = x.getPolicyId();
+        if (policyId == null && "active".equals(x.getStatus()) && latestMember != null) policyId = latestMember.getPolicyId();
+
         Enterprise enterprise = enterpriseMapper.findById(x.getEnterpriseId());
         WorkPosition position = x.getPositionId() != null ? positionMapper.findById(x.getPositionId()) : null;
         ActualEmployer employer = position != null && position.getActualEmployerId() != null ? actualEmployerMapper.findById(position.getActualEmployerId()) : null;
         InsurancePlan plan = position != null && position.getPlanId() != null ? planMapper.findById(position.getPlanId()) : null;
-        Policy policy = x.getPolicyId() != null ? policyMapper.findById(x.getPolicyId()) : null;
+        Policy policy = policyId != null ? policyMapper.findById(policyId) : null;
         x.setEnterpriseName(enterprise != null ? enterprise.getName() : "");
         x.setPositionName(position != null ? position.getName() : x.getOccupation());
         x.setActualEmployerName(employer != null ? employer.getName() : (position != null ? position.getActualEmployer() : ""));
@@ -91,11 +105,6 @@ public class InsuredPersonController {
         x.setPolicyStatus(policy != null ? policy.getStatus() : "");
         x.setEffectiveMode(plan != null ? plan.getEffectiveMode() : "");
         x.setBillingMode(plan != null ? plan.getBillingMode() : "");
-        PolicyMember latestMember = policyMemberMapper.findLatestForPerson(x.getId());
-        if (latestMember != null) {
-            x.setEffectiveAt(latestMember.getEffectiveAt());
-            x.setTerminatedAt(latestMember.getTerminatedAt());
-        }
         if (plan != null) {
             AgentCommission relation = commissionMapper.findActiveRelation(x.getEnterpriseId(), plan.getId());
             x.setPricing(pricingService.snapshot(plan, relation, pricingService.planPriceForClass(plan, x.getOccupationClass())));
