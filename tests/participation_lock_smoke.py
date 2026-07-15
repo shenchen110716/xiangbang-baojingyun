@@ -20,10 +20,12 @@ def run():
         os.environ["ENTERPRISE_PASSWORD"] = "enterprise123"
 
         from sqlalchemy import select
+        from fastapi import HTTPException
 
         from backend.app import startup
         from backend.core.db import SessionLocal
         from backend.models import Enterprise, PendingTermination, User
+        from backend.services import require_usage_funded
 
         startup()
         with SessionLocal() as session:
@@ -34,6 +36,33 @@ def run():
             pt = PendingTermination(enterprise_id=ent.id, account_id=1, affected_insurers="测试保司", affected_count=2)
             session.add(pt); session.commit(); session.refresh(pt)
             assert pt.status == "pending" and pt.confirmed_by is None
+
+            # require_usage_funded: real-time check, no caching
+            admin_user = session.scalar(select(User).where(User.username == "admin"))
+            funded_ent = Enterprise(name="有余额企业", kind="企业", contact="", phone="", status="active", usage_balance=50.0)
+            session.add(funded_ent); session.commit(); session.refresh(funded_ent)
+            require_usage_funded(session, funded_ent, admin_user)  # must not raise
+
+            unfunded_ent = Enterprise(name="无余额企业", kind="企业", contact="", phone="", status="active", usage_balance=0.0)
+            session.add(unfunded_ent); session.commit(); session.refresh(unfunded_ent)
+            try:
+                require_usage_funded(session, unfunded_ent, admin_user)
+                assert False, "expected 403"
+            except HTTPException as e:
+                assert e.status_code == 403
+
+            negative_ent = Enterprise(name="负余额企业", kind="企业", contact="", phone="", status="active", usage_balance=-5.0)
+            session.add(negative_ent); session.commit(); session.refresh(negative_ent)
+            try:
+                require_usage_funded(session, negative_ent, admin_user)
+                assert False, "expected 403"
+            except HTTPException as e:
+                assert e.status_code == 403
+
+            # unlocks immediately on the very next check, no separate unlock step
+            unfunded_ent.usage_balance = 10.0
+            session.commit()
+            require_usage_funded(session, unfunded_ent, admin_user)  # must not raise now
 
     print("participation lock smoke: ok")
 
