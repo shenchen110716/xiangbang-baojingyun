@@ -7,6 +7,7 @@ import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import TablePagination from '@/components/TablePagination.vue'
 import { usePagedList } from '@/composables/usePagedList'
+import { downloadCsv } from '@/utils/download'
 import EmployeeDetailDialog from './EmployeeDetailDialog.vue'
 import EmployeeEditorDialog from './EmployeeEditorDialog.vue'
 
@@ -50,13 +51,7 @@ function editFromDetail() {
 function exportCsv() {
   const header = ['被保险人', '投保单位', '实际工作单位', '岗位', '职业类别', '保险方案', '状态']
   const rows = filtered.value.map((p) => [p.name, p.enterprise_name, p.actual_employer_name, p.position_name, p.occupation_class, p.plan_name, insuredStatusLabel(p).text])
-  const csv = '﻿' + [header, ...rows].map((r) => r.map((v) => `"${(v || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' })
-  const link = document.createElement('a')
-  link.href = URL.createObjectURL(blob)
-  link.download = `响帮帮保经云-劳动关系-${Date.now()}.csv`
-  link.click()
-  URL.revokeObjectURL(link.href)
+  downloadCsv([header, ...rows], `响帮帮保经云-劳动关系-${Date.now()}.csv`)
 }
 </script>
 

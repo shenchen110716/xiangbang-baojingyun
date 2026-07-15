@@ -18,6 +18,10 @@ import com.xbb.baojing.plan.PricingService;
 import com.xbb.baojing.position.WorkPosition;
 import com.xbb.baojing.position.WorkPositionMapper;
 import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.util.NumberToTextConverter;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpHeaders;
@@ -35,6 +39,7 @@ import java.util.*;
 @RestController
 @RequestMapping("/api")
 public class InsuredPersonController {
+    private static final long MAX_IMPORT_FILE_BYTES = 10L * 1024 * 1024;
     private final InsuredPersonMapper personMapper;
     private final EnterpriseMapper enterpriseMapper;
     private final WorkPositionMapper positionMapper;
@@ -329,10 +334,30 @@ public class InsuredPersonController {
 
     public record ImportResult(boolean ok, String kind, int success, List<Map<String, Object>> errors) {}
 
+    private List<String> parseCsvRow(String line) {
+        List<String> values = new ArrayList<>();
+        StringBuilder value = new StringBuilder();
+        boolean quoted = false;
+        for (int index = 0; index < line.length(); index++) {
+            char current = line.charAt(index);
+            if (quoted) {
+                if (current == '"' && index + 1 < line.length() && line.charAt(index + 1) == '"') { value.append('"'); index++; }
+                else if (current == '"') quoted = false;
+                else value.append(current);
+            } else if (current == '"') quoted = true;
+            else if (current == ',') { values.add(value.toString().strip()); value.setLength(0); }
+            else value.append(current);
+        }
+        values.add(value.toString().strip());
+        return values;
+    }
+
     @PostMapping("/insured/import-file")
     public ImportResult importFile(@RequestParam String kind, @RequestParam("enterprise_id") int enterpriseId,
                                     @RequestParam(name = "position_id", defaultValue = "0") int positionId,
                                     @RequestParam MultipartFile file, User user) throws IOException {
+        if (!Set.of("enrollment", "termination").contains(kind)) throw ApiException.badRequest("业务类型必须是批量参保或批量停保");
+        if (file.getSize() > MAX_IMPORT_FILE_BYTES) throw new ApiException(413, "单个导入文件不能超过 10MB，请拆分后重试");
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(enterpriseId)) throw ApiException.forbidden("无权操作该单位");
         if (enterpriseMapper.findById(enterpriseId) == null) throw ApiException.notFound("投保单位不存在");
         WorkPosition defaultPosition = null;
@@ -346,19 +371,28 @@ public class InsuredPersonController {
         String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase();
         try {
             if (name.endsWith(".xlsx")) {
-                var workbook = WorkbookFactory.create(new ByteArrayInputStream(file.getBytes()));
-                var sheet = workbook.getSheetAt(0);
-                for (Row row : sheet) {
-                    List<String> cells = new ArrayList<>();
-                    row.forEach(cell -> cells.add(cell.toString().trim()));
-                    raw.add(cells.toArray(new String[0]));
+                try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(file.getBytes()))) {
+                    var sheet = workbook.getSheetAt(0);
+                    var formatter = new DataFormatter(Locale.ROOT);
+                    for (Row row : sheet) {
+                        List<String> cells = new ArrayList<>();
+                        int lastCell = Math.max(0, row.getLastCellNum());
+                        for (int index = 0; index < lastCell; index++) {
+                            var cell = row.getCell(index, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                            String value = cell.getCellType() == CellType.NUMERIC && !DateUtil.isCellDateFormatted(cell)
+                                    ? NumberToTextConverter.toText(cell.getNumericCellValue()) : formatter.formatCellValue(cell);
+                            cells.add(value.strip());
+                        }
+                        if (cells.stream().anyMatch(value -> !value.isBlank())) raw.add(cells.toArray(new String[0]));
+                    }
                 }
             } else if (name.endsWith(".csv")) {
                 String text = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
                 if (text.startsWith("﻿")) text = text.substring(1);
                 for (String line : text.split("\\r?\\n")) {
                     if (line.isBlank()) continue;
-                    raw.add(Arrays.stream(line.split(",")).map(String::trim).toArray(String[]::new));
+                    List<String> cells = parseCsvRow(line);
+                    if (cells.stream().anyMatch(value -> !value.isBlank())) raw.add(cells.toArray(new String[0]));
                 }
             } else {
                 throw ApiException.badRequest("仅支持 CSV 或 XLSX 电子表格");

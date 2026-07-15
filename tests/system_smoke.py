@@ -13,6 +13,10 @@ import openpyxl
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
+async def response_body(response):
+    return b''.join([chunk async for chunk in response.body_iterator])
+
+
 def run():
     with tempfile.TemporaryDirectory(prefix="xbb-smoke-") as folder:
         os.environ["DATABASE_URL"] = f"sqlite:///{Path(folder) / 'test.db'}"
@@ -41,9 +45,9 @@ def run():
         from backend.routers.audit_logs import audit_logs
         from backend.routers.claims import add_claim, add_claim_document, claim_status
         from backend.routers.dashboard import dashboard, screen_products
-        from backend.routers.enrollment import enrollment_email
+        from backend.routers.enrollment import enrollment_email, enrollment_export
         from backend.routers.enterprises import add_enterprise
-        from backend.routers.insured import add_person, insured_import_template, insured_status, update_person
+        from backend.routers.insured import _read_import_rows, add_person, insured_import_template, insured_status, update_person
         from backend.routers.invoices import create_invoice, update_invoice
         from backend.routers.operators import add_operator
         from backend.routers.payments import create_payment, payment_callback
@@ -52,7 +56,7 @@ def run():
             add_actual_employer, add_position, delete_actual_employer, delete_position_video,
             position_videos, update_actual_employer, upload_position_video,
         )
-        from backend.routers.reports import _period_premium, billing, premium_details
+        from backend.routers.reports import _period_premium, billing, export_premium_details, premium_details
         from backend.routers.reports import export_policy
         from backend.routers.reports import policies as list_policies
 
@@ -65,13 +69,24 @@ def run():
             user = session.get(User, operator["id"])
 
             template_response = insured_import_template(user)
-            template_data = asyncio.run(template_response.body_iterator.__anext__())
+            template_data = asyncio.run(response_body(template_response))
             template_book = openpyxl.load_workbook(BytesIO(template_data), read_only=True, data_only=True)
             template_sheet = template_book.active
             assert template_response.media_type.endswith('spreadsheetml.sheet')
             assert [cell.value for cell in template_sheet[1]] == ['姓名', '身份证号', '手机号', '投保单位', '实际工作单位', '岗位名称', '生效日期', '停保日期']
             assert template_sheet['B2'].value == '340123199001011234'
             template_book.close()
+
+            quoted_csv = '﻿姓名,身份证号,手机号,投保单位,实际工作单位,岗位名称,生效日期,停保日期\r\n张三,340123199001019977,13800000000,"测试,单位",,,2026-01-01,\r\n'
+            parsed_csv = _read_import_rows(quoted_csv.encode('utf-8'), 'quoted.csv')
+            assert parsed_csv[1][3] == '测试,单位' and parsed_csv[1][6] == '2026-01-01'
+            sparse_book = openpyxl.Workbook(); sparse_sheet = sparse_book.active
+            sparse_sheet.append(['姓名', '身份证号', '手机号', '投保单位', '实际工作单位', '岗位名称', '生效日期', '停保日期'])
+            sparse_sheet.cell(2, 1).value = '李四'; sparse_sheet.cell(2, 2).value = '340123199001019977'; sparse_sheet.cell(2, 7).value = '2026-01-01'
+            sparse_sheet.cell(5, 1).fill = openpyxl.styles.PatternFill('solid', fgColor='FFFFFF')
+            sparse_output = BytesIO(); sparse_book.save(sparse_output); sparse_book.close()
+            parsed_xlsx = _read_import_rows(sparse_output.getvalue(), 'sparse.xlsx')
+            assert len(parsed_xlsx) == 2 and parsed_xlsx[1][3] == '' and parsed_xlsx[1][6] == '2026-01-01'
 
             try:
                 add_plan(PlanIn(insurer="测试保司", name="越权方案", price=1), user, session)
@@ -136,7 +151,10 @@ def run():
 
             rows = list_policies(user, session)
             assert len(rows) == 1 and rows[0]["insured_count"] == 1 and rows[0]["premium"] > 0
-            export_policy(policy.id, user, session)  # must not raise
+            policy_export = export_policy(policy.id, user, session)
+            policy_book = openpyxl.load_workbook(BytesIO(asyncio.run(response_body(policy_export))), read_only=True, data_only=True)
+            assert policy_book.active['G2'].value == person['id_number']
+            policy_book.close()
 
             # redundant active->active PATCH must not create a second PolicyMember
             count_before = session.query(PolicyMember).count()
@@ -173,6 +191,10 @@ def run():
             assert platform_report["total_commission"] == 600 and platform_report["total_agent_commission"] == 600
             assert platform_report["rows"][0]["agent_id"] == agent["id"]
             assert platform_report["rows"][0]["agent_name"] == "测试业务员"
+            detail_export = export_premium_details('2026-01-01', '2026-01-31', enterprise_id, '测试保司', agent['id'], admin, session)
+            detail_book = openpyxl.load_workbook(BytesIO(asyncio.run(response_body(detail_export))), read_only=True, data_only=True)
+            assert detail_book.active['D2'].value == person['id_number'] and detail_book.active['A1'].value == '统计开始'
+            detail_book.close()
             filtered_commission = premium_details("2026-01-01", "2026-01-31", enterprise_id=None, insurer="", agent_id=agent["id"], user=admin, session=session)
             assert filtered_commission["detail_count"] == 1
             assert filtered_commission["total_commission"] == 600 and filtered_commission["total_agent_commission"] == 600
@@ -231,6 +253,9 @@ def run():
 
             mail = enrollment_email(enterprise_id, plan["id"], "enrollment", "", user, session)
             assert mail["people_count"] == 1 and mail["filename"].endswith('.csv')
+            roster_export = enrollment_export('enrollment', '', plan['id'], user, session)
+            roster_data = asyncio.run(response_body(roster_export))
+            assert roster_data.startswith(b'\xef\xbb\xbf') and '身份证号'.encode() in roster_data
 
             invoice = create_invoice(InvoiceIn(enterprise_id=enterprise_id, account="premium", amount=88.5, title="冒烟测试企业"), user, session)
             reviewed = update_invoice(invoice["id"], InvoiceUpdate(status="issued"), admin, session)

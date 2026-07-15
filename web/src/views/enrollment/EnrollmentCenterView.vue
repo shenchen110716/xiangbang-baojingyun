@@ -7,7 +7,7 @@ import { listPositions } from '@/api/positions'
 import { importInsuredFile, importTemplateUrl, listInsured } from '@/api/insured'
 import type { Enterprise, EnrollmentEmailLog, EnrollmentSummaryRow, InsuredPerson, WorkPosition } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
-import { downloadAuthenticated } from '@/utils/download'
+import { downloadAuthenticated, downloadCsv } from '@/utils/download'
 import { formatCoverageDate, formatDateTime, insuredStatusLabel } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
@@ -74,13 +74,7 @@ function exportPeopleCsv() {
     p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, insuredStatusLabel(p).text,
     formatDateTime(p.created_at), formatCoverageDate(p.effective_at, p.effective_mode), formatCoverageDate(p.terminated_at, p.effective_mode),
   ])
-  const csv = '﻿' + [header, ...rows].map((r) => r.map((v) => `"${(v || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' })
-  const link = document.createElement('a')
-  link.href = URL.createObjectURL(blob)
-  link.download = `响帮帮保经云-参停保人员-${Date.now()}.csv`
-  link.click()
-  URL.revokeObjectURL(link.href)
+  downloadCsv([header, ...rows], `响帮帮保经云-参停保人员-${Date.now()}.csv`)
 }
 
 async function reloadSummary() {
@@ -117,8 +111,12 @@ async function submitImport() {
     importing.value = false
   }
 }
-function downloadTemplate() {
-  downloadAuthenticated(importTemplateUrl().replace(/^\/api/, ''), '参保员工批量导入模板.xlsx')
+async function downloadTemplate() {
+  try {
+    await downloadAuthenticated(importTemplateUrl().replace(/^\/api/, ''), '参保员工批量导入模板.xlsx')
+  } catch (error) {
+    ElMessage.error((error as Error).message)
+  }
 }
 
 // ---- export / email ----

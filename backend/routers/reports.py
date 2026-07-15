@@ -222,6 +222,7 @@ def export_premium_details(start_date: str = Query(...), end_date: str = Query(.
             values.insert(5, row["agent_name"])
             values += [row["unit_policy_floor_price"], row["settlement_amount"], row["unit_total_commission"], row["commission_amount"], row["unit_agent_commission"], row["agent_commission_amount"]]
         sheet.append(values)
+    for row_number in range(2, sheet.max_row + 1): sheet.cell(row_number, 4).number_format = '@'
     sheet.append([]); sheet.append(["销售保费总额", payload["total_premium"]])
     if platform_export: sheet.append(["保司结算总额", payload["total_settlement"]])
     if platform_export: sheet.append(["总返佣金额", payload["total_commission"]])
@@ -290,6 +291,7 @@ def export_policy(item_id:int,user:User=Depends(current_user),session:Session=De
         prefix=[policy.policy_no,enterprise.name if enterprise else '',employer.name if employer else (position.actual_employer if position else ''),position.name if position else person.occupation,person.occupation_class,person.name,person.id_number,plan.insurer if plan else '',plan.name if plan else '']
         if enterprise_export: sheet.append(prefix+[pricing.get('sale_price',0),policy.start_date,policy.end_date,policy.status])
         else: sheet.append(prefix+[pricing.get('insurance_base_price',0),pricing.get('total_commission_rate',0),pricing.get('total_commission_amount',0),pricing.get('policy_floor_price',0),pricing.get('profit_amount',0),pricing.get('minimum_sale_price',0),pricing.get('sale_price',0),pricing.get('agent_commission_amount',0),policy.start_date,policy.end_date,policy.status])
+    for row_number in range(2, sheet.max_row + 1): sheet.cell(row_number, 7).number_format = '@'
     for column in sheet.columns: sheet.column_dimensions[column[0].column_letter].width=min(32,max(12,max(len(str(cell.value or '')) for cell in column)+2))
     output=io.BytesIO();book.save(output);output.seek(0)
     return StreamingResponse(output,media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename=policy-{policy.policy_no}.xlsx'})

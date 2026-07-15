@@ -9,6 +9,7 @@ import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
 import TablePagination from '@/components/TablePagination.vue'
 import { usePagedList } from '@/composables/usePagedList'
+import { downloadCsv } from '@/utils/download'
 import EmployeeDetailDialog from './EmployeeDetailDialog.vue'
 import EmployeeEditorDialog from './EmployeeEditorDialog.vue'
 
@@ -153,13 +154,7 @@ function exportCsv() {
     p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, p.occupation_class, p.plan_name, p.policy_no, insuredStatusLabel(p).text,
     formatDateTime(p.created_at), formatCoverageDate(p.effective_at, p.effective_mode), formatCoverageDate(p.terminated_at, p.effective_mode),
   ])
-  const csv = '﻿' + [header, ...rows].map((r) => r.map((v) => `"${(v || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' })
-  const link = document.createElement('a')
-  link.href = URL.createObjectURL(blob)
-  link.download = `响帮帮保经云-员工-${Date.now()}.csv`
-  link.click()
-  URL.revokeObjectURL(link.href)
+  downloadCsv([header, ...rows], `响帮帮保经云-员工-${Date.now()}.csv`)
 }
 </script>
 

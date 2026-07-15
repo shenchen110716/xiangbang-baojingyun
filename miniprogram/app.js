@@ -102,7 +102,7 @@ App({
           if (res.statusCode >= 200 && res.statusCode < 300) resolve(data);
           else {
             if (res.statusCode === 401) this.logout(true);
-            const message = data.detail || (res.statusCode === 413 ? '视频文件过大，请压缩后重试' : `文件上传失败（${res.statusCode}）`);
+            const message = data.detail || (res.statusCode === 413 ? '文件过大，请压缩或拆分后重试' : `文件上传失败（${res.statusCode}）`);
             wx.showToast({ title: message, icon: 'none' });
             reject(new Error(message));
           }
@@ -110,13 +110,70 @@ App({
         fail: (detail) => {
           const reason = (detail && detail.errMsg) || '';
           let message = '文件上传失败，请重试';
-          if (reason.includes('timeout')) message = '上传超时，请压缩视频或切换网络后重试';
+          if (reason.includes('timeout')) message = '上传超时，请压缩文件或切换网络后重试';
           else if (reason.includes('domain')) message = '上传域名未配置，请联系平台管理员';
           else if (reason.includes('abort')) message = '上传已取消';
           const error = new Error(message);
           wx.showToast({ title: error.message, icon: 'none' });
           reject(error);
         }
+      });
+    });
+  },
+
+  downloadAndOpen(path, options = {}) {
+    if (!this.globalData.token) {
+      this.logout(true);
+      return Promise.reject(new Error('登录已过期，请重新登录'));
+    }
+    const filename = String(options.filename || '响帮帮文件').replace(/[\\/:*?"<>|]/g, '-');
+    const fileType = String(options.fileType || filename.split('.').pop() || '').toLowerCase();
+    const url = /^https?:\/\//.test(path) ? path : `${this.globalData.apiBase}${path}`;
+    const filePath = `${wx.env.USER_DATA_PATH}/${filename}`;
+    wx.showLoading({ title: options.loadingTitle || '正在下载', mask: true });
+    return new Promise((resolve, reject) => {
+      const fail = (title, content, error) => {
+        wx.hideLoading();
+        wx.showModal({ title, content, showCancel: false });
+        reject(error instanceof Error ? error : new Error(content));
+      };
+      wx.request({
+        url,
+        method: 'GET',
+        header: { Authorization: `Bearer ${this.globalData.token}` },
+        responseType: 'arraybuffer',
+        timeout: options.timeout || 60000,
+        success: (res) => {
+          if (res.statusCode === 401) {
+            wx.hideLoading();
+            this.logout(true);
+            reject(new Error('登录已过期，请重新登录'));
+            return;
+          }
+          if (res.statusCode < 200 || res.statusCode >= 300 || !(res.data instanceof ArrayBuffer) || !res.data.byteLength) {
+            fail('下载失败', `文件服务返回异常（${res.statusCode}），请稍后重试。`);
+            return;
+          }
+          wx.getFileSystemManager().writeFile({
+            filePath,
+            data: res.data,
+            success: () => {
+              wx.hideLoading();
+              wx.openDocument({
+                filePath,
+                fileType,
+                showMenu: true,
+                success: () => resolve(filePath),
+                fail: (error) => {
+                  wx.showModal({ title: '文件已下载', content: '微信无法直接打开该文件，请升级微信或选择其他应用打开。', showCancel: false });
+                  reject(error);
+                }
+              });
+            },
+            fail: (error) => fail('保存失败', '无法保存文件，请清理微信存储空间后重试。', error)
+          });
+        },
+        fail: (error) => fail('下载失败', (error && error.errMsg || '').includes('timeout') ? '下载超时，请检查网络后重试。' : '无法连接文件服务，请检查网络后重试。', error)
       });
     });
   },

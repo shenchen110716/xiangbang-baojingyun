@@ -6,63 +6,36 @@ Page({
   enterpriseChange(e) { const enterpriseIndex = Number(e.detail.value), enterprise = this.data.enterprises[enterpriseIndex], positions = this.data.allPositions.filter((item) => item.enterprise_id === enterprise.id); this.setData({ enterpriseIndex, positions, positionIndex: 0 }); },
   positionChange(e) { this.setData({ positionIndex: Number(e.detail.value) }); },
   template() {
-    if (!app.globalData.token) { app.logout(true); return; }
-    wx.showLoading({ title: '正在生成模板', mask: true });
-    wx.request({
-      url: `${app.globalData.apiBase}/insured/import-template`,
-      method: 'GET',
-      header: { Authorization: `Bearer ${app.globalData.token}` },
-      responseType: 'arraybuffer',
-      timeout: 30000,
-      success: (res) => {
-        if (res.statusCode === 401) {
-          wx.hideLoading();
-          app.logout(true);
-          return;
-        }
-        if (res.statusCode !== 200 || !(res.data instanceof ArrayBuffer) || !res.data.byteLength) {
-          wx.hideLoading();
-          wx.showModal({ title: '下载失败', content: `模板服务返回异常（${res.statusCode}），请稍后重试。`, showCancel: false });
-          return;
-        }
-        const filePath = `${wx.env.USER_DATA_PATH}/响帮帮批量导入标准模板.xlsx`;
-        wx.getFileSystemManager().writeFile({
-          filePath,
-          data: res.data,
-          success: () => {
-            wx.hideLoading();
-            wx.openDocument({
-              filePath,
-              fileType: 'xlsx',
-              showMenu: true,
-              fail: () => wx.showModal({ title: '模板已下载', content: '微信无法直接打开文件，请重试或升级微信后再试。', showCancel: false })
-            });
-          },
-          fail: () => {
-            wx.hideLoading();
-            wx.showModal({ title: '保存失败', content: '无法保存标准模板，请清理微信存储空间后重试。', showCancel: false });
-          }
-        });
-      },
-      fail: (error) => {
-        wx.hideLoading();
-        const detail = (error && error.errMsg) || '';
-        const content = detail.includes('timeout') ? '下载超时，请检查网络后重试。' : '无法连接模板服务，请检查网络后重试。';
-        wx.showModal({ title: '下载失败', content, showCancel: false });
-      }
-    });
+    app.downloadAndOpen('/insured/import-template', { filename: '响帮帮批量导入标准模板.xlsx', fileType: 'xlsx', loadingTitle: '正在生成模板' }).catch(() => {});
   },
-  choose() { wx.chooseMessageFile({ count: 1, type: 'file', extension: ['csv', 'xlsx'], success: (res) => { const file = res.tempFiles[0], isCsv = file.name.toLowerCase().endsWith('.csv'); this.setData({ fileName: file.name, filePath: file.path, rows: [], errors: [] }); if (isCsv) wx.getFileSystemManager().readFile({ filePath: file.path, encoding: 'utf-8', success: (data) => this.parseCsv(data.data), fail: () => wx.showToast({ title: '文件读取失败，请重新选择', icon: 'none' }) }); }, fail: (error) => { const message = (error && error.errMsg) || ''; if (message.includes('cancel')) return; wx.showToast({ title: '选择文件失败，请从聊天记录中选择 CSV 或 XLSX 文件', icon: 'none' }); } }); },
+  choose() { wx.chooseMessageFile({ count: 1, type: 'file', extension: ['csv', 'xlsx'], success: (res) => { const file = res.tempFiles[0], isCsv = file.name.toLowerCase().endsWith('.csv'); if (file.size > 10 * 1024 * 1024) { wx.showModal({ title: '文件过大', content: '单个导入文件不能超过 10MB，请拆分后重试。', showCancel: false }); return; } this.setData({ fileName: file.name, filePath: file.path, rows: [], errors: [] }); if (isCsv) wx.getFileSystemManager().readFile({ filePath: file.path, encoding: 'utf-8', success: (data) => this.parseCsv(data.data), fail: () => wx.showToast({ title: '文件读取失败，请重新选择', icon: 'none' }) }); }, fail: (error) => { const message = (error && error.errMsg) || ''; if (message.includes('cancel')) return; wx.showToast({ title: '选择文件失败，请从聊天记录中选择 CSV 或 XLSX 文件', icon: 'none' }); } }); },
+  csvRows(text) {
+    const result = []; let row = [], value = '', quoted = false;
+    const source = String(text || '').replace(/^\ufeff/, '');
+    for (let index = 0; index < source.length; index += 1) {
+      const char = source[index];
+      if (quoted) {
+        if (char === '"' && source[index + 1] === '"') { value += '"'; index += 1; }
+        else if (char === '"') quoted = false;
+        else value += char;
+      } else if (char === '"') quoted = true;
+      else if (char === ',') { row.push(value.trim()); value = ''; }
+      else if (char === '\n') { row.push(value.trim()); if (row.some(Boolean)) result.push(row); row = []; value = ''; }
+      else if (char !== '\r') value += char;
+    }
+    row.push(value.trim()); if (row.some(Boolean)) result.push(row);
+    return result;
+  },
   parseCsv(text) {
-    const lines = text.replace(/^\ufeff/, '').split(/\r?\n/).filter(Boolean), rows = [], errors = [];
-    if (!lines.length) { this.setData({ rows: [], errors: [] }); return; }
-    const headerCells = lines[0].split(',').map((value) => value.trim().replace(/^"|"$/g, '').replace(/\s/g, ''));
+    const table = this.csvRows(text), rows = [], errors = [];
+    if (!table.length) { this.setData({ rows: [], errors: [{ row: 1, message: '文件中没有可导入的数据' }] }); return; }
+    const headerCells = table[0].map((value) => value.replace(/\s/g, ''));
     const colIndex = (label) => headerCells.indexOf(label);
     const nameCol = colIndex('姓名'), idCol = colIndex('身份证号'), phoneCol = colIndex('手机号');
     const enterpriseCol = colIndex('投保单位'), employerCol = colIndex('实际工作单位'), positionCol = colIndex('岗位名称');
     const effectiveCol = colIndex('生效日期'), terminatedCol = colIndex('停保日期');
-    lines.slice(1).forEach((line, index) => {
-      const cells = line.split(',').map((value) => value.trim().replace(/^"|"$/g, ''));
+    if (idCol < 0 || (this.data.kindIndex === 0 && nameCol < 0)) { this.setData({ rows: [], errors: [{ row: 1, message: '模板必须包含姓名、身份证号；停保模板至少包含身份证号' }] }); return; }
+    table.slice(1).forEach((cells, index) => {
       const at = (col) => (col >= 0 ? cells[col] || '' : '');
       const row = { name: at(nameCol), id_number: at(idCol), phone: at(phoneCol), enterprise: at(enterpriseCol), actual_employer: at(employerCol), position: at(positionCol), effective_at: at(effectiveCol), terminated_at: at(terminatedCol) };
       if (!row.id_number || (this.data.kindIndex === 0 && !row.name)) errors.push({ row: index + 2, message: '参保需姓名和身份证号，停保需身份证号' });

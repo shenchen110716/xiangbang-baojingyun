@@ -19,6 +19,7 @@ from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
 from ..services import activate_person_policy, correct_person_policy_dates, effective_person_status, plan_price_for_class, pricing_snapshot, serialize, strip_internal_pricing, terminate_person_policy
 
 router = APIRouter(prefix="/api", tags=["insured"])
+MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024
 
 
 def _parse_business_time(raw: str | None, label: str) -> datetime | None:
@@ -155,6 +156,31 @@ def insured_import_template(user:User=Depends(current_user)):
     media_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     return StreamingResponse(iter([output.getvalue()]), media_type=media_type, headers={'Content-Disposition': f'attachment; filename={filename}'})
 
+
+def _read_import_rows(content: bytes, filename: str) -> list[list[str]]:
+    if len(content) > MAX_IMPORT_FILE_BYTES:
+        raise HTTPException(413, '单个导入文件不能超过 10MB，请拆分后重试')
+    name = (filename or '').lower()
+    try:
+        if name.endswith('.xlsx'):
+            book = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            try:
+                sheet = book.active
+                raw = [[value.isoformat(sep=' ') if isinstance(value, datetime) else str(value).strip() if value is not None else '' for value in row] for row in sheet.iter_rows(values_only=True)]
+            finally:
+                book.close()
+        elif name.endswith('.csv'):
+            raw = [[str(value).strip() for value in row] for row in csv.reader(io.StringIO(content.decode('utf-8-sig')))]
+        else:
+            raise HTTPException(400, '仅支持 CSV 或 XLSX 电子表格')
+    except HTTPException:
+        raise
+    except UnicodeDecodeError as exc:
+        raise HTTPException(400, 'CSV 文件必须使用 UTF-8 编码，建议使用系统标准模板') from exc
+    except Exception as exc:
+        raise HTTPException(400, f'电子表格解析失败：{exc}') from exc
+    return [row for row in raw if any(value.strip() for value in row)]
+
 @router.post("/insured/bulk")
 def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Session=Depends(db)):
     if user.role=='enterprise' and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,'无权操作该单位')
@@ -180,16 +206,8 @@ async def import_insured_file(kind:Literal['enrollment','termination']=Form(...)
     if kind=='enrollment' and position_id:
         default_position=session.get(WorkPosition,position_id)
         if not default_position or default_position.enterprise_id!=enterprise_id or default_position.status!='approved': raise HTTPException(400,'批量参保必须选择本单位已审核通过的岗位')
-    content=await file.read();name=(file.filename or '').lower();raw=[]
-    try:
-        if name.endswith('.xlsx'):
-            sheet=openpyxl.load_workbook(io.BytesIO(content),read_only=True,data_only=True).active
-            raw=[[str(v or '').strip() for v in row] for row in sheet.iter_rows(values_only=True)]
-        elif name.endswith('.csv'):
-            raw=[[str(v).strip() for v in row] for row in csv.reader(io.StringIO(content.decode('utf-8-sig')))]
-        else: raise HTTPException(400,'仅支持 CSV 或 XLSX 电子表格')
-    except HTTPException: raise
-    except Exception as exc: raise HTTPException(400,f'电子表格解析失败：{exc}')
+    if file.size is not None and file.size > MAX_IMPORT_FILE_BYTES: raise HTTPException(413,'单个导入文件不能超过 10MB，请拆分后重试')
+    content=await file.read();raw=_read_import_rows(content,file.filename or '')
     if len(raw)<2: raise HTTPException(400,'电子表格没有可导入的数据')
     headers={x.replace(' ',''):i for i,x in enumerate(raw[0])}
     name_col=headers.get('姓名');id_col=headers.get('身份证号');phone_col=headers.get('手机号')

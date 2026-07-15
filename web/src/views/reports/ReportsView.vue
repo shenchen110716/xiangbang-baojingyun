@@ -7,7 +7,7 @@ import { listPlans } from '@/api/plans'
 import { getPremiumDetails, getReports } from '@/api/reports'
 import type { Agent, Enterprise, PremiumDetailReport, ReportRow } from '@/api/types'
 import { money } from '@/utils/format'
-import { downloadAuthenticated } from '@/utils/download'
+import { downloadAuthenticated, downloadCsv } from '@/utils/download'
 import { useAuthStore } from '@/stores/auth'
 import PageCard from '@/components/PageCard.vue'
 import TablePagination from '@/components/TablePagination.vue'
@@ -93,15 +93,7 @@ function displayValue(row: ReportRow) {
 
 function exportCsv() {
   const header = ['报表', '周期', '指标', '说明']
-  const csv = '﻿' + [header, ...visibleRows.value.map((r) => [r.name, r.period, displayValue(r), r.detail])]
-    .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
-    .join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' })
-  const link = document.createElement('a')
-  link.href = URL.createObjectURL(blob)
-  link.download = `响帮帮保经云-报表-${Date.now()}.csv`
-  link.click()
-  URL.revokeObjectURL(link.href)
+  downloadCsv([header, ...visibleRows.value.map((r) => [r.name, r.period, displayValue(r), r.detail])], `响帮帮保经云-报表-${Date.now()}.csv`)
 }
 
 async function exportPremiumDetails() {
