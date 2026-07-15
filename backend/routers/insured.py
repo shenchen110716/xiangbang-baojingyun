@@ -135,10 +135,25 @@ def insured_policy_members(item_id: int, user: User = Depends(current_user), ses
 
 @router.get("/insured/import-template")
 def insured_import_template(user:User=Depends(current_user)):
-    header = '姓名,身份证号,手机号,投保单位,实际工作单位,岗位名称,生效日期,停保日期\n'
-    sample = '张三,340123199001011234,13800000000,,,,2026-01-01,\n'
-    content = header + sample
-    return StreamingResponse(iter([content.encode('utf-8-sig')]),media_type='text/csv',headers={'Content-Disposition':'attachment; filename=insured-import-template.csv'})
+    book = openpyxl.Workbook()
+    sheet = book.active
+    sheet.title = '批量导入模板'
+    sheet.append(['姓名', '身份证号', '手机号', '投保单位', '实际工作单位', '岗位名称', '生效日期', '停保日期'])
+    sheet.append(['张三', '340123199001011234', '13800000000', '', '', '', '2026-01-01', ''])
+    for cell in sheet[1]:
+        cell.font = openpyxl.styles.Font(bold=True)
+        cell.fill = openpyxl.styles.PatternFill('solid', fgColor='DCE6FF')
+    for column, width in {'A': 14, 'B': 23, 'C': 16, 'D': 24, 'E': 24, 'F': 20, 'G': 16, 'H': 16}.items():
+        sheet.column_dimensions[column].width = width
+    for row in range(2, sheet.max_row + 1):
+        sheet.cell(row, 2).number_format = '@'
+        sheet.cell(row, 3).number_format = '@'
+    output = io.BytesIO()
+    book.save(output)
+    book.close()
+    filename = 'insured-import-template.xlsx'
+    media_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    return StreamingResponse(iter([output.getvalue()]), media_type=media_type, headers={'Content-Disposition': f'attachment; filename={filename}'})
 
 @router.post("/insured/bulk")
 def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Session=Depends(db)):

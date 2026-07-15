@@ -118,7 +118,7 @@ async function submitImport() {
   }
 }
 function downloadTemplate() {
-  downloadAuthenticated(importTemplateUrl().replace(/^\/api/, ''), '参保员工批量导入模板.csv')
+  downloadAuthenticated(importTemplateUrl().replace(/^\/api/, ''), '参保员工批量导入模板.xlsx')
 }
 
 // ---- export / email ----

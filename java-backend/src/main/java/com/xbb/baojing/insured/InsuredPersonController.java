@@ -19,11 +19,15 @@ import com.xbb.baojing.position.WorkPosition;
 import com.xbb.baojing.position.WorkPositionMapper;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -234,8 +238,8 @@ public class InsuredPersonController {
         return rows;
     }
 
-    @GetMapping(value = "/insured/import-template", produces = "text/csv")
-    public byte[] importTemplate() {
+    @GetMapping(value = "/insured/import-template", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    public ResponseEntity<byte[]> importTemplate() throws IOException {
         // 投保单位/实际工作单位/岗位名称 are optional: leave blank to use the
         // enterprise/position selected at upload time (backward compatible
         // with the miniprogram, which doesn't send these columns). Fill them
@@ -243,8 +247,28 @@ public class InsuredPersonController {
         // 生效日期/停保日期 are optional too: leave a row's column blank for the
         // old behaviour (enrollment rows land as 'pending' for manual review;
         // termination rows use "now" as the stop time).
-        String content = "姓名,身份证号,手机号,投保单位,实际工作单位,岗位名称,生效日期,停保日期\n张三,340123199001011234,13800000000,,,,2026-01-01,\n";
-        return ("﻿" + content).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        try (var workbook = new XSSFWorkbook(); var output = new ByteArrayOutputStream()) {
+            var sheet = workbook.createSheet("批量导入模板");
+            var header = sheet.createRow(0);
+            String[] headers = {"姓名", "身份证号", "手机号", "投保单位", "实际工作单位", "岗位名称", "生效日期", "停保日期"};
+            var headerStyle = workbook.createCellStyle();
+            var headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            for (int index = 0; index < headers.length; index++) {
+                header.createCell(index).setCellValue(headers[index]);
+                header.getCell(index).setCellStyle(headerStyle);
+                sheet.setColumnWidth(index, (index == 1 ? 23 : index >= 3 && index <= 5 ? 24 : 16) * 256);
+            }
+            var example = sheet.createRow(1);
+            String[] values = {"张三", "340123199001011234", "13800000000", "", "", "", "2026-01-01", ""};
+            for (int index = 0; index < values.length; index++) example.createCell(index).setCellValue(values[index]);
+            workbook.write(output);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=insured-import-template.xlsx")
+                    .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(output.toByteArray());
+        }
     }
 
     private static final java.time.format.DateTimeFormatter[] IMPORT_DATE_FORMATS = {

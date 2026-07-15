@@ -5,7 +5,53 @@ Page({
   kindChange(e) { this.setData({ kindIndex: Number(e.detail.value), errors: [], rows: [] }); },
   enterpriseChange(e) { const enterpriseIndex = Number(e.detail.value), enterprise = this.data.enterprises[enterpriseIndex], positions = this.data.allPositions.filter((item) => item.enterprise_id === enterprise.id); this.setData({ enterpriseIndex, positions, positionIndex: 0 }); },
   positionChange(e) { this.setData({ positionIndex: Number(e.detail.value) }); },
-  template() { wx.showLoading({ title: '下载中' }); wx.downloadFile({ url: `${app.globalData.apiBase}/insured/import-template`, header: { Authorization: `Bearer ${app.globalData.token}` }, success: (res) => { wx.hideLoading(); if (res.statusCode === 200) wx.openDocument({ filePath: res.tempFilePath, showMenu: true }); else wx.showToast({ title: '模板下载失败', icon: 'none' }); }, fail: () => { wx.hideLoading(); wx.showToast({ title: '模板下载失败', icon: 'none' }); } }); },
+  template() {
+    if (!app.globalData.token) { app.logout(true); return; }
+    wx.showLoading({ title: '正在生成模板', mask: true });
+    wx.request({
+      url: `${app.globalData.apiBase}/insured/import-template`,
+      method: 'GET',
+      header: { Authorization: `Bearer ${app.globalData.token}` },
+      responseType: 'arraybuffer',
+      timeout: 30000,
+      success: (res) => {
+        if (res.statusCode === 401) {
+          wx.hideLoading();
+          app.logout(true);
+          return;
+        }
+        if (res.statusCode !== 200 || !(res.data instanceof ArrayBuffer) || !res.data.byteLength) {
+          wx.hideLoading();
+          wx.showModal({ title: '下载失败', content: `模板服务返回异常（${res.statusCode}），请稍后重试。`, showCancel: false });
+          return;
+        }
+        const filePath = `${wx.env.USER_DATA_PATH}/响帮帮批量导入标准模板.xlsx`;
+        wx.getFileSystemManager().writeFile({
+          filePath,
+          data: res.data,
+          success: () => {
+            wx.hideLoading();
+            wx.openDocument({
+              filePath,
+              fileType: 'xlsx',
+              showMenu: true,
+              fail: () => wx.showModal({ title: '模板已下载', content: '微信无法直接打开文件，请重试或升级微信后再试。', showCancel: false })
+            });
+          },
+          fail: () => {
+            wx.hideLoading();
+            wx.showModal({ title: '保存失败', content: '无法保存标准模板，请清理微信存储空间后重试。', showCancel: false });
+          }
+        });
+      },
+      fail: (error) => {
+        wx.hideLoading();
+        const detail = (error && error.errMsg) || '';
+        const content = detail.includes('timeout') ? '下载超时，请检查网络后重试。' : '无法连接模板服务，请检查网络后重试。';
+        wx.showModal({ title: '下载失败', content, showCancel: false });
+      }
+    });
+  },
   choose() { wx.chooseMessageFile({ count: 1, type: 'file', extension: ['csv', 'xlsx'], success: (res) => { const file = res.tempFiles[0], isCsv = file.name.toLowerCase().endsWith('.csv'); this.setData({ fileName: file.name, filePath: file.path, rows: [], errors: [] }); if (isCsv) wx.getFileSystemManager().readFile({ filePath: file.path, encoding: 'utf-8', success: (data) => this.parseCsv(data.data), fail: () => wx.showToast({ title: '文件读取失败，请重新选择', icon: 'none' }) }); }, fail: (error) => { const message = (error && error.errMsg) || ''; if (message.includes('cancel')) return; wx.showToast({ title: '选择文件失败，请从聊天记录中选择 CSV 或 XLSX 文件', icon: 'none' }); } }); },
   parseCsv(text) {
     const lines = text.replace(/^\ufeff/, '').split(/\r?\n/).filter(Boolean), rows = [], errors = [];

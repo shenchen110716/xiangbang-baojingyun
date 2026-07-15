@@ -8,6 +8,8 @@ from datetime import date, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 
+import openpyxl
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
@@ -41,7 +43,7 @@ def run():
         from backend.routers.dashboard import dashboard, screen_products
         from backend.routers.enrollment import enrollment_email
         from backend.routers.enterprises import add_enterprise
-        from backend.routers.insured import add_person, insured_status, update_person
+        from backend.routers.insured import add_person, insured_import_template, insured_status, update_person
         from backend.routers.invoices import create_invoice, update_invoice
         from backend.routers.operators import add_operator
         from backend.routers.payments import create_payment, payment_callback
@@ -61,6 +63,15 @@ def run():
             enterprise_id = enterprise["id"]
             operator = add_operator(OperatorIn(enterprise_id=enterprise_id, username="smoke_operator", password="smoke123", name="测试操作员"), admin, session)
             user = session.get(User, operator["id"])
+
+            template_response = insured_import_template(user)
+            template_data = asyncio.run(template_response.body_iterator.__anext__())
+            template_book = openpyxl.load_workbook(BytesIO(template_data), read_only=True, data_only=True)
+            template_sheet = template_book.active
+            assert template_response.media_type.endswith('spreadsheetml.sheet')
+            assert [cell.value for cell in template_sheet[1]] == ['姓名', '身份证号', '手机号', '投保单位', '实际工作单位', '岗位名称', '生效日期', '停保日期']
+            assert template_sheet['B2'].value == '340123199001011234'
+            template_book.close()
 
             try:
                 add_plan(PlanIn(insurer="测试保司", name="越权方案", price=1), user, session)
