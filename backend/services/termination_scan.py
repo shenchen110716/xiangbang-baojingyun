@@ -53,6 +53,8 @@ def scan_premium_shortfalls(session: Session, enterprise_id: int | None = None) 
                 InsuredPerson.status == "active",
             )
         ) or 0
+        if affected_count == 0:
+            continue
         item = PendingTermination(
             enterprise_id=row.enterprise_id, account_id=row.account_id,
             affected_insurers=",".join(insurers), affected_count=affected_count,

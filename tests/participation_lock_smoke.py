@@ -32,6 +32,7 @@ def run():
         from backend.routers.insured import add_person, insured_status
         from backend.routers.pending_terminations import confirm_pending_termination, pending_terminations as list_pending_terminations
         from backend.routers.recharge_requests import confirm_recharge_request, reject_recharge_request
+        from backend.routers.dashboard import dashboard as dashboard_endpoint
         from backend.schemas import PersonIn
         from backend.models import EnterprisePremiumAccount, InsurerAccount, InsurerAccountLink
         from backend.models import AuditLog
@@ -263,6 +264,7 @@ def run():
             assert result["status"] == "confirmed" and result["terminated_count"] == 2
             statuses = session.scalars(select(InsuredPerson.status).where(InsuredPerson.enterprise_id == confirm_ent.id)).all()
             assert statuses == ["stopped", "stopped"], statuses
+            assert scan_premium_shortfalls(session, enterprise_id=confirm_ent.id) == [], "no active people means no new termination task"
             try:
                 confirm_pending_termination(fresh_pending[0].id, admin_user, session)
                 assert False, "expected 400 for re-confirming an already processed task"
@@ -290,6 +292,7 @@ def run():
             warning_ent = Enterprise(name="保费预警短信企业", kind="企业", contact="", phone="", status="active")
             warning_account = InsurerAccount(label="保费预警短信账户", bank_name="", account_no="", account_holder="", status="active")
             session.add_all([warning_ent, warning_account]); session.commit(); session.refresh(warning_ent); session.refresh(warning_account)
+            session.add(InsuredPerson(enterprise_id=warning_ent.id, name="保费预警在保员工", status="active"))
             session.add(InsurerAccountLink(insurer="保费预警短信保司", account_id=warning_account.id))
             session.add(EnterprisePremiumAccount(enterprise_id=warning_ent.id, account_id=warning_account.id, balance=-1.0)); session.commit()
             with patch("backend.services.termination_scan.notify_enterprise", side_effect=record_trigger):
@@ -301,6 +304,7 @@ def run():
             confirm_sms_ent = Enterprise(name="停保确认短信企业", kind="企业", contact="", phone="", status="active")
             confirm_sms_account = InsurerAccount(label="停保确认短信账户", bank_name="", account_no="", account_holder="", status="active")
             session.add_all([confirm_sms_ent, confirm_sms_account]); session.commit(); session.refresh(confirm_sms_ent); session.refresh(confirm_sms_account)
+            session.add(InsuredPerson(enterprise_id=confirm_sms_ent.id, name="停保确认在保员工", status="active"))
             session.add(InsurerAccountLink(insurer="停保确认短信保司", account_id=confirm_sms_account.id))
             session.add(EnterprisePremiumAccount(enterprise_id=confirm_sms_ent.id, account_id=confirm_sms_account.id, balance=-1.0)); session.commit()
             confirm_sms_pending = scan_premium_shortfalls(session, confirm_sms_ent.id)[0]
@@ -318,6 +322,26 @@ def run():
                 reject_recharge_request(reject_request.id, "凭证不清晰", admin_user, session)
             assert [call[1] for call in trigger_calls].count("recharge_confirmed") == 1
             assert [call[1] for call in trigger_calls].count("recharge_rejected") == 1
+
+            dashboard_ent = Enterprise(name="看板惰性扫描企业", kind="企业", contact="", phone="", status="active")
+            dashboard_account = InsurerAccount(label="看板惰性扫描账户", bank_name="", account_no="", account_holder="", status="active")
+            session.add_all([dashboard_ent, dashboard_account]); session.commit(); session.refresh(dashboard_ent); session.refresh(dashboard_account)
+            session.add(InsuredPerson(enterprise_id=dashboard_ent.id, name="看板扫描在保员工", status="active"))
+            session.add(InsurerAccountLink(insurer="看板惰性扫描保司", account_id=dashboard_account.id))
+            session.add(EnterprisePremiumAccount(enterprise_id=dashboard_ent.id, account_id=dashboard_account.id, balance=-1.0)); session.commit()
+            dashboard_result = dashboard_endpoint(admin_user, session)
+            dashboard_pending = session.scalar(select(PendingTermination).where(
+                PendingTermination.enterprise_id == dashboard_ent.id,
+                PendingTermination.account_id == dashboard_account.id,
+                PendingTermination.status == "pending",
+            ))
+            assert dashboard_pending is not None
+            current_pending = session.query(PendingTermination).filter(PendingTermination.status == "pending").count()
+            assert dashboard_result["pending_terminations_count"] == current_pending
+
+            enterprise_user = session.scalar(select(User).where(User.username == "enterprise"))
+            enterprise_result = dashboard_endpoint(enterprise_user, session)
+            assert enterprise_result["pending_terminations_count"] == 0
 
     print("participation lock smoke: ok")
 
