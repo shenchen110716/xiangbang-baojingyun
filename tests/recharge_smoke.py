@@ -41,6 +41,7 @@ def run():
             create_recharge_request, list_recharge_requests, confirm_recharge_request, reject_recharge_request,
         )
         from backend.routers.enterprises import enterprise_premium_accounts
+        from backend.routers.dashboard import dashboard as dashboard_endpoint
         from backend.schemas import InsurerAccountIn, InsurerAccountUpdate, InsurerAccountLinkIn
 
         startup()
@@ -171,6 +172,12 @@ def run():
             rejected = reject_recharge_request(second_submission["id"], "回单金额与申请金额不符", admin, session)
             assert rejected["status"] == "rejected" and rejected["reject_reason"] == "回单金额与申请金额不符"
             assert enterprise.usage_balance == usage_before  # rejecting must not touch the balance
+
+            dashboard_data = dashboard_endpoint(admin, session)
+            assert "premium_accounts" in dashboard_data
+            assert "premium_balance" not in dashboard_data  # replaced, not just supplemented
+            matching = next((row for row in dashboard_data["premium_accounts"] if row["account_id"] == account.id), None)
+            assert matching is not None and matching["balance"] == balance_after
 
     print("recharge smoke: ok")
 
