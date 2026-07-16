@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..core.audit import audit
@@ -15,6 +15,7 @@ from ..services import (
     serialize,
     terminate_person_policy,
 )
+from ..services.termination_scan import affected_coverage_for_account
 
 router = APIRouter(prefix="/api", tags=["pending-terminations"])
 
@@ -57,15 +58,20 @@ def confirm_pending_termination(
     user: User = Depends(current_user),
     session: Session = Depends(db),
 ):
-    item = session.scalar(
-        select(PendingTermination)
-        .where(PendingTermination.id == item_id)
-        .with_for_update()
+    claimed = session.execute(
+        update(PendingTermination)
+        .where(
+            PendingTermination.id == item_id,
+            PendingTermination.status == "pending",
+        )
+        .values(status="processing")
     )
-    if not item:
-        raise HTTPException(404, "待处理停保任务不存在")
-    if item.status != "pending":
+    if claimed.rowcount != 1:
+        session.rollback()
+        if session.get(PendingTermination, item_id) is None:
+            raise HTTPException(404, "待处理停保任务不存在")
         raise HTTPException(400, "该任务已处理，不能重复确认")
+    item = session.get(PendingTermination, item_id)
 
     premium_account = session.scalar(
         select(EnterprisePremiumAccount)
@@ -82,11 +88,12 @@ def confirm_pending_termination(
         audit(session, user, "auto_dismiss", "pending_termination", str(item.id), "balance_recovered")
         raise HTTPException(409, "该账户已充值，待停保任务已自动撤销")
 
-    insurers, affected = affected_people_for_account(
+    insurers, affected_coverage = affected_coverage_for_account(
         session,
         item.enterprise_id,
         item.account_id,
     )
+    affected = [person for person, _member in affected_coverage]
     if not affected:
         item.status = "dismissed"
         item.dismissed_at = business_now()
@@ -95,12 +102,13 @@ def confirm_pending_termination(
         raise HTTPException(409, "该账户当前没有可停保人员，任务已自动撤销")
 
     terminated_at = business_now()
-    for person in affected:
+    for person, member in affected_coverage:
         terminate_person_policy(
             session,
             person,
             terminated_at=terminated_at,
             enforce_timing=False,
+            coverage_member_id=member.id,
         )
         person.status = "stopped"
 

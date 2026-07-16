@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -10,21 +10,21 @@ from ..models import (
     InsurerAccountLink,
     PendingTermination,
     Policy,
+    PolicyMember,
 )
 from .notify import notify_enterprise
 
 
-def affected_people_for_account(
+def affected_coverage_for_account(
     session: Session,
     enterprise_id: int,
     account_id: int,
-) -> tuple[list[str], list[InsuredPerson]]:
-    """Return only active people whose current policy belongs to this account.
+) -> tuple[list[str], list[tuple[InsuredPerson, PolicyMember]]]:
+    """Return people and the exact live coverage funded by this account.
 
-    Account balance is pooled by insurer mapping.  A person's current
-    ``policy_id`` is the durable link to the plan/insurer that is actually
-    covering them; enterprise-wide or position-only matching can stop people
-    funded by another account and is therefore unsafe.
+    Account balance is pooled by insurer mapping. The live ``PolicyMember``
+    is authoritative; callers that terminate coverage must use this exact row
+    rather than re-selecting by person at a later time.
     """
     insurers = sorted({
         insurer
@@ -37,19 +37,41 @@ def affected_people_for_account(
     if not insurers:
         return [], []
 
-    people = session.scalars(
-        select(InsuredPerson)
-        .join(Policy, InsuredPerson.policy_id == Policy.id)
+    now = business_now()
+    latest_coverage_id = (
+        select(PolicyMember.id)
+        .where(
+            PolicyMember.person_id == InsuredPerson.id,
+            PolicyMember.effective_at <= now,
+            or_(PolicyMember.terminated_at.is_(None), PolicyMember.terminated_at > now),
+        )
+        .order_by(PolicyMember.id.desc())
+        .limit(1)
+        .correlate(InsuredPerson)
+        .scalar_subquery()
+    )
+    coverage = session.execute(
+        select(InsuredPerson, PolicyMember)
+        .join(PolicyMember, PolicyMember.id == latest_coverage_id)
+        .join(Policy, PolicyMember.policy_id == Policy.id)
         .join(InsurancePlan, Policy.plan_id == InsurancePlan.id)
         .where(
             InsuredPerson.enterprise_id == enterprise_id,
-            InsuredPerson.status == "active",
             Policy.status == "active",
             InsurancePlan.insurer.in_(insurers),
         )
         .order_by(InsuredPerson.id)
     ).all()
-    return insurers, list(people)
+    return insurers, list(coverage)
+
+
+def affected_people_for_account(
+    session: Session,
+    enterprise_id: int,
+    account_id: int,
+) -> tuple[list[str], list[InsuredPerson]]:
+    insurers, coverage = affected_coverage_for_account(session, enterprise_id, account_id)
+    return insurers, [person for person, _member in coverage]
 
 
 def scan_premium_shortfalls(session: Session, enterprise_id: int | None = None) -> list[PendingTermination]:

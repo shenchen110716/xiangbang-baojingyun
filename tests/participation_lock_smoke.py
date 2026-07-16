@@ -8,6 +8,7 @@ ID-checksum validation bug unrelated to this feature.
 import os
 import sys
 import tempfile
+import threading
 from datetime import timedelta
 from unittest.mock import patch
 from pathlib import Path
@@ -315,6 +316,35 @@ def run():
             session.add(confirm_ent); session.commit(); session.refresh(confirm_ent)
             target_person = add_covered_person(confirm_ent, "确认停保保司", "欠费账户员工")
             safe_person = add_covered_person(confirm_ent, "正常余额保司", "正常账户员工")
+            temporary_person = add_covered_person(confirm_ent, "确认停保保司", "仍在保障期临时员工")
+            temporary_member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == temporary_person.id))
+            temporary_member.terminated_at = business_now() + timedelta(hours=1)
+            temporary_member.status = "terminated"
+            temporary_person.policy_id = None
+            temporary_person.status = "stopped"
+            target_policy = session.get(Policy, target_person.policy_id)
+            moved_position = WorkPosition(
+                enterprise_id=confirm_ent.id,
+                name="岗位已改到欠费产品",
+                plan_id=target_policy.plan_id,
+                status="approved",
+            )
+            session.add(moved_position); session.flush()
+            safe_person.position_id = moved_position.id
+            current_target_member = session.scalar(
+                select(PolicyMember)
+                .where(PolicyMember.person_id == target_person.id)
+                .order_by(PolicyMember.id.asc())
+            )
+            coverage_scan_time = business_now()
+            future_target_member = PolicyMember(
+                policy_id=target_policy.id,
+                person_id=target_person.id,
+                status="active",
+                effective_at=coverage_scan_time + timedelta(hours=1),
+            )
+            session.add(future_target_member)
+            session.flush()
             legacy_person = InsuredPerson(enterprise_id=confirm_ent.id, name="无法归属历史员工", status="active")
             session.add(legacy_person)
             session.add_all([
@@ -326,22 +356,107 @@ def run():
             listed = next(row for row in list_pending_terminations(session) if row["id"] == fresh_pending[0].id)
             assert listed["enterprise_name"] == confirm_ent.name
             assert listed["account_label"] == confirm_account.label
-            assert listed["current_affected_count"] == 1
-            assert listed["affected_people"] == [{"id": target_person.id, "name": target_person.name}]
+            assert listed["current_affected_count"] == 2
+            assert listed["affected_people"] == [
+                {"id": target_person.id, "name": target_person.name},
+                {"id": temporary_person.id, "name": temporary_person.name},
+            ]
 
-            result = confirm_pending_termination(fresh_pending[0].id, admin_user, session)
-            assert result["status"] == "confirmed" and result["terminated_count"] == 1
-            session.refresh(target_person); session.refresh(safe_person); session.refresh(legacy_person)
+            with patch("backend.services.termination_scan.business_now", return_value=coverage_scan_time), patch(
+                "backend.services.policy_members.business_now",
+                return_value=coverage_scan_time + timedelta(hours=2),
+            ):
+                result = confirm_pending_termination(fresh_pending[0].id, admin_user, session)
+            assert result["status"] == "confirmed" and result["terminated_count"] == 2
+            session.refresh(target_person); session.refresh(safe_person); session.refresh(temporary_person); session.refresh(legacy_person)
             assert target_person.status == "stopped"
-            assert safe_person.status == "active", "a funded account must not be affected"
+            assert safe_person.status == "active", "a funded live policy remains authoritative even if the current position changed"
+            assert temporary_person.status == "stopped"
             assert legacy_person.status == "active", "an unattributed row must not be affected"
-            terminated_member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == target_person.id))
-            assert terminated_member.status == "terminated" and terminated_member.terminated_at is not None
+            session.refresh(current_target_member)
+            assert current_target_member.status == "terminated" and current_target_member.terminated_at is not None
+            session.refresh(future_target_member)
+            assert future_target_member.status == "active" and future_target_member.terminated_at is None, "future coverage must not replace the current period selected for termination"
+            session.refresh(temporary_member)
+            assert temporary_member.terminated_at <= business_now(), "forced termination must close a still-live future-ended period now"
             try:
                 confirm_pending_termination(fresh_pending[0].id, admin_user, session)
                 assert False, "expected 400 for re-confirming an already processed task"
             except HTTPException as error:
                 assert error.status_code == 400
+
+            # SQLite ignores SELECT ... FOR UPDATE. Two independent requests
+            # must still have one atomic winner, one clean 400 loser, one
+            # audit, and one confirmation notification.
+            concurrent_account = InsurerAccount(label="并发确认账户", status="active")
+            concurrent_ent = Enterprise(name="并发确认企业", kind="企业", status="active")
+            session.add_all([concurrent_account, concurrent_ent]); session.commit()
+            session.add(InsurerAccountLink(insurer="并发确认保司", account_id=concurrent_account.id)); session.commit()
+            add_covered_person(concurrent_ent, "并发确认保司", "并发确认员工")
+            session.add(EnterprisePremiumAccount(
+                enterprise_id=concurrent_ent.id,
+                account_id=concurrent_account.id,
+                balance=-1.0,
+            )); session.commit()
+            concurrent_pending = scan_premium_shortfalls(session, concurrent_ent.id)[0]
+            barrier = threading.Barrier(2)
+            concurrent_results = []
+            concurrent_sms = []
+            result_lock = threading.Lock()
+
+            def run_concurrent_confirm():
+                with SessionLocal() as concurrent_session:
+                    concurrent_admin = concurrent_session.scalar(select(User).where(User.username == "admin"))
+                    barrier.wait()
+                    try:
+                        outcome = confirm_pending_termination(concurrent_pending.id, concurrent_admin, concurrent_session)
+                    except HTTPException as error:
+                        outcome = error.status_code
+                    except Exception as error:
+                        outcome = type(error).__name__
+                    with result_lock:
+                        concurrent_results.append(outcome)
+
+            with patch(
+                "backend.routers.pending_terminations.notify_enterprise",
+                side_effect=lambda *args: concurrent_sms.append(args),
+            ):
+                workers = [threading.Thread(target=run_concurrent_confirm) for _ in range(2)]
+                for worker in workers: worker.start()
+                for worker in workers: worker.join(timeout=10)
+            assert all(not worker.is_alive() for worker in workers), "concurrent confirmation must not deadlock"
+            assert sorted(400 if result == 400 else 200 if isinstance(result, dict) else str(result) for result in concurrent_results) == [200, 400], concurrent_results
+            assert len(concurrent_sms) == 1
+            assert session.query(AuditLog).filter(
+                AuditLog.action == "confirm",
+                AuditLog.object_type == "pending_termination",
+                AuditLog.object_id == str(concurrent_pending.id),
+            ).count() == 1
+
+            rollback_account = InsurerAccount(label="异常回滚账户", status="active")
+            rollback_ent = Enterprise(name="异常回滚企业", kind="企业", status="active")
+            session.add_all([rollback_account, rollback_ent]); session.commit()
+            session.add(InsurerAccountLink(insurer="异常回滚保司", account_id=rollback_account.id)); session.commit()
+            add_covered_person(rollback_ent, "异常回滚保司", "异常回滚员工")
+            session.add(EnterprisePremiumAccount(
+                enterprise_id=rollback_ent.id,
+                account_id=rollback_account.id,
+                balance=-1.0,
+            )); session.commit()
+            rollback_pending = scan_premium_shortfalls(session, rollback_ent.id)[0]
+            try:
+                with SessionLocal() as failing_session:
+                    failing_admin = failing_session.scalar(select(User).where(User.username == "admin"))
+                    with patch(
+                        "backend.routers.pending_terminations.affected_coverage_for_account",
+                        side_effect=RuntimeError("injected failure after claim"),
+                    ):
+                        confirm_pending_termination(rollback_pending.id, failing_admin, failing_session)
+                assert False, "expected injected confirmation failure"
+            except RuntimeError as error:
+                assert str(error) == "injected failure after claim"
+            with SessionLocal() as verification_session:
+                assert verification_session.get(PendingTermination, rollback_pending.id).status == "pending", "an exception must roll back the processing claim"
 
             # Confirmation always rechecks the locked balance row. A recharge
             # after task creation dismisses the task and must not stop anyone.

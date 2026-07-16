@@ -4,7 +4,7 @@ from datetime import datetime, time, timedelta
 
 from fastapi import HTTPException
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..core.business_time import as_business_time, business_now
@@ -114,6 +114,7 @@ def terminate_person_policy(
     terminated_at: datetime | None = None,
     *,
     enforce_timing: bool = True,
+    coverage_member_id: int | None = None,
 ) -> PolicyMember | None:
     """Call when person.status transitions OUT of 'active'. Closes (never
     deletes/reuses) the person's currently-open coverage period; no-ops if
@@ -127,9 +128,22 @@ def terminate_person_policy(
     deliberately immediate and must not use the voluntary next-day/minimum-
     period validation.  The default remains strict for every existing caller.
     """
-    member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == person.id, PolicyMember.status == "active", PolicyMember.terminated_at.is_(None)).order_by(PolicyMember.id.desc()))
+    operation = business_now()
+    member_stmt = select(PolicyMember).where(PolicyMember.person_id == person.id)
+    if coverage_member_id is not None:
+        member_stmt = member_stmt.where(PolicyMember.id == coverage_member_id)
+    elif enforce_timing:
+        member_stmt = member_stmt.where(
+            PolicyMember.status == "active",
+            PolicyMember.terminated_at.is_(None),
+        )
+    else:
+        member_stmt = member_stmt.where(
+            PolicyMember.effective_at <= operation,
+            or_(PolicyMember.terminated_at.is_(None), PolicyMember.terminated_at > operation)
+        )
+    member = session.scalar(member_stmt.order_by(PolicyMember.id.desc()))
     if member:
-        operation = business_now()
         plan = _plan_for_person(session, person)
         if terminated_at is not None:
             if enforce_timing:
