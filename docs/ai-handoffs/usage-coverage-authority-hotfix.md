@@ -2,7 +2,7 @@
 
 - task_id: `usage-coverage-authority-hotfix`
 - owner: `Codex`
-- status: `review`
+- status: `ready`
 - branch: `codex/usage-coverage-authority`
 - worktree: `/private/tmp/xiangbang-usage-coverage-hotfix`
 - base_commit: `1c223e3`
@@ -38,4 +38,5 @@
 - 无迁移，不占用 v4.2 迁移锁。
 - 独立审查发现强制停保会按最大 ID 误选未来保障期；现由范围扫描返回并传递精确 `PolicyMember.id`，生命周期函数不再按稍后的时间重新猜测。竞态测试模拟扫描后未来记录刚好生效，断言仍只终止扫描时选中的当前保障期。
 - 已补充确认抢占后注入异常的回滚测试；新会话确认任务恢复为 `pending`。并发测试在 SQLite 双连接通过，PostgreSQL 依赖正常条件更新事务语义，本地未配置 PostgreSQL 实例。
-- 待修复后复审；通过后快进合并 `main`，再通知 v4.2 工作树刷新基线。
+- 最终独立复审：无 P0/P1；仅保留“未在真实 PostgreSQL 双连接环境运行集成测试”的 P2 覆盖缺口，代码审查确认条件更新的单赢家语义成立。
+- 已具备快进合并 `main` 条件；合并后通知 v4.2 工作树刷新基线。
