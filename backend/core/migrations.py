@@ -9,8 +9,14 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(users)")}
     if "enterprise_id" not in columns:
         s.connection().exec_driver_sql("ALTER TABLE users ADD COLUMN enterprise_id INTEGER")
-    for column, definition in [("phone", "VARCHAR(30) DEFAULT ''"), ("status", "VARCHAR(30) DEFAULT 'active'"), ("is_owner", "BOOLEAN DEFAULT 0")]:
+    for column, definition in [("phone", "VARCHAR(30) DEFAULT ''"), ("status", "VARCHAR(30) DEFAULT 'active'"), ("is_owner", "BOOLEAN DEFAULT 0"), ("enterprise_role", "VARCHAR(30)")]:
         if column not in columns: s.connection().exec_driver_sql(f"ALTER TABLE users ADD COLUMN {column} {definition}")
+    s.connection().exec_driver_sql(
+        "UPDATE users SET enterprise_role=CASE WHEN is_owner THEN 'owner' ELSE 'project_manager' END "
+        "WHERE role='enterprise' AND enterprise_role IS NULL"
+    )
+    from ..models import UserEmployerScope
+    UserEmployerScope.__table__.create(bind=s.connection(), checkfirst=True)
     enterprise_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(enterprises)")}
     if "agent_id" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN agent_id INTEGER")
     if "usage_fee_daily" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN usage_fee_daily FLOAT DEFAULT 0.1")

@@ -1,6 +1,6 @@
 from ..core.db import Base
 from .user import User
-from .enterprise import Enterprise, ActualEmployer
+from .enterprise import Enterprise, ActualEmployer, UserEmployerScope
 from .position import WorkPosition, PositionVideo
 from .plan import InsurancePlan, PlanTier
 from .insured import InsuredPerson, Policy, PolicyMember
@@ -14,6 +14,7 @@ __all__ = [
     "User",
     "Enterprise",
     "ActualEmployer",
+    "UserEmployerScope",
     "WorkPosition",
     "PositionVideo",
     "InsurancePlan",

@@ -66,7 +66,7 @@
 - `[x]` `usage-lock-pending-termination` 状态为 `merged`。
 - `[x]` `main` 已通过合并后回归。
 - `[x]` 新任务分支以更新后的 `main` 为基线。
-- `[ ]` 新 Alembic 迁移接在最新迁移头 `f7e2d9b1a4c8` 之后。
+- `[x]` 新 Alembic 迁移 `d5a4c12f7b91` 线性接在最新迁移头 `f7e2d9b1a4c8` 之后。
 
 ## 后续实施顺序
 
