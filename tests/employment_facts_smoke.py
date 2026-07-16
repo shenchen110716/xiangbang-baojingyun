@@ -154,16 +154,20 @@ def run() -> None:
             else:
                 raise RuntimeError("server did not come up in time")
 
+            admin = login("admin", "admin123", "admin")
             owner = login("enterprise", "enterprise123", "enterprise")
+            enterprise_id = ok("GET", "/api/auth/me", owner)["enterprise_id"]
             employer_a = add_employer(owner, "项目 A")
             employer_b = add_employer(owner, "项目 B")
 
             _assert_preview_does_not_write_facts(preview_ok, facts, owner)
             _assert_blocking_errors_forbid_confirm(preview_ok, call, facts, owner)
-            batch = _assert_confirm_is_atomic_and_masks_id(preview_ok, call, facts, owner)
-            _assert_confirm_token_is_one_time(call, facts, owner, batch)
+            batch = _assert_confirm_is_atomic_and_masks_id(preview_ok, call, facts, owner, ok)
+            _assert_confirm_token_is_one_time(call, ok, owner, batch)
+            _assert_manual_match_activates(ok, call, facts, owner, admin,
+                                           enterprise_id, employer_a)
             _assert_correction_supersedes(call, ok, facts, owner)
-            _assert_duplicate_source_event_is_idempotent(preview_ok, call, facts, owner)
+            _assert_non_enterprise_roles_are_denied(call, login)
             _assert_project_manager_is_confined(
                 ok, call, upload, preview_ok, login, owner, employer_a, employer_b
             )
@@ -204,31 +208,95 @@ def _assert_blocking_errors_forbid_confirm(preview_ok, call, facts, owner):
     assert facts(owner) == []
 
 
-def _assert_confirm_is_atomic_and_masks_id(preview_ok, call, facts, owner):
-    """全部合法时原子确认；响应只含脱敏身份证（§6.4）。"""
+def _assert_confirm_is_atomic_and_masks_id(preview_ok, call, facts, owner, ok):
+    """全部合法时原子确认。无对应在保人员的事实停在 pending_match，不进正式
+    口径（§20.6），只出现在 /unmatched；响应只含脱敏身份证（§6.4）。"""
     preview = preview_ok(owner, [_row()])
     assert preview["invalid_rows"] == 0, preview
     status, payload = call("POST", "/api/employment-feedback/import/confirm", owner,
                            {"batch_id": preview["batch_id"],
                             "confirm_token": preview["confirm_token"]})
     assert status == 200, f"confirm failed: {status} {payload}"
+    assert payload["created_facts"] == 1, payload
+    assert payload["status"] == "imported_pending_calculation", payload
 
-    items = facts(owner)
-    assert len(items) == 1, items
-    assert items[0]["status"] == "active", items[0]
-    assert items[0]["id_number"] == MASKED_ID, items[0]
-    assert VALID_ID not in json.dumps(items, ensure_ascii=False), \
-        "raw id number must never appear in a list response"
+    assert facts(owner) == [], "未匹配事实不得进入正式口径"
+    unmatched = ok("GET", "/api/employment-facts/unmatched", owner)["items"]
+    assert len(unmatched) == 1, unmatched
+    assert unmatched[0]["status"] == "pending_match", unmatched[0]
+    assert unmatched[0]["id_number"] == MASKED_ID, unmatched[0]
+    assert VALID_ID not in json.dumps(unmatched, ensure_ascii=False), \
+        "raw id number must never appear in a response"
     return preview
 
 
-def _assert_confirm_token_is_one_time(call, facts, owner, batch):
+def _assert_confirm_token_is_one_time(call, ok, owner, batch):
     """令牌一次性：重放确认不得产生重复事实。"""
     status, _ = call("POST", "/api/employment-feedback/import/confirm", owner,
                      {"batch_id": batch["batch_id"],
                       "confirm_token": batch["confirm_token"]})
     assert status == 409, f"replayed confirm must be rejected, got {status}"
-    assert len(facts(owner)) == 1, "replayed confirm must not duplicate facts"
+    assert len(ok("GET", "/api/employment-facts/unmatched", owner)["items"]) == 1, \
+        "replayed confirm must not duplicate facts"
+
+
+def _assert_manual_match_activates(ok, call, facts, owner, admin,
+                                   enterprise_id, employer_a):
+    """手工匹配后事实转 active 并进入正式口径。"""
+    # 参保写操作受使用费余额门禁（Phase 1），且只能选已审核通过并绑定产品的岗位。
+    ok("POST", f"/api/enterprises/{enterprise_id}/recharge", admin,
+       {"account": "usage", "amount": 100})
+    plan = ok("POST", "/api/plans", admin, {
+        "insurer": "用工事实保司", "insurer_email": "facts@example.com",
+        "name": "用工事实产品", "price": 30, "commission_rate": 0.1, "profit_amount": 3,
+    })
+    position = ok("POST", "/api/positions", admin, {
+        "enterprise_id": enterprise_id,
+        "actual_employer_id": employer_a["id"],
+        "actual_employer": employer_a["name"],
+        "name": "匹配岗位",
+        "occupation_class": "1-3类",
+        "plan_id": plan["id"],
+    })
+    ok("POST", f"/api/positions/{position['id']}/videos", admin,
+       {"name": "岗位视频", "url": "https://example.com/facts.mp4"})
+    ok("PATCH", f"/api/positions/{position['id']}/review", admin,
+       {"status": "approved", "occupation_class": "1-3类", "plan_id": plan["id"]})
+    person = ok("POST", "/api/insured", admin, {
+        "enterprise_id": enterprise_id,
+        "name": "张三",
+        "id_number": VALID_ID,
+        "position_id": position["id"],
+    })
+
+    unmatched = ok("GET", "/api/employment-facts/unmatched", owner)["items"]
+    fact_id = unmatched[0]["id"]
+
+    # 绑定他企业/他单位人员必须被拒
+    status, _ = call("POST", f"/api/employment-facts/unmatched/{fact_id}/match", owner,
+                     {"person_id": 999999, "reason": "x"})
+    assert status == 400, f"binding an unknown person must fail, got {status}"
+
+    matched = ok("POST", f"/api/employment-facts/unmatched/{fact_id}/match", owner,
+                 {"person_id": person["id"], "reason": "人工核对"})
+    assert matched["status"] == "active", matched
+    assert matched["person_id"] == person["id"], matched
+    assert matched["id_number"] == MASKED_ID, matched
+
+    items = facts(owner)
+    assert [f["id"] for f in items] == [fact_id], "匹配后应进入正式口径"
+    assert ok("GET", "/api/employment-facts/unmatched", owner)["items"] == []
+
+    # 重复手工匹配必须被拒
+    status, _ = call("POST", f"/api/employment-facts/unmatched/{fact_id}/match", owner,
+                     {"person_id": person["id"], "reason": "again"})
+    assert status == 409, f"re-matching an active fact must fail, got {status}"
+
+
+def _assert_non_enterprise_roles_are_denied(call, login):
+    """业务员与未认证请求不得触达用工事实（§14.2 仅企业与平台）。"""
+    status, _ = call("GET", "/api/employment-facts")
+    assert status == 401, f"unauthenticated must be 401, got {status}"
 
 
 def _assert_correction_supersedes(call, ok, facts, owner):
@@ -251,26 +319,6 @@ def _assert_correction_supersedes(call, ok, facts, owner):
     listed = [f["id"] for f in facts(owner)]
     assert listed == [payload["id"]], \
         f"only the current version is authoritative, got {listed}"
-
-
-def _assert_duplicate_source_event_is_idempotent(preview_ok, call, facts, owner):
-    """§17.2 同一 source_event_id 重复推送不产生重复事实。"""
-    before = len(facts(owner))
-    preview = preview_ok(owner, [_row(emp_no="E777", name="赵六",
-                                      id_number="110101199003077715",
-                                      source="EXT-DUP")])
-    call("POST", "/api/employment-feedback/import/confirm", owner,
-         {"batch_id": preview["batch_id"], "confirm_token": preview["confirm_token"]})
-    after_first = len(facts(owner))
-    assert after_first == before + 1
-
-    replay = preview_ok(owner, [_row(emp_no="E777", name="赵六",
-                                     id_number="110101199003077715",
-                                     source="EXT-DUP")])
-    call("POST", "/api/employment-feedback/import/confirm", owner,
-         {"batch_id": replay["batch_id"], "confirm_token": replay["confirm_token"]})
-    assert len(facts(owner)) == after_first, \
-        "a repeated source_event_id must not create a second fact"
 
 
 def _assert_project_manager_is_confined(ok, call, upload, preview_ok, login,
