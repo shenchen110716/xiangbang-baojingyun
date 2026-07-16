@@ -8,7 +8,7 @@
 - base_commit: `cf8fcced6d6a41167d1ae8389ce762ea83e4661e`
 - migration_owner: `yes（Phase 1 独占）`
 - depends_on: `recharge-accounts-phase-a、usage-lock-pending-termination（均已合并）`
-- last_updated: `2026-07-16 10:50 AEST`
+- last_updated: `2026-07-16 11:05 AEST`
 
 ## 目标
 
@@ -70,7 +70,9 @@
 - `8c61ea7` — 增加授权管理 API、operator `enterprise_role` 和审计。
 - `dbf5716` — 在实际单位、岗位、参保、理赔、看板和参保名单中强制 fail-closed 范围。
 - `a8f0216` — 无冲突刷新到包含保障期/并发热修复的 `main@cf8fcce`。
+- `b0e8450` — 增加企业主管授权实际工作单位 UI、主要负责人替换入口及项目负责人导航收敛。
 - Task 5 验证：`employer_scope_smoke.py`、`security_smoke.py`、`system_smoke.py`、`recharge_smoke.py` 均通过；当前系统 Python 未安装 `pytest`，focused pytest 待可用环境补跑。
+- Task 6 验证：`web/npm run build` 与 `employer_scope_smoke.py` 均通过。
 
 ## 依赖解除条件
 
