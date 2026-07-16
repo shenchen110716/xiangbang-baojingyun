@@ -2,7 +2,7 @@
 
 - task_id: `agent-pricing-leak-hotfix`
 - owner: `Claude Code`
-- status: `review`
+- status: `merged`（已合并并发布生产）
 - branch: `fix/agent-pricing-leak`
 - worktree: `/private/tmp/xbb-agent-pricing-leak`
 - base_commit: `6bb9fd7`
@@ -67,7 +67,14 @@
 - `[x]` `security_smoke.py`、`system_smoke.py`、`recharge_smoke.py`
 - `[x]` `participation_lock_smoke.py`、`salesperson_portal_smoke.py`
 - `[x]` `python3 -m compileall -q backend`、`git diff --check`
-- `[ ]` Web 构建：本次未改前端，合并前在 `main` 上复跑。
+- `[x]` 合并后在 `main` 上重跑：7 项烟测全通过；本次未改前端，Web 构建未受影响。
+
+## 合并与发布
+
+- 合并提交：`0caa07b`（`Merge branch 'fix/agent-pricing-leak'`）。
+- 推送 `6bb9fd7..0caa07b`，经 Render `autoDeployTrigger: commit` 自动部署，生产 `/api/health` 200。
+- 生产端到端未复验：`/api/dashboard` 无 token 时修复前后均为 401，外部无可区分信号，
+  且本地无生产业务员账号，不应在生产建账号。修复由本地隔离库红→绿验证覆盖。
 
 ## 风险与后续
 
