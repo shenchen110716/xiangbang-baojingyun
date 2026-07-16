@@ -2,11 +2,11 @@
 
 - task_id: `employment-facts-phase2`
 - owner: `Claude Code`
-- status: `review`
+- status: `merged`（已合并到本地 main，**尚未推送、尚未部署**）
 - branch: `feat/employment-facts-phase2`
 - worktree: `/private/tmp/xiangbang-employment-facts`
 - base_commit: `8bc04e0`
-- migration_owner: `yes（复核及合并完成前保持）`
+- migration_owner: `no（已释放；迁移 c40dab695a66 已合并进 main，尚未在生产执行）`
 - depends_on: `role-timeliness-v42 Phase 1（已合并发布）`
 - last_updated: `2026-07-17`
 
@@ -105,10 +105,19 @@
 - 原始导入文件按 §6.4 加密留存，但**保留期限清理尚未实现**，需后续阶段补。
 - 事实的 `pending_match` 队列有 API（`/employment-facts/unmatched`）但无界面，Phase 4 负责。
 
+## 合并
+
+- 合并提交：`b314cbc`（`Merge branch 'feat/employment-facts-phase2'`），无冲突。
+- 合并后在 `main` 上重跑全量门槛：14 个测试文件、`compileall`、单一 head `c40dab695a66` 全部通过。
+- **未推送、未部署**：`render.yaml` 的 `autoDeployTrigger: commit` 会使推送即自动部署，
+  而 `ID_ENCRYPTION_KEY` 尚未在 Render 配置，届时 `_check_production_config()` 会阻断启动，
+  造成生产不可用。必须先配好该密钥再推送。
+
 ## 下一动作
 
-- 待复核与合并。合并后释放迁移锁，Phase 3（及时率引擎）方可创建新迁移，
-  且必须线性接在 `c40dab695a66` 之后。
+- 用户在 Render 配置 `ID_ENCRYPTION_KEY` 后方可推送发布。
+- 迁移锁已释放，Phase 3（及时率引擎）可基于 `main@b314cbc` 创建新分支与迁移，
+  新迁移须线性接在 `c40dab695a66` 之后。
 - Phase 3 消费的接口：`active_facts`、`correct_fact`、`serialize_fact`、
   `FACT_EXCLUDED_STATUSES`（`backend/services/employment_facts.py`），
   并负责把批次从 `imported_pending_calculation` 推进到 `completed`。
