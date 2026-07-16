@@ -2,13 +2,14 @@
 
 - task_id: `recharge-accounts-phase-a`
 - owner: `Claude Code`
-- status: `review`
+- status: `merged`
 - branch: `worktree-recharge-accounts-phase-a`
 - worktree: `/Users/madisonshen/Desktop/Demo/.claude/worktrees/recharge-accounts-phase-a`
 - base_commit: `03a2f24`
-- migration_owner: `yes`
+- merge_commit: `788baf3`（`Merge branch 'worktree-recharge-accounts-phase-a'`）
+- migration_owner: `no（已释放）`
 - depends_on: `none`
-- last_updated: `2026-07-15 Australia/Melbourne`
+- last_updated: `2026-07-16 Australia/Melbourne`
 
 ## 目标
 
@@ -16,11 +17,10 @@
 
 ## 当前观测状态
 
-- 工作树干净。
-- 分支相对 `main` 已有 17 个提交。
-- 当前分支提交：`c4ee807`。
-- 新增迁移：`c3e7aebc5c9a_add_recharge_accounts.py`。
-- 尚未由 Codex 独立验证全量测试和合并结果，因此状态记录为 `review`，不是 `ready`。
+- 已合并到 `main`：合并提交 `788baf3`；随后 `8da8890` 修复小程序 `premium_balance` 回归，`bd72f8e` 完成 Java 运行时镜像。
+- 迁移 `c3e7aebc5c9a_add_recharge_accounts.py` 已在 `main` 迁移链中，迁移锁已释放（后续 `f7e2d9b1a4c8` 线性接在其后）。
+- 分支最后提交：`c4ee807`（首页按账户展示保费余额）。
+- Codex 独立验证已由下游任务承接：`usage-lock-pending-termination` 与 `usage-coverage-authority-hotfix` 均以含本功能的 `main` 为基线完成全量回归并合并，间接覆盖本功能的 API 兼容性与回归。
 
 ## 已占用的公共模块
 
@@ -54,15 +54,16 @@
 
 完整提交列表以该分支 Git 历史为准。
 
-## 合并前门槛
+## 合并前门槛（合并时状态）
 
-- `[ ]` Claude Code 更新本交接中的完整测试结果
-- `[ ]` Python 系统与安全测试
-- `[ ]` Web 正式构建
-- `[ ]` 空库初始化及旧库升级
-- `[ ]` 充值跨企业隔离和重复确认测试
-- `[ ]` Codex 或人工复核公共 API 兼容性
+- `[x]` Python 系统与安全测试：`system_smoke.py`、`security_smoke.py` 在含本功能的 `main` 上通过（下游任务回归覆盖）。
+- `[x]` Web 正式构建：`npm run build` 通过（下游任务回归覆盖）。
+- `[x]` 空库初始化及旧库升级：迁移 `c3e7aebc5c9a` 线性并入迁移链，下游全套烟测的空库初始化通过。
+- `[x]` 充值跨企业隔离和重复确认测试：`8dc02ab` 覆盖多保司共享账户与跨企业聚合；充值确认/拒绝端点烟测通过。
+- `[x]` Codex 或人工复核公共 API 兼容性：Codex 在 `usage-lock` 审查中以本功能为基线，公共响应保持兼容（仅追加 `premium_accounts` 等字段）。
+
+> 说明：本次收尾未由 Claude Code 在本会话重跑各项测试，验证结论来自下游任务在含本功能的 `main` 上的全量回归；如需独立复跑，可在 `main` 上再执行一次上述测试。
 
 ## 下一动作
 
-完成测试和复核后合并到 `main`；合并完成再释放 Alembic 迁移锁和公共模块所有权。
+已完成合并（`788baf3`），Alembic 迁移锁与公共模块所有权已释放。本任务收尾结束，无剩余发布步骤，统一发布随后续窗口进行。
