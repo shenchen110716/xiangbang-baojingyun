@@ -15,6 +15,10 @@ from .policy_members import (
     activate_person_policy, correct_person_policy_dates, earliest_effective_at,
     earliest_termination_at, effective_person_status, terminate_person_policy, validate_person_policy_dates,
 )
+from .employer_scopes import (
+    allowed_employer_ids, assert_employer_access, grant_employer_scope,
+    is_enterprise_owner, replace_primary_manager, revoke_employer_scope,
+)
 
 __all__ = [
     "serialize", "amount",
@@ -29,4 +33,6 @@ __all__ = [
     "get_or_create_premium_account", "premium_accounts_for_enterprise",
     "activate_person_policy", "correct_person_policy_dates", "terminate_person_policy",
     "earliest_effective_at", "earliest_termination_at", "effective_person_status", "validate_person_policy_dates",
+    "allowed_employer_ids", "assert_employer_access", "grant_employer_scope",
+    "is_enterprise_owner", "replace_primary_manager", "revoke_employer_scope",
 ]
