@@ -5,7 +5,7 @@ from .accruals import billable_date_range, last_billable_date, period_amount, us
 from .policies import policy_dict
 from .ledger import post_ledger_entry, ledger_dict, reconcile_enterprise_ledger
 from .participation_lock import require_usage_funded
-from .termination_scan import scan_premium_shortfalls
+from .termination_scan import affected_people_for_account, scan_premium_shortfalls
 from .notify import notify_enterprise
 from .recharge import (
     resolve_account_for_insurer, insurers_for_account, insurer_account_dict,
@@ -23,7 +23,7 @@ __all__ = [
     "billable_date_range", "last_billable_date", "period_amount", "usage_person_days",
     "policy_dict",
     "post_ledger_entry", "ledger_dict", "reconcile_enterprise_ledger", "require_usage_funded",
-    "scan_premium_shortfalls",
+    "affected_people_for_account", "scan_premium_shortfalls",
     "notify_enterprise",
     "resolve_account_for_insurer", "insurers_for_account", "insurer_account_dict",
     "get_or_create_premium_account", "premium_accounts_for_enterprise",

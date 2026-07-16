@@ -188,7 +188,9 @@ def _read_import_rows(content: bytes, filename: str) -> list[list[str]]:
 @router.post("/insured/bulk")
 def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Session=Depends(db)):
     if user.role=='enterprise' and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,'无权操作该单位')
-    require_usage_funded(session, session.get(Enterprise, data.enterprise_id), user)
+    enterprise=session.get(Enterprise,data.enterprise_id)
+    if not enterprise: raise HTTPException(404,'投保单位不存在')
+    require_usage_funded(session, enterprise, user)
     position=session.get(WorkPosition,data.position_id)
     if not position or position.enterprise_id!=data.enterprise_id or position.status!='approved': raise HTTPException(400,'只能选择本单位已审核通过的岗位')
     errors=[];created=[];seen=set()

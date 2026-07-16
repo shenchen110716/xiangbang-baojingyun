@@ -17,7 +17,7 @@ def notify_enterprise(session: Session, enterprise_id: int, template: str, param
     ).all()
 
     for user in recipients:
-        if not user.phone.strip():
+        if not (user.phone or "").strip():
             continue
 
         try:

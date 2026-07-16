@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { confirmPendingTermination, listPendingTerminations } from '@/api/pendingTerminations'
 import type { PendingTermination } from '@/api/types'
@@ -7,6 +7,7 @@ import PageCard from '@/components/PageCard.vue'
 
 const rows = ref<PendingTermination[]>([])
 const loading = ref(true)
+const pendingCount = computed(() => rows.value.filter((row) => row.status === 'pending').length)
 
 async function load() {
   loading.value = true
@@ -24,7 +25,7 @@ onMounted(load)
 async function confirm(row: PendingTermination) {
   try {
     await ElMessageBox.confirm(
-      `确认停保后，该账户名下（${row.affected_insurers}）当前 ${row.affected_count} 名在保人员将被立即停保，此操作不可撤销。`,
+      `确认停保后，该账户名下（${row.affected_insurers}）当前 ${row.current_affected_count} 名在保人员将被立即停保，此操作不可撤销。`,
       '确认停保',
       { type: 'warning', confirmButtonText: '确认停保', cancelButtonText: '取消' },
     )
@@ -49,11 +50,25 @@ const statusLabel: Record<PendingTermination['status'], string> = {
 
 <template>
   <div v-loading="loading" class="page">
-    <PageCard title="待处理停保" :count="rows.length" hint="保费账户余额耗尽后自动生成，需管理员确认后才会真正停保">
+    <PageCard title="待处理停保" :count="pendingCount" hint="保费账户余额耗尽后自动生成，需管理员确认后才会真正停保">
       <el-table :data="rows" size="small" style="width: 100%">
-        <el-table-column prop="enterprise_id" label="企业 ID" width="90" />
+        <el-table-column type="expand" width="44">
+          <template #default="{ row }">
+            <div class="affected-list">
+              <b>当前受影响人员：</b>
+              <template v-if="row.affected_people.length">
+                <el-tag v-for="person in row.affected_people" :key="person.id" size="small">{{ person.name }}</el-tag>
+              </template>
+              <span v-else class="muted">当前无待停保人员或任务已结束</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="enterprise_name" label="企业" min-width="150" />
+        <el-table-column prop="account_label" label="保费账户" min-width="140" />
         <el-table-column prop="affected_insurers" label="受影响保司" min-width="160" />
-        <el-table-column prop="affected_count" label="受影响人数" width="100" />
+        <el-table-column label="受影响人数" width="100">
+          <template #default="{ row }">{{ row.status === 'pending' ? row.current_affected_count : row.affected_count }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="180">
           <template #default="{ row }">{{ statusLabel[row.status as PendingTermination['status']] }}</template>
         </el-table-column>
@@ -72,5 +87,17 @@ const statusLabel: Record<PendingTermination['status'], string> = {
 <style scoped>
 .page {
   padding: 20px 24px;
+}
+
+.affected-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 24px;
+}
+
+.muted {
+  color: var(--el-text-color-secondary);
 }
 </style>

@@ -1,9 +1,55 @@
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..models import EnterprisePremiumAccount, InsuredPerson, InsurerAccountLink, PendingTermination
+from ..core.business_time import business_now
+from ..models import (
+    EnterprisePremiumAccount,
+    InsurancePlan,
+    InsuredPerson,
+    InsurerAccountLink,
+    PendingTermination,
+    Policy,
+)
 from .notify import notify_enterprise
+
+
+def affected_people_for_account(
+    session: Session,
+    enterprise_id: int,
+    account_id: int,
+) -> tuple[list[str], list[InsuredPerson]]:
+    """Return only active people whose current policy belongs to this account.
+
+    Account balance is pooled by insurer mapping.  A person's current
+    ``policy_id`` is the durable link to the plan/insurer that is actually
+    covering them; enterprise-wide or position-only matching can stop people
+    funded by another account and is therefore unsafe.
+    """
+    insurers = sorted({
+        insurer
+        for insurer, in session.execute(
+            select(InsurerAccountLink.insurer).where(
+                InsurerAccountLink.account_id == account_id,
+            )
+        ).all()
+    })
+    if not insurers:
+        return [], []
+
+    people = session.scalars(
+        select(InsuredPerson)
+        .join(Policy, InsuredPerson.policy_id == Policy.id)
+        .join(InsurancePlan, Policy.plan_id == InsurancePlan.id)
+        .where(
+            InsuredPerson.enterprise_id == enterprise_id,
+            InsuredPerson.status == "active",
+            Policy.status == "active",
+            InsurancePlan.insurer.in_(insurers),
+        )
+        .order_by(InsuredPerson.id)
+    ).all()
+    return insurers, list(people)
 
 
 def scan_premium_shortfalls(session: Session, enterprise_id: int | None = None) -> list[PendingTermination]:
@@ -28,7 +74,6 @@ def scan_premium_shortfalls(session: Session, enterprise_id: int | None = None) 
     for existing in session.scalars(dismiss_stmt).all():
         if (existing.enterprise_id, existing.account_id) not in shortfall_keys:
             existing.status = "dismissed"
-            from ..core.business_time import business_now
             existing.dismissed_at = business_now()
 
     created: list[PendingTermination] = []
@@ -40,24 +85,25 @@ def scan_premium_shortfalls(session: Session, enterprise_id: int | None = None) 
                 PendingTermination.status == "pending",
             )
         )
-        if already_pending:
-            continue
-        insurers = [x for x, in session.execute(select(InsurerAccountLink.insurer).where(InsurerAccountLink.account_id == row.account_id)).all()]
-        if not insurers:
-            continue
-        affected_count = session.scalar(
-            select(func.count())
-            .select_from(InsuredPerson)
-            .where(
-                InsuredPerson.enterprise_id == row.enterprise_id,
-                InsuredPerson.status == "active",
-            )
-        ) or 0
+        insurers, affected_people = affected_people_for_account(
+            session,
+            row.enterprise_id,
+            row.account_id,
+        )
+        affected_count = len(affected_people)
         if affected_count == 0:
+            if already_pending:
+                already_pending.status = "dismissed"
+                already_pending.dismissed_at = business_now()
+            continue
+        insurer_snapshot = ",".join(insurers)
+        if already_pending:
+            already_pending.affected_insurers = insurer_snapshot
+            already_pending.affected_count = affected_count
             continue
         item = PendingTermination(
             enterprise_id=row.enterprise_id, account_id=row.account_id,
-            affected_insurers=",".join(insurers), affected_count=affected_count,
+            affected_insurers=insurer_snapshot, affected_count=affected_count,
         )
         try:
             # The pre-insert lookup is only an optimization. The partial

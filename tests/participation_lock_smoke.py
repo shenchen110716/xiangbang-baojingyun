@@ -8,6 +8,7 @@ ID-checksum validation bug unrelated to this feature.
 import os
 import sys
 import tempfile
+from datetime import timedelta
 from unittest.mock import patch
 from pathlib import Path
 
@@ -25,22 +26,74 @@ def run():
         from fastapi import HTTPException
 
         from backend.app import startup
+        from backend.core.business_time import business_now
         from backend.core.db import SessionLocal
-        from backend.models import Enterprise, PendingTermination, RechargeRequest, User
+        from backend.models import (
+            AuditLog,
+            Enterprise,
+            EnterprisePremiumAccount,
+            InsurancePlan,
+            InsuredPerson,
+            InsurerAccount,
+            InsurerAccountLink,
+            PendingTermination,
+            Policy,
+            PolicyMember,
+            RechargeRequest,
+            User,
+            WorkPosition,
+        )
         from backend.services import require_usage_funded
-        from backend.models import InsuredPerson, WorkPosition
         from backend.routers.insured import add_person, insured_status
         from backend.routers.pending_terminations import confirm_pending_termination, pending_terminations as list_pending_terminations
         from backend.routers.recharge_requests import confirm_recharge_request, reject_recharge_request
         from backend.routers.dashboard import dashboard as dashboard_endpoint
         from backend.schemas import PersonIn
-        from backend.models import EnterprisePremiumAccount, InsurerAccount, InsurerAccountLink
-        from backend.models import AuditLog
         from backend.providers import ProviderResult
         from backend.services import notify_enterprise, scan_premium_shortfalls
 
         startup()
         with SessionLocal() as session:
+            def add_covered_person(enterprise, insurer, name):
+                """Create a real current policy link so account scoping is testable."""
+                plan = InsurancePlan(
+                    insurer=insurer,
+                    name=f"{insurer}测试方案",
+                    effective_mode="next_day",
+                    status="active",
+                )
+                session.add(plan); session.flush()
+                position = WorkPosition(
+                    enterprise_id=enterprise.id,
+                    name=f"{name}岗位",
+                    plan_id=plan.id,
+                    status="approved",
+                )
+                session.add(position); session.flush()
+                policy = Policy(
+                    policy_no=f"LOCK-{session.query(Policy).count() + 1}",
+                    enterprise_id=enterprise.id,
+                    plan_id=plan.id,
+                    status="active",
+                )
+                session.add(policy); session.flush()
+                person = InsuredPerson(
+                    enterprise_id=enterprise.id,
+                    name=name,
+                    position_id=position.id,
+                    policy_id=policy.id,
+                    status="active",
+                )
+                session.add(person); session.flush()
+                session.add(PolicyMember(
+                    policy_id=policy.id,
+                    person_id=person.id,
+                    effective_at=business_now() - timedelta(days=2),
+                    status="active",
+                ))
+                session.commit(); session.refresh(person)
+                return person
+
             ent = Enterprise(name="锁定测试企业", kind="企业", contact="", phone="", status="active")
             session.add(ent); session.commit(); session.refresh(ent)
             assert ent.id is not None
@@ -110,17 +163,20 @@ def run():
             session.add(scan_ent); session.commit(); session.refresh(scan_ent)
             positionless_active_person = InsuredPerson(
                 enterprise_id=scan_ent.id,
-                name="无岗位在保人员",
+                name="无法归属保司的历史人员",
                 status="active",
             )
             session.add(positionless_active_person); session.commit()
+            covered_scan_person = add_covered_person(scan_ent, "扫描测试保司", "扫描账户员工")
             shortfall = EnterprisePremiumAccount(enterprise_id=scan_ent.id, account_id=scan_account.id, balance=-10.0)
             session.add(shortfall); session.commit()
 
             created_1 = scan_premium_shortfalls(session, enterprise_id=scan_ent.id)
             assert len(created_1) == 1, created_1
             assert created_1[0].affected_insurers == "扫描测试保司"
-            assert created_1[0].affected_count == 1, "active people without a position must be counted"
+            assert created_1[0].affected_count == 1
+            assert covered_scan_person.status == "active"
+            assert positionless_active_person.status == "active", "unattributed people must never be auto-stopped"
             assert created_1[0].status == "pending"
 
             # The database, not only the pre-insert lookup, forbids a second
@@ -144,6 +200,7 @@ def run():
             race_account = InsurerAccount(label="并发扫描账户", bank_name="", account_no="", account_holder="", status="active")
             session.add(race_account); session.commit(); session.refresh(race_account)
             session.add(InsurerAccountLink(insurer="并发扫描保司", account_id=race_account.id)); session.commit()
+            add_covered_person(scan_ent, "并发扫描保司", "并发扫描员工")
             session.add(EnterprisePremiumAccount(enterprise_id=scan_ent.id, account_id=race_account.id, balance=-10.0)); session.commit()
             original_begin_nested = session.begin_nested
             injected_competitor = False
@@ -244,32 +301,84 @@ def run():
                 notify_enterprise(session, notify_ent.id, "audit_failure", {})
             assert session.scalar(select(User.id).where(User.id == owner.id)) == owner.id
 
-            # Confirming a pending termination stops every active person in
-            # the enterprise, including legacy rows without a position.
+            # Confirmation is scoped to the shortfall account's insurers. It
+            # must not stop another funded account or an unattributed legacy
+            # row in the same enterprise. The covered target uses a next-day
+            # plan, proving involuntary shortfall termination bypasses the
+            # voluntary next-day timing check.
             confirm_account = InsurerAccount(label="确认停保账户", bank_name="", account_no="", account_holder="", status="active")
-            session.add(confirm_account); session.commit(); session.refresh(confirm_account)
+            safe_account = InsurerAccount(label="正常余额账户", bank_name="", account_no="", account_holder="", status="active")
+            session.add_all([confirm_account, safe_account]); session.commit(); session.refresh(confirm_account); session.refresh(safe_account)
             session.add(InsurerAccountLink(insurer="确认停保保司", account_id=confirm_account.id)); session.commit()
+            session.add(InsurerAccountLink(insurer="正常余额保司", account_id=safe_account.id)); session.commit()
             confirm_ent = Enterprise(name="确认停保企业", kind="企业", contact="", phone="", status="active")
             session.add(confirm_ent); session.commit(); session.refresh(confirm_ent)
+            target_person = add_covered_person(confirm_ent, "确认停保保司", "欠费账户员工")
+            safe_person = add_covered_person(confirm_ent, "正常余额保司", "正常账户员工")
+            legacy_person = InsuredPerson(enterprise_id=confirm_ent.id, name="无法归属历史员工", status="active")
+            session.add(legacy_person)
             session.add_all([
-                InsuredPerson(enterprise_id=confirm_ent.id, name="有岗位前状态员工", status="active"),
-                InsuredPerson(enterprise_id=confirm_ent.id, name="无岗位在保员工", status="active"),
+                EnterprisePremiumAccount(enterprise_id=confirm_ent.id, account_id=confirm_account.id, balance=-20.0),
+                EnterprisePremiumAccount(enterprise_id=confirm_ent.id, account_id=safe_account.id, balance=100.0),
             ]); session.commit()
-            session.add(EnterprisePremiumAccount(enterprise_id=confirm_ent.id, account_id=confirm_account.id, balance=-20.0)); session.commit()
             fresh_pending = scan_premium_shortfalls(session, enterprise_id=confirm_ent.id)
             assert len(fresh_pending) == 1
-            assert any(row["id"] == fresh_pending[0].id for row in list_pending_terminations(session))
+            listed = next(row for row in list_pending_terminations(session) if row["id"] == fresh_pending[0].id)
+            assert listed["enterprise_name"] == confirm_ent.name
+            assert listed["account_label"] == confirm_account.label
+            assert listed["current_affected_count"] == 1
+            assert listed["affected_people"] == [{"id": target_person.id, "name": target_person.name}]
 
             result = confirm_pending_termination(fresh_pending[0].id, admin_user, session)
-            assert result["status"] == "confirmed" and result["terminated_count"] == 2
-            statuses = session.scalars(select(InsuredPerson.status).where(InsuredPerson.enterprise_id == confirm_ent.id)).all()
-            assert statuses == ["stopped", "stopped"], statuses
-            assert scan_premium_shortfalls(session, enterprise_id=confirm_ent.id) == [], "no active people means no new termination task"
+            assert result["status"] == "confirmed" and result["terminated_count"] == 1
+            session.refresh(target_person); session.refresh(safe_person); session.refresh(legacy_person)
+            assert target_person.status == "stopped"
+            assert safe_person.status == "active", "a funded account must not be affected"
+            assert legacy_person.status == "active", "an unattributed row must not be affected"
+            terminated_member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == target_person.id))
+            assert terminated_member.status == "terminated" and terminated_member.terminated_at is not None
             try:
                 confirm_pending_termination(fresh_pending[0].id, admin_user, session)
                 assert False, "expected 400 for re-confirming an already processed task"
             except HTTPException as error:
                 assert error.status_code == 400
+
+            # Confirmation always rechecks the locked balance row. A recharge
+            # after task creation dismisses the task and must not stop anyone.
+            recovered_account = InsurerAccount(label="确认前充值账户", bank_name="", account_no="", account_holder="", status="active")
+            session.add(recovered_account); session.commit(); session.refresh(recovered_account)
+            session.add(InsurerAccountLink(insurer="确认前充值保司", account_id=recovered_account.id)); session.commit()
+            recovered_person = add_covered_person(confirm_ent, "确认前充值保司", "确认前充值员工")
+            recovered_balance = EnterprisePremiumAccount(enterprise_id=confirm_ent.id, account_id=recovered_account.id, balance=-1.0)
+            session.add(recovered_balance); session.commit()
+            recovered_pending = scan_premium_shortfalls(session, confirm_ent.id)[0]
+            recovered_balance.balance = 50.0
+            session.commit()
+            try:
+                confirm_pending_termination(recovered_pending.id, admin_user, session)
+                assert False, "a recovered account must not be terminated"
+            except HTTPException as error:
+                assert error.status_code == 409 and "已自动撤销" in error.detail
+            session.refresh(recovered_pending); session.refresh(recovered_person)
+            assert recovered_pending.status == "dismissed"
+            assert recovered_person.status == "active"
+
+            # Loading the pending-termination page is itself a lazy-scan
+            # trigger; an administrator must not have to visit the dashboard
+            # first.
+            direct_list_ent = Enterprise(name="列表扫描企业", kind="企业", contact="", phone="", status="active")
+            direct_list_account = InsurerAccount(label="列表扫描账户", bank_name="", account_no="", account_holder="", status="active")
+            session.add_all([direct_list_ent, direct_list_account]); session.commit(); session.refresh(direct_list_ent); session.refresh(direct_list_account)
+            session.add(InsurerAccountLink(insurer="列表扫描保司", account_id=direct_list_account.id)); session.commit()
+            direct_list_person = add_covered_person(direct_list_ent, "列表扫描保司", "列表扫描员工")
+            session.add(EnterprisePremiumAccount(enterprise_id=direct_list_ent.id, account_id=direct_list_account.id, balance=-1.0)); session.commit()
+            assert session.scalar(select(PendingTermination).where(
+                PendingTermination.enterprise_id == direct_list_ent.id,
+                PendingTermination.account_id == direct_list_account.id,
+            )) is None
+            direct_rows = list_pending_terminations(session)
+            direct_row = next(row for row in direct_rows if row["enterprise_id"] == direct_list_ent.id)
+            assert direct_row["affected_people"] == [{"id": direct_list_person.id, "name": direct_list_person.name}]
 
             # All four business trigger families call notify_enterprise with
             # stable templates and params. Usage locking is deduplicated once
@@ -292,7 +401,7 @@ def run():
             warning_ent = Enterprise(name="保费预警短信企业", kind="企业", contact="", phone="", status="active")
             warning_account = InsurerAccount(label="保费预警短信账户", bank_name="", account_no="", account_holder="", status="active")
             session.add_all([warning_ent, warning_account]); session.commit(); session.refresh(warning_ent); session.refresh(warning_account)
-            session.add(InsuredPerson(enterprise_id=warning_ent.id, name="保费预警在保员工", status="active"))
+            add_covered_person(warning_ent, "保费预警短信保司", "保费预警在保员工")
             session.add(InsurerAccountLink(insurer="保费预警短信保司", account_id=warning_account.id))
             session.add(EnterprisePremiumAccount(enterprise_id=warning_ent.id, account_id=warning_account.id, balance=-1.0)); session.commit()
             with patch("backend.services.termination_scan.notify_enterprise", side_effect=record_trigger):
@@ -304,7 +413,7 @@ def run():
             confirm_sms_ent = Enterprise(name="停保确认短信企业", kind="企业", contact="", phone="", status="active")
             confirm_sms_account = InsurerAccount(label="停保确认短信账户", bank_name="", account_no="", account_holder="", status="active")
             session.add_all([confirm_sms_ent, confirm_sms_account]); session.commit(); session.refresh(confirm_sms_ent); session.refresh(confirm_sms_account)
-            session.add(InsuredPerson(enterprise_id=confirm_sms_ent.id, name="停保确认在保员工", status="active"))
+            add_covered_person(confirm_sms_ent, "停保确认短信保司", "停保确认在保员工")
             session.add(InsurerAccountLink(insurer="停保确认短信保司", account_id=confirm_sms_account.id))
             session.add(EnterprisePremiumAccount(enterprise_id=confirm_sms_ent.id, account_id=confirm_sms_account.id, balance=-1.0)); session.commit()
             confirm_sms_pending = scan_premium_shortfalls(session, confirm_sms_ent.id)[0]
@@ -326,7 +435,7 @@ def run():
             dashboard_ent = Enterprise(name="看板惰性扫描企业", kind="企业", contact="", phone="", status="active")
             dashboard_account = InsurerAccount(label="看板惰性扫描账户", bank_name="", account_no="", account_holder="", status="active")
             session.add_all([dashboard_ent, dashboard_account]); session.commit(); session.refresh(dashboard_ent); session.refresh(dashboard_account)
-            session.add(InsuredPerson(enterprise_id=dashboard_ent.id, name="看板扫描在保员工", status="active"))
+            add_covered_person(dashboard_ent, "看板惰性扫描保司", "看板扫描在保员工")
             session.add(InsurerAccountLink(insurer="看板惰性扫描保司", account_id=dashboard_account.id))
             session.add(EnterprisePremiumAccount(enterprise_id=dashboard_ent.id, account_id=dashboard_account.id, balance=-1.0)); session.commit()
             dashboard_result = dashboard_endpoint(admin_user, session)

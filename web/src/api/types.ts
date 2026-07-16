@@ -449,9 +449,13 @@ export interface RechargeRequest {
 export interface PendingTermination {
   id: number
   enterprise_id: number
+  enterprise_name: string
   account_id: number
+  account_label: string
   affected_insurers: string
   affected_count: number
+  current_affected_count: number
+  affected_people: Array<{ id: number; name: string }>
   status: 'pending' | 'confirmed' | 'dismissed'
   confirmed_by: number | null
   confirmed_at: string | null

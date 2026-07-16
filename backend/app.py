@@ -93,7 +93,8 @@ _WEB_ROOT_FILES = {"favicon.svg", "icons.svg", "xbbzp.html"}
 _FRONTEND_ROUTES = {
     "/", "/home", "/screen", "/team", "/dispatch", "/workers", "/work-relations",
     "/agents", "/insurance", "/policy", "/claims", "/insurers", "/exports",
-    "/report", "/billing", "/promotion", "/operators", "/message", "/settings", "/login",
+    "/report", "/billing", "/recharge", "/pending-terminations", "/promotion",
+    "/operators", "/message", "/settings", "/login", "/agent-portal",
 }
 
 
