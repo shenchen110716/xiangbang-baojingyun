@@ -27,7 +27,7 @@ def add_operator(data:OperatorIn,user:User=Depends(require_operator_manager),ses
     enterprise_id=user.enterprise_id if user.role=="enterprise" else data.enterprise_id
     if not enterprise_id or not session.get(Enterprise,enterprise_id): raise HTTPException(400,"请选择有效投保单位")
     if session.scalar(select(User).where(User.username==data.username)): raise HTTPException(409,"登录账号已存在")
-    item=User(username=data.username.strip(),password_hash=pwd.hash(data.password),name=data.name.strip(),phone=data.phone.strip(),role="enterprise",enterprise_id=enterprise_id,is_owner=False,active=True,status="active")
+    item=User(username=data.username.strip(),password_hash=pwd.hash(data.password),name=data.name.strip(),phone=data.phone.strip(),role="enterprise",enterprise_id=enterprise_id,enterprise_role="project_manager",is_owner=False,active=True,status="active")
     session.add(item);session.commit();session.refresh(item);audit(session,user,"create","operator",str(item.id));return operator_dict(item,session)
 
 @router.patch("/operators/{item_id}")
@@ -47,6 +47,14 @@ def update_operator(item_id:int,data:OperatorUpdate,user:User=Depends(current_us
         target=session.get(Enterprise,values["enterprise_id"])
         if not target: raise HTTPException(400,"目标投保单位不存在")
         item.enterprise_id=target.id
+    if values.get("enterprise_role") is not None:
+        requested_role=values["enterprise_role"]
+        if user.role!="admin" and requested_role!="project_manager":
+            raise HTTPException(403,"仅平台管理员可设置企业主管")
+        if item.enterprise_role!=requested_role or item.is_owner!=(requested_role=="owner"):
+            item.enterprise_role=requested_role
+            item.is_owner=requested_role=="owner"
+            item.session_version+=1
     if values.get("name") is not None: item.name=values["name"].strip()
     if values.get("phone") is not None: item.phone=values["phone"].strip()
     if values.get("password"): item.password_hash=pwd.hash(values["password"]);item.session_version+=1

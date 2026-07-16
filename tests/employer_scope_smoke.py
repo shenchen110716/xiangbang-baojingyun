@@ -139,6 +139,12 @@ def run() -> None:
                 {"enterprise_role": "project_manager"},
             )
             assert patched.get("enterprise_role") == "project_manager"
+            assert call(
+                "PATCH",
+                f"/api/operators/{manager_two['id']}",
+                owner,
+                {"enterprise_role": "owner"},
+            )[0] == 403
 
             scope = ok(
                 "POST",
@@ -165,6 +171,13 @@ def run() -> None:
             assert expected_fields <= scope.keys()
 
             manager_token = login("scope_manager", "pass1234", "enterprise")
+            assert call(
+                "PATCH",
+                f"/api/operators/{manager['id']}",
+                manager_token,
+                {"enterprise_role": "owner"},
+            )[0] == 403
+            assert call("GET", "/api/employer-scopes", manager_token)[0] == 403
             visible = ok("GET", "/api/actual-employers", manager_token)
             assert {row["id"] for row in visible} == {employer_a["id"]}
             assert add_position(manager_token, employer_a)[0] == 200
@@ -207,6 +220,22 @@ def run() -> None:
                 },
             )
             assert foreign_status == 403
+            promoted = ok(
+                "PATCH",
+                f"/api/operators/{foreign_manager['id']}",
+                admin,
+                {"enterprise_role": "owner"},
+            )
+            assert promoted["enterprise_role"] == "owner"
+            assert promoted["is_owner"] is True
+            restored = ok(
+                "PATCH",
+                f"/api/operators/{foreign_manager['id']}",
+                admin,
+                {"enterprise_role": "project_manager"},
+            )
+            assert restored["enterprise_role"] == "project_manager"
+            assert restored["is_owner"] is False
 
             replacement = ok(
                 "POST",
@@ -216,6 +245,10 @@ def run() -> None:
             )
             assert replacement["user_id"] == manager_two["id"]
             scopes = ok("GET", "/api/employer-scopes", owner)
+            admin_scopes = ok(
+                "GET", f"/api/employer-scopes?enterprise_id={enterprise_id}", admin
+            )
+            assert {row["id"] for row in admin_scopes} == {row["id"] for row in scopes}
             active_primary = [
                 row
                 for row in scopes

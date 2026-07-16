@@ -13,6 +13,7 @@ from .claim import (
 )
 from .finance import PaymentIn, PaymentCallbackIn, InvoiceIn, InvoiceUpdate, InsurerAccountIn, InsurerAccountUpdate, InsurerAccountLinkIn
 from .notification import NotificationIn
+from .employer_scope import EmployerScopeIn, EmployerScopeOut, PrimaryManagerIn
 
 __all__ = [
     "LoginIn", "PasswordChangeIn", "TokenOut", "UserOut",
@@ -26,4 +27,5 @@ __all__ = [
     "ClaimIn", "ClaimUpdate", "ClaimStatusIn", "ClaimDocumentIn", "ClaimDocumentReviewIn",
     "PaymentIn", "PaymentCallbackIn", "InvoiceIn", "InvoiceUpdate", "InsurerAccountIn", "InsurerAccountUpdate", "InsurerAccountLinkIn",
     "NotificationIn",
+    "EmployerScopeIn", "EmployerScopeOut", "PrimaryManagerIn",
 ]
