@@ -5,10 +5,10 @@
 - status: `active`
 - branch: `codex/role-timeliness-v42-scope`
 - worktree: `/private/tmp/xiangbang-role-v42-phase1`
-- base_commit: `1c223e3346faf912644bc6699473fab4eb46655c`
+- base_commit: `cf8fcced6d6a41167d1ae8389ce762ea83e4661e`
 - migration_owner: `yes（Phase 1 独占）`
 - depends_on: `recharge-accounts-phase-a、usage-lock-pending-termination（均已合并）`
-- last_updated: `2026-07-16 10:45 AEST`
+- last_updated: `2026-07-16 10:50 AEST`
 
 ## 目标
 
@@ -28,8 +28,10 @@
 - `recharge-accounts-phase-a` 已合并。
 - `usage-lock-pending-termination` 已由 Codex 审查修复并合并，迁移头为 `f7e2d9b1a4c8`。
 - 合并后全量回归通过，当前无活动迁移所有者。
-- 第一阶段独立分支和外部工作树已从 `main@1c223e3` 创建，迁移所有权已申请。
-- 当前唯一 Alembic head 为 `f7e2d9b1a4c8`，新迁移必须线性接在该头之后。
+- 第一阶段独立分支和外部工作树最初从 `main@1c223e3` 创建，迁移所有权已申请。
+- 待停保保障期/并发热修复已由 `cf8fcce` 完整纳入 `main`；本分支在完成 Task 5 提交 `dbf5716` 后，以无冲突合并提交 `a8f0216` 刷新到该基线。
+- 热修复仅修改 `pending_terminations.py`、`policy_members.py`、`termination_scan.py`、`participation_lock_smoke.py` 及其交接；与 Phase 1 已提交文件无重叠，本任务没有手工修改这些文件。
+- 最新已合并 Alembic head 仍为 `f7e2d9b1a4c8`；本分支唯一新 head `d5a4c12f7b91` 线性接在该 revision 之后。
 - 业务员门户已由 `b664e20` 合并，当前没有活动业务员分支占用共享认证或 Web 文件。
 
 ## Active Phase 1 Scope
@@ -58,7 +60,17 @@
 - 完整独立设计基线：`SYSTEM-DESIGN-V4.2.md`。
 - 设计已由用户确认；实施总路线图：`docs/superpowers/plans/2026-07-16-role-timeliness-v42-roadmap.md`。
 - 第一阶段执行计划：`docs/superpowers/plans/2026-07-16-employer-scope-phase.md`。
-- 本轮仅更新设计和交接，不创建迁移或修改业务代码。
+- Phase 1 Task 1–5 已完成：红灯安全契约、历史授权迁移、集中式 scope 服务、授权管理 API，以及实际单位/岗位/参保/理赔/看板/参保导出的服务端范围强制。
+
+## Phase 1 实施进展
+
+- `c4d45e2` — 定义项目负责人实际工作单位授权安全契约。
+- `743e5b1` — 增加企业角色兼容字段与历史授权迁移 `d5a4c12f7b91`。
+- `4a8cc3e` — 集中实现 scope 查询、校验、授权、撤销和主要负责人替换。
+- `8c61ea7` — 增加授权管理 API、operator `enterprise_role` 和审计。
+- `dbf5716` — 在实际单位、岗位、参保、理赔、看板和参保名单中强制 fail-closed 范围。
+- `a8f0216` — 无冲突刷新到包含保障期/并发热修复的 `main@cf8fcce`。
+- Task 5 验证：`employer_scope_smoke.py`、`security_smoke.py`、`system_smoke.py`、`recharge_smoke.py` 均通过；当前系统 Python 未安装 `pytest`，focused pytest 待可用环境补跑。
 
 ## 依赖解除条件
 
