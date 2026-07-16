@@ -36,6 +36,14 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Every status that means "this file has already been confirmed" (§6.1).
+# Kept identical to the same constant in the c40dab695a66 migration.
+_CONFIRMED_FILE_PREDICATE = (
+    "status IN ('confirmed','imported_pending_calculation','completed') "
+    "AND source_file_hash != ''"
+)
+
+
 class EmploymentFeedbackBatch(Base):
     __tablename__ = "employment_feedback_batches"
     __table_args__ = (
@@ -48,13 +56,17 @@ class EmploymentFeedbackBatch(Base):
             "'completed','rejected','failed')",
             name="ck_batch_status",
         ),
-        # 同一企业、来源、文件哈希不得重复确认（§6.1）
+        # 同一企业、来源、文件哈希不得重复确认（§6.1）。Covers every
+        # post-confirm status: confirm_import() settles the batch at
+        # 'imported_pending_calculation', so a 'confirmed'-only predicate would
+        # match no row and block nothing. 'failed'/'rejected' stay out so a
+        # failed import can be retried with the same file.
         Index(
             "ux_batch_confirmed_file",
             "enterprise_id", "source_type", "source_file_hash",
             unique=True,
-            sqlite_where=text("status = 'confirmed' AND source_file_hash != ''"),
-            postgresql_where=text("status = 'confirmed' AND source_file_hash != ''"),
+            sqlite_where=text(_CONFIRMED_FILE_PREDICATE),
+            postgresql_where=text(_CONFIRMED_FILE_PREDICATE),
         ),
     )
 

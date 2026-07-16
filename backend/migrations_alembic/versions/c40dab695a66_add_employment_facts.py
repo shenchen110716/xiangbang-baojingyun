@@ -17,6 +17,12 @@ down_revision: Union[str, Sequence[str], None] = 'd5a4c12f7b91'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+# Every status that means "this file has already been confirmed" (§6.1).
+_CONFIRMED_FILE_PREDICATE = (
+    "status IN ('confirmed','imported_pending_calculation','completed') "
+    "AND source_file_hash != ''"
+)
+
 
 def upgrade() -> None:
     """Create the employment fact base.
@@ -51,11 +57,17 @@ def upgrade() -> None:
             "status IN ('uploaded','previewed','confirmed','imported_pending_calculation',"
             "'completed','rejected','failed')", name="ck_batch_status"),
     )
-    # 同一企业、来源、文件哈希不得重复确认（§6.1）
+    # 同一企业、来源、文件哈希不得重复确认（§6.1）。
+    # The predicate must cover every post-confirm status, not just 'confirmed':
+    # confirm_import() leaves the batch at 'imported_pending_calculation' (and
+    # Phase 3 moves it to 'completed'), so a predicate of status='confirmed'
+    # alone would match no row once the transaction settles and would never
+    # actually block a re-confirm. 'failed'/'rejected' stay out so a genuinely
+    # failed import can be retried with the same file.
     op.create_index("ux_batch_confirmed_file", "employment_feedback_batches",
                     ["enterprise_id", "source_type", "source_file_hash"], unique=True,
-                    sqlite_where=sa.text("status = 'confirmed' AND source_file_hash != ''"),
-                    postgresql_where=sa.text("status = 'confirmed' AND source_file_hash != ''"))
+                    sqlite_where=sa.text(_CONFIRMED_FILE_PREDICATE),
+                    postgresql_where=sa.text(_CONFIRMED_FILE_PREDICATE))
 
     op.create_table(
         "employment_facts",
