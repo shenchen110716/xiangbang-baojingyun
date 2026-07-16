@@ -7,7 +7,10 @@ from .insured import InsuredPerson, Policy, PolicyMember
 from .claim import Claim, ClaimTimeline, ClaimDocument
 from .finance import AgentCommission, PaymentRecord, Invoice, LedgerEntry
 from .finance_accounts import InsurerAccount, InsurerAccountLink, EnterprisePremiumAccount, RechargeRequest, PendingTermination
-from .employment import EmploymentFeedbackBatch, EmploymentFact, EmploymentFactMatch
+from .employment import (
+    EmploymentFeedbackBatch, EmploymentFact, EmploymentFactMatch,
+    IntegrationApiKey, IntegrationNonce,
+)
 from .misc import AuditLog, EnrollmentEmail
 
 __all__ = [
@@ -38,6 +41,8 @@ __all__ = [
     "EmploymentFeedbackBatch",
     "EmploymentFact",
     "EmploymentFactMatch",
+    "IntegrationApiKey",
+    "IntegrationNonce",
     "AuditLog",
     "EnrollmentEmail",
 ]

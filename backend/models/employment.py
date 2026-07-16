@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     Float,
@@ -137,6 +138,38 @@ class EmploymentFact(Base):
     status: Mapped[str] = mapped_column(String(20), default="active")
     created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class IntegrationApiKey(Base):
+    """Authenticated identity for the §7.3 external employment event API.
+
+    ``allowed_employer_ids`` pins the scope server-side (comma-separated ids;
+    empty means every employer of the enterprise), so a request body can never
+    widen what the caller may write.
+    """
+    __tablename__ = "integration_api_keys"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    enterprise_id: Mapped[int] = mapped_column(ForeignKey("enterprises.id"), index=True)
+    name: Mapped[str] = mapped_column(String(64), default="")
+    key_id: Mapped[str] = mapped_column(String(32), unique=True)
+    secret_cipher: Mapped[str] = mapped_column(Text)
+    allowed_employer_ids: Mapped[str] = mapped_column(Text, default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class IntegrationNonce(Base):
+    """Seen nonces; the unique index is what makes a replay fail."""
+    __tablename__ = "integration_nonces"
+    __table_args__ = (
+        Index("ux_nonce_per_key", "key_id", "nonce", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key_id: Mapped[str] = mapped_column(String(32))
+    nonce: Mapped[str] = mapped_column(String(64))
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class EmploymentFactMatch(Base):

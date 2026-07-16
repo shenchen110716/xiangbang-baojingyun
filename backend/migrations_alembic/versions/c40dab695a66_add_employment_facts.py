@@ -129,7 +129,51 @@ def upgrade() -> None:
     )
 
 
+    # §7.3 外部用工事件接口的认证身份。Secrets are stored hashed, never in
+    # plaintext; allowed_employer_ids pins the scope server-side so a request
+    # body can never widen it.
+    op.create_table(
+        "integration_api_keys",
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("enterprise_id", sa.Integer, sa.ForeignKey("enterprises.id"), nullable=False, index=True),
+        sa.Column("name", sa.String(64), nullable=False, server_default=""),
+        sa.Column("key_id", sa.String(32), nullable=False, unique=True),
+        sa.Column("secret_cipher", sa.Text, nullable=False),
+        sa.Column("allowed_employer_ids", sa.Text, nullable=False, server_default=""),
+        sa.Column("active", sa.Boolean, nullable=False, server_default=sa.text("1")),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+    )
+    op.create_table(
+        "integration_nonces",
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("key_id", sa.String(32), nullable=False),
+        sa.Column("nonce", sa.String(64), nullable=False),
+        sa.Column("seen_at", sa.DateTime(timezone=True), nullable=False),
+    )
+    op.create_index("ux_nonce_per_key", "integration_nonces", ["key_id", "nonce"], unique=True)
+
+    # §7.3 要求外部接入调用有完整审计，但机器调用没有 users 行可归属，而
+    # audit_logs.user_id 原为 NOT NULL。放宽为可空（只放松约束，向后兼容；
+    # audit_logs 只追加不改写），机器调用以 user_id IS NULL + detail 中的
+    # key_id 标识。
+    context = op.get_context()
+    if context.dialect.name == "sqlite" and context.as_sql:
+        # Offline SQLite SQL is a diagnostic artifact only; batch mode needs a
+        # live table to reflect.
+        pass
+    else:
+        with op.batch_alter_table("audit_logs") as batch_op:
+            batch_op.alter_column("user_id", existing_type=sa.Integer(), nullable=True)
+
+
 def downgrade() -> None:
+    context = op.get_context()
+    if not (context.dialect.name == "sqlite" and context.as_sql):
+        with op.batch_alter_table("audit_logs") as batch_op:
+            batch_op.alter_column("user_id", existing_type=sa.Integer(), nullable=False)
+    op.drop_index("ux_nonce_per_key", table_name="integration_nonces")
+    op.drop_table("integration_nonces")
+    op.drop_table("integration_api_keys")
     op.drop_table("employment_fact_matches")
     op.drop_index("ix_fact_scope_window", table_name="employment_facts")
     op.drop_index("ux_fact_source_event", table_name="employment_facts")
