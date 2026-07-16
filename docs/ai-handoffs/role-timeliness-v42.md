@@ -2,13 +2,13 @@
 
 - task_id: `role-timeliness-v42`
 - owner: `Codex`
-- status: `blocked`
-- branch: `待创建`
+- status: `planned`
+- branch: `待创建：feat/role-timeliness-v42-phase1`
 - worktree: `待创建，必须位于主仓库外`
-- base_commit: `等待 recharge-accounts-phase-a 合并后的 main`
-- migration_owner: `no（依赖合并前不申请）`
-- depends_on: `recharge-accounts-phase-a`
-- last_updated: `2026-07-16 Australia/Melbourne`
+- base_commit: `使用费锁定/待停保合并后的 main（f2632f5 之后）`
+- migration_owner: `no（创建独立分支后申请）`
+- depends_on: `recharge-accounts-phase-a、usage-lock-pending-termination（均已合并）`
+- last_updated: `2026-07-16 10:16 AEST`
 
 ## 目标
 
@@ -23,11 +23,12 @@
 - 按产品生效规则计算及时参保、延迟参保、提前停保、延迟停保和未操作。
 - 按操作员、实际工作单位、时间段、状态和原因查询与导出。
 
-## 当前阻塞
+## 依赖状态
 
-充值任务正在占用用户相关聚合入口、企业接口、看板、公共类型、公共路由和 Alembic 迁移头，与本任务高度重叠。
-
-依赖合并前只允许完善设计、验收场景和不依赖公共结构的测试方案；不得创建迁移或修改公共代码。
+- `recharge-accounts-phase-a` 已合并。
+- `usage-lock-pending-termination` 已由 Codex 审查修复并合并，迁移头为 `f7e2d9b1a4c8`。
+- 合并后全量回归通过，当前无活动迁移所有者。
+- 下一步可按第一阶段计划创建独立分支和工作树，再将状态改为 `active`、申请迁移所有权。
 
 ## 设计进展
 
@@ -42,10 +43,11 @@
 
 ## 依赖解除条件
 
-- `recharge-accounts-phase-a` 状态为 `merged`。
-- `main` 已通过合并后回归。
-- 新任务分支以更新后的 `main` 为基线。
-- 新 Alembic 迁移接在 `c3e7aebc5c9a` 或届时最新迁移头之后。
+- `[x]` `recharge-accounts-phase-a` 状态为 `merged`。
+- `[x]` `usage-lock-pending-termination` 状态为 `merged`。
+- `[x]` `main` 已通过合并后回归。
+- `[ ]` 新任务分支以更新后的 `main` 为基线。
+- `[ ]` 新 Alembic 迁移接在最新迁移头 `f7e2d9b1a4c8` 之后。
 
 ## 后续实施顺序
 
