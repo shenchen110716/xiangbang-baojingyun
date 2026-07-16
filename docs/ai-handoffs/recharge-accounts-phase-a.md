@@ -2,13 +2,13 @@
 
 - task_id: `recharge-accounts-phase-a`
 - owner: `Claude Code`
-- status: `review`
+- status: `merged`
 - branch: `worktree-recharge-accounts-phase-a`
 - worktree: `/Users/madisonshen/Desktop/Demo/.claude/worktrees/recharge-accounts-phase-a`
 - base_commit: `03a2f24`
-- migration_owner: `yes`
+- migration_owner: `no（已释放）`
 - depends_on: `none`
-- last_updated: `2026-07-15 Australia/Melbourne`
+- last_updated: `2026-07-16 10:45 AEST`
 
 ## 目标
 
@@ -16,11 +16,11 @@
 
 ## 当前观测状态
 
-- 工作树干净。
-- 分支相对 `main` 已有 17 个提交。
-- 当前分支提交：`c4ee807`。
-- 新增迁移：`c3e7aebc5c9a_add_recharge_accounts.py`。
-- 尚未由 Codex 独立验证全量测试和合并结果，因此状态记录为 `review`，不是 `ready`。
+- `c4ee807` 已由合并提交 `788baf3` 纳入 `main`。
+- 新增迁移 `c3e7aebc5c9a_add_recharge_accounts.py` 已位于当前唯一迁移链中。
+- Codex 在 `main@1c223e3` 复核 `git merge-base --is-ancestor c4ee807 main` 返回成功。
+- 合并后的充值、系统、安全、使用费锁、业务员门户烟测和 Web 构建均通过。
+- 原充值工作树已不在注册工作树列表中，迁移锁和公共模块所有权已释放。
 
 ## 已占用的公共模块
 
@@ -40,7 +40,7 @@
 - `web/src/views/plans/PlansAdminView.vue`
 - Alembic 迁移头
 
-在本任务合并前，其他任务不得从旧 `main` 修改上述公共模块或创建新的迁移头。
+本任务已合并；后续任务必须从包含 `788baf3` 的最新 `main` 继续。
 
 ## 主要提交
 
@@ -54,15 +54,15 @@
 
 完整提交列表以该分支 Git 历史为准。
 
-## 合并前门槛
+## 合并门槛
 
-- `[ ]` Claude Code 更新本交接中的完整测试结果
-- `[ ]` Python 系统与安全测试
-- `[ ]` Web 正式构建
-- `[ ]` 空库初始化及旧库升级
-- `[ ]` 充值跨企业隔离和重复确认测试
-- `[ ]` Codex 或人工复核公共 API 兼容性
+- `[x]` 充值功能合并到 `main`
+- `[x]` Python 系统与安全测试
+- `[x]` Web 正式构建
+- `[x]` 充值跨企业隔离和重复确认测试
+- `[x]` Codex 复核公共 API 兼容性
+- `[x]` 后续使用费任务基于该迁移头继续并完成合并回归
 
 ## 下一动作
 
-完成测试和复核后合并到 `main`；合并完成再释放 Alembic 迁移锁和公共模块所有权。
+本任务已完成合并并释放 Alembic 迁移锁和公共模块所有权；等待统一发布窗口，不单独部署。
