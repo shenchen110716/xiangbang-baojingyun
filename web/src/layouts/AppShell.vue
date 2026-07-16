@@ -56,10 +56,14 @@ async function doSwitch(account: LinkedAccount) {
 }
 
 const navRoutes = routes.filter((r) => r.meta.group !== undefined && r.name !== 'login')
+const projectManagerRouteNames = new Set([
+  'home', 'screen', 'dispatch', 'workers', 'workRelations', 'claims', 'exports', 'settings',
+])
 const navGroups = computed(() => {
   const groups: Record<string, typeof navRoutes> = {}
   for (const r of navRoutes) {
     if (r.meta.adminOnly && auth.isEnterprise()) continue
+    if (auth.isProjectManager() && !projectManagerRouteNames.has(String(r.name))) continue
     const key = r.meta.group || ''
     if (!groups[key]) groups[key] = []
     groups[key].push(r)
@@ -144,8 +148,8 @@ async function openPasswordChange() {
           <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
         </el-breadcrumb>
         <div class="top-actions">
-          <el-button link :icon="'Search'" @click="searchVisible = true" />
-          <el-badge :value="messageCount" :hidden="messageCount === 0">
+          <el-button v-if="!auth.isProjectManager()" link :icon="'Search'" @click="searchVisible = true" />
+          <el-badge v-if="!auth.isProjectManager()" :value="messageCount" :hidden="messageCount === 0">
             <el-button link :icon="'Bell'" @click="router.push({ name: 'message' })" />
           </el-badge>
           <el-dropdown>

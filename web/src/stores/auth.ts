@@ -10,6 +10,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isEnterprise = () => user.value?.role === 'enterprise'
   const isAdmin = () => user.value?.role === 'admin'
+  const isEnterpriseOwner = () => isEnterprise() && user.value?.enterprise_role === 'owner'
+  const isProjectManager = () => isEnterprise() && user.value?.enterprise_role === 'project_manager'
 
   async function login(username: string, password: string, portal: 'admin' | 'enterprise' | 'salesperson') {
     const result = await authApi.login(username, password, portal)
@@ -36,5 +38,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(TOKEN_KEY)
   }
 
-  return { user, token, isEnterprise, isAdmin, login, loadProfile, logout, switchAccount }
+  return { user, token, isEnterprise, isAdmin, isEnterpriseOwner, isProjectManager, login, loadProfile, logout, switchAccount }
 })

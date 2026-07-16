@@ -306,6 +306,8 @@ def run() -> None:
             assert expected_fields <= scope.keys()
 
             manager_token = login("scope_manager", "pass1234", "enterprise")
+            manager_profile = ok("GET", "/api/auth/me", manager_token)
+            assert manager_profile["enterprise_role"] == "project_manager"
             assert call(
                 "PATCH",
                 f"/api/operators/{manager['id']}",

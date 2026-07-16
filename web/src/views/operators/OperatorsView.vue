@@ -2,8 +2,10 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as operatorsApi from '@/api/operators'
+import * as employerScopesApi from '@/api/employerScopes'
 import { listEnterprises } from '@/api/enterprises'
-import type { Enterprise, Operator } from '@/api/types'
+import { listActualEmployers } from '@/api/positions'
+import type { ActualEmployer, EmployerScope, Enterprise, Operator } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import PageCard from '@/components/PageCard.vue'
 import StatTile from '@/components/StatTile.vue'
@@ -14,13 +16,37 @@ const auth = useAuthStore()
 const loading = ref(true)
 const list = ref<Operator[]>([])
 const enterprises = ref<Enterprise[]>([])
+const employers = ref<ActualEmployer[]>([])
+const scopes = ref<EmployerScope[]>([])
 
-const canManage = computed(() => auth.isAdmin() || !!auth.user?.is_owner)
+const canManage = computed(() => auth.isAdmin() || auth.isEnterpriseOwner())
+const activeScopesByUser = computed(() => {
+  const result = new Map<number, EmployerScope[]>()
+  for (const scope of scopes.value) {
+    if (scope.status !== 'active' || scope.revoked_at) continue
+    result.set(scope.user_id, [...(result.get(scope.user_id) || []), scope])
+  }
+  return result
+})
+function activeScopes(item: Operator) {
+  return activeScopesByUser.value.get(item.id) || []
+}
 
 async function load() {
   loading.value = true
   try {
     list.value = await operatorsApi.listOperators()
+    if (canManage.value) {
+      const [scopeRows, employerRows] = await Promise.all([
+        employerScopesApi.listEmployerScopes(),
+        listActualEmployers(),
+      ])
+      scopes.value = scopeRows
+      employers.value = employerRows.filter((item) => item.status === 'active')
+    } else {
+      scopes.value = []
+      employers.value = []
+    }
     if (auth.isAdmin()) enterprises.value = await listEnterprises()
   } finally {
     loading.value = false
@@ -108,6 +134,59 @@ async function resetPassword(item: Operator) {
     ElMessage.success('操作员密码已重置，原登录会话已失效')
   } catch { /* cancelled */ }
 }
+
+const scopeVisible = ref(false)
+const scopeSaving = ref(false)
+const scopeError = ref('')
+const scopeTarget = ref<Operator | null>(null)
+const scopeForm = reactive({ actual_employer_id: null as number | null, responsibility_type: 'collaborator' as 'primary' | 'collaborator' })
+const assignableEmployers = computed(() => {
+  if (!scopeTarget.value) return employers.value
+  const assigned = new Set(activeScopes(scopeTarget.value).map((scope) => scope.actual_employer_id))
+  return scopeForm.responsibility_type === 'primary'
+    ? employers.value
+    : employers.value.filter((employer) => !assigned.has(employer.id))
+})
+function openScopeDialog(item: Operator) {
+  scopeTarget.value = item
+  Object.assign(scopeForm, { actual_employer_id: null, responsibility_type: 'collaborator' })
+  scopeError.value = ''
+  scopeVisible.value = true
+}
+async function submitScope() {
+  if (!scopeTarget.value || !scopeForm.actual_employer_id) {
+    scopeError.value = '请选择实际工作单位'
+    return
+  }
+  scopeSaving.value = true
+  scopeError.value = ''
+  try {
+    if (scopeForm.responsibility_type === 'primary') {
+      await employerScopesApi.replacePrimaryManager(scopeForm.actual_employer_id, scopeTarget.value.id)
+    } else {
+      await employerScopesApi.createEmployerScope({
+        user_id: scopeTarget.value.id,
+        actual_employer_id: scopeForm.actual_employer_id,
+        responsibility_type: 'collaborator',
+      })
+    }
+    ElMessage.success(scopeForm.responsibility_type === 'primary' ? '主要负责人已更换' : '实际工作单位已授权')
+    scopeVisible.value = false
+    await load()
+  } catch (e) {
+    scopeError.value = (e as Error).message
+  } finally {
+    scopeSaving.value = false
+  }
+}
+async function revokeScope(scope: EmployerScope) {
+  try {
+    await ElMessageBox.confirm(`撤销 ${scope.user_name} 对“${scope.actual_employer_name}”的授权？`, '撤销授权', { type: 'warning' })
+    await employerScopesApi.revokeEmployerScope(scope.id)
+    ElMessage.success('授权已撤销')
+    await load()
+  } catch { /* cancelled or failed */ }
+}
 </script>
 
 <template>
@@ -139,13 +218,25 @@ async function resetPassword(item: Operator) {
           <template #default="{ row }">{{ row.phone || '—' }}</template>
         </el-table-column>
         <el-table-column label="账号类型" width="100">
-          <template #default="{ row }">{{ row.is_owner ? '单位主管' : '操作员' }}</template>
+          <template #default="{ row }">{{ row.enterprise_role === 'owner' || row.is_owner ? '企业主管' : '项目负责人' }}</template>
+        </el-table-column>
+        <el-table-column label="授权实际工作单位" min-width="220">
+          <template #default="{ row }">
+            <template v-if="row.enterprise_role === 'project_manager' && activeScopes(row).length">
+              <el-tag v-for="scope in activeScopes(row)" :key="scope.id" size="small" :type="scope.responsibility_type === 'primary' ? 'success' : 'info'" :closable="canManage" style="margin: 2px 4px 2px 0" @close="revokeScope(scope)">
+                {{ scope.actual_employer_name }} · {{ scope.responsibility_type === 'primary' ? '主要' : '协作' }}
+              </el-tag>
+            </template>
+            <span v-else-if="row.enterprise_role === 'project_manager'" class="muted">未授权</span>
+            <span v-else>全企业</span>
+          </template>
         </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="row.active ? 'success' : 'info'">{{ row.active ? '正常' : '已停用' }}</el-tag></template>
         </el-table-column>
-        <el-table-column v-if="canManage" label="操作" width="180" fixed="right">
+        <el-table-column v-if="canManage" label="操作" width="240" fixed="right">
           <template #default="{ row }">
+            <el-button v-if="row.enterprise_role === 'project_manager'" link type="primary" size="small" @click="openScopeDialog(row)">授权单位</el-button>
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-button link type="primary" size="small" @click="resetPassword(row)">重置密码</el-button>
             <el-button v-if="!row.is_owner" link :type="row.active ? 'danger' : 'success'" size="small" @click="toggleActive(row)">{{ row.active ? '停用' : '启用' }}</el-button>
@@ -193,6 +284,28 @@ async function resetPassword(item: Operator) {
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
         <el-button type="primary" :loading="editSaving" @click="submitEdit">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="scopeVisible" :title="`授权实际工作单位 · ${scopeTarget?.name || ''}`" width="460px" append-to-body>
+      <p class="dialog-hint">项目负责人仅能查看和操作被授权的实际工作单位。设置“主要负责人”会通过专用接口原子替换原负责人。</p>
+      <el-form label-width="110px">
+        <el-form-item label="实际工作单位">
+          <el-select v-model="scopeForm.actual_employer_id" filterable style="width: 100%" placeholder="请选择实际工作单位">
+            <el-option v-for="item in assignableEmployers" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="负责人类型">
+          <el-radio-group v-model="scopeForm.responsibility_type">
+            <el-radio value="collaborator">协作负责人</el-radio>
+            <el-radio value="primary">主要负责人</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <p v-if="scopeError" class="error-text">{{ scopeError }}</p>
+      </el-form>
+      <template #footer>
+        <el-button @click="scopeVisible = false">取消</el-button>
+        <el-button type="primary" :loading="scopeSaving" @click="submitScope">保存授权</el-button>
       </template>
     </el-dialog>
   </div>
