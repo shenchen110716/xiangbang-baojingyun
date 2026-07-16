@@ -17,6 +17,10 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     )
     from ..models import UserEmployerScope
     UserEmployerScope.__table__.create(bind=s.connection(), checkfirst=True)
+    # v4.2 Phase 2 用工事实表；空表创建，不回填任何真实入离职时间（§16）。
+    from ..models import EmploymentFact, EmploymentFactMatch, EmploymentFeedbackBatch
+    for table in (EmploymentFeedbackBatch, EmploymentFact, EmploymentFactMatch):
+        table.__table__.create(bind=s.connection(), checkfirst=True)
     enterprise_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(enterprises)")}
     if "agent_id" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN agent_id INTEGER")
     if "usage_fee_daily" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN usage_fee_daily FLOAT DEFAULT 0.1")
