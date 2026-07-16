@@ -4,6 +4,9 @@ from .commissions import commission_accrual, commission_dict, agent_commission_r
 from .accruals import billable_date_range, last_billable_date, period_amount, usage_person_days
 from .policies import policy_dict
 from .ledger import post_ledger_entry, ledger_dict, reconcile_enterprise_ledger
+from .participation_lock import require_usage_funded
+from .termination_scan import affected_people_for_account, scan_premium_shortfalls
+from .notify import notify_enterprise
 from .recharge import (
     resolve_account_for_insurer, insurers_for_account, insurer_account_dict,
     get_or_create_premium_account, premium_accounts_for_enterprise,
@@ -19,7 +22,9 @@ __all__ = [
     "commission_accrual", "commission_dict", "agent_commission_rows", "agent_commission_summary",
     "billable_date_range", "last_billable_date", "period_amount", "usage_person_days",
     "policy_dict",
-    "post_ledger_entry", "ledger_dict", "reconcile_enterprise_ledger",
+    "post_ledger_entry", "ledger_dict", "reconcile_enterprise_ledger", "require_usage_funded",
+    "affected_people_for_account", "scan_premium_shortfalls",
+    "notify_enterprise",
     "resolve_account_for_insurer", "insurers_for_account", "insurer_account_dict",
     "get_or_create_premium_account", "premium_accounts_for_enterprise",
     "activate_person_policy", "correct_person_policy_dates", "terminate_person_policy",

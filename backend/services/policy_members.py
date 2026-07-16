@@ -108,20 +108,37 @@ def activate_person_policy(session: Session, person: InsuredPerson, effective_at
     return member
 
 
-def terminate_person_policy(session: Session, person: InsuredPerson, terminated_at: datetime | None = None) -> PolicyMember | None:
+def terminate_person_policy(
+    session: Session,
+    person: InsuredPerson,
+    terminated_at: datetime | None = None,
+    *,
+    enforce_timing: bool = True,
+) -> PolicyMember | None:
     """Call when person.status transitions OUT of 'active'. Closes (never
     deletes/reuses) the person's currently-open coverage period; no-ops if
     none is found (e.g. activate_person_policy previously skipped them).
     Re-activating this person later always creates a brand-new PolicyMember
     row — this is what produces "两个保障期间" for stop-then-re-enroll
-    instead of silently overwriting history (SYSTEM-DESIGN-V4.md 16.2)."""
+    instead of silently overwriting history (SYSTEM-DESIGN-V4.md 16.2).
+
+    ``enforce_timing=False`` is reserved for an administrator-confirmed
+    involuntary stop caused by premium-account shortfall.  That operation is
+    deliberately immediate and must not use the voluntary next-day/minimum-
+    period validation.  The default remains strict for every existing caller.
+    """
     member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == person.id, PolicyMember.status == "active", PolicyMember.terminated_at.is_(None)).order_by(PolicyMember.id.desc()))
     if member:
         operation = business_now()
         plan = _plan_for_person(session, person)
         if terminated_at is not None:
-            validate_person_policy_dates(session, person, None, terminated_at, operation)
-            target_terminated_at = terminated_at
+            if enforce_timing:
+                validate_person_policy_dates(session, person, None, terminated_at, operation)
+                target_terminated_at = terminated_at
+            else:
+                target_terminated_at = as_business_time(terminated_at)
+                if as_business_time(target_terminated_at) < as_business_time(member.effective_at):
+                    target_terminated_at = as_business_time(member.effective_at)
         else:
             # 即时生效方案默认停保时间为生效时间往后 24 小时；次日生效方案为
             # 操作日次日零点，如与生效时间冲突则顺延到生效当天的次日零点，

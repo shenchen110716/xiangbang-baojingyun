@@ -52,6 +52,7 @@ from .routers.notifications import router as notifications_router
 from .routers.claims import router as claims_router
 from .routers.insurer_accounts import router as insurer_accounts_router
 from .routers.recharge_requests import router as recharge_requests_router
+from .routers.pending_terminations import router as pending_terminations_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
@@ -73,6 +74,7 @@ app.include_router(notifications_router)
 app.include_router(claims_router)
 app.include_router(insurer_accounts_router)
 app.include_router(recharge_requests_router)
+app.include_router(pending_terminations_router)
 
 # SYSTEM-DESIGN-V4.md Phase 0 stop-loss item #1: the project root (source
 # code, data.db, .env, requirements.txt, ...) must never be reachable over
@@ -91,7 +93,8 @@ _WEB_ROOT_FILES = {"favicon.svg", "icons.svg", "xbbzp.html"}
 _FRONTEND_ROUTES = {
     "/", "/home", "/screen", "/team", "/dispatch", "/workers", "/work-relations",
     "/agents", "/insurance", "/policy", "/claims", "/insurers", "/exports",
-    "/report", "/billing", "/promotion", "/operators", "/message", "/settings", "/login",
+    "/report", "/billing", "/recharge", "/pending-terminations", "/promotion",
+    "/operators", "/message", "/settings", "/login", "/agent-portal",
 }
 
 

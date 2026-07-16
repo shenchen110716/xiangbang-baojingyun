@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, ForeignKey, String
+from sqlalchemy import DateTime, Float, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -61,4 +61,32 @@ class RechargeRequest(Base):
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     confirmed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class PendingTermination(Base):
+    # 保费余额耗尽时惰性扫描生成的待处理停保任务，按账户池化——一个账户
+    # 没钱了，挂在它上面的所有保司、所有在保人员都算受影响范围。唯一清除
+    # 路径是企业充值后重新扫描发现余额已经 >0，自动 dismiss；管理员没有
+    # 手动驳回/忽略的入口——如果不该停保，正确操作是协调企业充值。
+    __tablename__ = "pending_terminations"
+    __table_args__ = (
+        Index(
+            "uq_pending_terminations_live_enterprise_account",
+            "enterprise_id",
+            "account_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    enterprise_id: Mapped[int] = mapped_column(ForeignKey("enterprises.id"))
+    account_id: Mapped[int] = mapped_column(ForeignKey("insurer_accounts.id"))
+    affected_insurers: Mapped[str] = mapped_column(String(255), default="")
+    affected_count: Mapped[int] = mapped_column(default=0)
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending / confirmed / dismissed
+    confirmed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    dismissed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

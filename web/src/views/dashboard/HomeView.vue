@@ -84,6 +84,15 @@ const alertBarOption = computed(() => {
       <StatTile label="在保人数" :value="data?.active_people ?? '—'" :hint="data ? `待处理 ${data.pending_people}` : ''" hint-type="info" />
       <StatTile label="生效保单" :value="data?.active_policies ?? '—'" />
       <StatTile label="待处理理赔" :value="data?.claims_open ?? '—'" hint-type="danger" :hint="data && data.claims_open > 0 ? '需跟进' : ''" />
+      <StatTile
+        v-if="isAdmin"
+        label="待处理停保"
+        :value="data?.pending_terminations_count ?? '—'"
+        :hint="data && data.pending_terminations_count > 0 ? '点击查看' : ''"
+        hint-type="warning"
+        style="cursor: pointer"
+        @click="data && data.pending_terminations_count > 0 && router.push({ name: 'pendingTerminations' })"
+      />
       <StatTile label="服务费账户余额" :value="data ? money(data.usage_balance) : '—'" />
     </div>
 
