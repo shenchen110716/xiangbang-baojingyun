@@ -22,6 +22,7 @@ from .employer_scopes import (
 from .employment_facts import (
     FACT_EXCLUDED_STATUSES, active_facts, correct_fact, serialize_fact,
 )
+from .employment_matching import MatchResult, match_person
 
 __all__ = [
     "serialize", "amount",
@@ -39,4 +40,5 @@ __all__ = [
     "allowed_employer_ids", "assert_employer_access", "grant_employer_scope",
     "is_enterprise_owner", "replace_primary_manager", "revoke_employer_scope",
     "FACT_EXCLUDED_STATUSES", "active_facts", "correct_fact", "serialize_fact",
+    "MatchResult", "match_person",
 ]
