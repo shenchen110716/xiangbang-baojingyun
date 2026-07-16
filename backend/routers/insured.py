@@ -17,9 +17,9 @@ from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
 from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
 from ..services import activate_person_policy, allowed_employer_ids, assert_employer_access, correct_person_policy_dates, effective_person_status, is_enterprise_owner, plan_price_for_class, pricing_snapshot, require_usage_funded, serialize, strip_internal_pricing, terminate_person_policy
+from ..services.spreadsheet import MAX_IMPORT_FILE_BYTES, read_import_rows
 
 router = APIRouter(prefix="/api", tags=["insured"])
-MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024
 
 
 def _parse_business_time(raw: str | None, label: str) -> datetime | None:
@@ -192,28 +192,8 @@ def insured_import_template(user:User=Depends(current_user)):
 
 
 def _read_import_rows(content: bytes, filename: str) -> list[list[str]]:
-    if len(content) > MAX_IMPORT_FILE_BYTES:
-        raise HTTPException(413, '单个导入文件不能超过 10MB，请拆分后重试')
-    name = (filename or '').lower()
-    try:
-        if name.endswith('.xlsx'):
-            book = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
-            try:
-                sheet = book.active
-                raw = [[value.isoformat(sep=' ') if isinstance(value, datetime) else str(value).strip() if value is not None else '' for value in row] for row in sheet.iter_rows(values_only=True)]
-            finally:
-                book.close()
-        elif name.endswith('.csv'):
-            raw = [[str(value).strip() for value in row] for row in csv.reader(io.StringIO(content.decode('utf-8-sig')))]
-        else:
-            raise HTTPException(400, '仅支持 CSV 或 XLSX 电子表格')
-    except HTTPException:
-        raise
-    except UnicodeDecodeError as exc:
-        raise HTTPException(400, 'CSV 文件必须使用 UTF-8 编码，建议使用系统标准模板') from exc
-    except Exception as exc:
-        raise HTTPException(400, f'电子表格解析失败：{exc}') from exc
-    return [row for row in raw if any(value.strip() for value in row)]
+    # Shared with the employment-fact import; see services/spreadsheet.py.
+    return read_import_rows(content, filename)
 
 @router.post("/insured/bulk")
 def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Session=Depends(db)):

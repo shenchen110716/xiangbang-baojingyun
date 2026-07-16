@@ -14,6 +14,12 @@ _DEV_JWT_SECRET = "dev-only-change-this-secret-at-least-32-bytes"
 SECRET_KEY = os.getenv("JWT_SECRET", _DEV_JWT_SECRET)
 ALGORITHM = "HS256"
 
+# Encrypts stored resident ID numbers (v4.2 §6.4). Rotating this value makes
+# existing ciphertext undecryptable, so it is set once per environment and
+# never regenerated per deploy.
+_DEV_ID_KEY = "dev-only-id-key-change-me-0000000000000000000"
+ID_ENCRYPTION_KEY = os.getenv("ID_ENCRYPTION_KEY", _DEV_ID_KEY)
+
 
 def _check_production_config() -> None:
     # SYSTEM-DESIGN-V4.md Phase 0 stop-loss item #4: "生产环境缺少 JWT、管理员
@@ -25,6 +31,8 @@ def _check_production_config() -> None:
         problems.append("JWT_SECRET 未设置或仍为开发默认值")
     elif len(SECRET_KEY.encode()) < 32:
         problems.append("JWT_SECRET 长度不足 32 字节")
+    if ID_ENCRYPTION_KEY == _DEV_ID_KEY:
+        problems.append("ID_ENCRYPTION_KEY 未设置或仍为开发默认值")
     if not os.getenv("ADMIN_PASSWORD"):
         problems.append("ADMIN_PASSWORD 未设置")
     if DATABASE_URL.startswith("sqlite"):

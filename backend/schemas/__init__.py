@@ -14,6 +14,10 @@ from .claim import (
 from .finance import PaymentIn, PaymentCallbackIn, InvoiceIn, InvoiceUpdate, InsurerAccountIn, InsurerAccountUpdate, InsurerAccountLinkIn
 from .notification import NotificationIn
 from .employer_scope import EmployerScopeIn, EmployerScopeOut, PrimaryManagerIn
+from .employment import (
+    BatchOut, FactCorrectIn, FactListOut, FactOut, ImportConfirmIn, ImportConfirmOut,
+    ImportPreviewOut, ImportRowOut, ManualMatchIn,
+)
 
 __all__ = [
     "LoginIn", "PasswordChangeIn", "TokenOut", "UserOut",

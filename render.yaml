@@ -13,6 +13,11 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      # Set once per environment in the Render dashboard. Rotating it makes
+      # existing encrypted ID numbers undecryptable, so it must not be
+      # regenerated per deploy.
+      - key: ID_ENCRYPTION_KEY
+        sync: false
       - key: ADMIN_PASSWORD
         sync: false
       - key: ENTERPRISE_PASSWORD
