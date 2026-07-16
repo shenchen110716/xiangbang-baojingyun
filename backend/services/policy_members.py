@@ -136,6 +136,7 @@ def terminate_person_policy(
         )
     else:
         member_stmt = member_stmt.where(
+            PolicyMember.effective_at <= operation,
             or_(PolicyMember.terminated_at.is_(None), PolicyMember.terminated_at > operation)
         )
     member = session.scalar(member_stmt.order_by(PolicyMember.id.desc()))

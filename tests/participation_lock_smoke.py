@@ -331,12 +331,13 @@ def run():
             )
             session.add(moved_position); session.flush()
             safe_person.position_id = moved_position.id
-            session.add(PolicyMember(
+            future_target_member = PolicyMember(
                 policy_id=target_policy.id,
-                person_id=safe_person.id,
+                person_id=target_person.id,
                 status="active",
                 effective_at=business_now() + timedelta(days=1),
-            ))
+            )
+            session.add(future_target_member)
             session.flush()
             legacy_person = InsuredPerson(enterprise_id=confirm_ent.id, name="无法归属历史员工", status="active")
             session.add(legacy_person)
@@ -364,6 +365,8 @@ def run():
             assert legacy_person.status == "active", "an unattributed row must not be affected"
             terminated_member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == target_person.id))
             assert terminated_member.status == "terminated" and terminated_member.terminated_at is not None
+            session.refresh(future_target_member)
+            assert future_target_member.status == "active" and future_target_member.terminated_at is None, "future coverage must not replace the current period selected for termination"
             session.refresh(temporary_member)
             assert temporary_member.terminated_at <= business_now(), "forced termination must close a still-live future-ended period now"
             try:
@@ -419,6 +422,31 @@ def run():
                 AuditLog.object_type == "pending_termination",
                 AuditLog.object_id == str(concurrent_pending.id),
             ).count() == 1
+
+            rollback_account = InsurerAccount(label="异常回滚账户", status="active")
+            rollback_ent = Enterprise(name="异常回滚企业", kind="企业", status="active")
+            session.add_all([rollback_account, rollback_ent]); session.commit()
+            session.add(InsurerAccountLink(insurer="异常回滚保司", account_id=rollback_account.id)); session.commit()
+            add_covered_person(rollback_ent, "异常回滚保司", "异常回滚员工")
+            session.add(EnterprisePremiumAccount(
+                enterprise_id=rollback_ent.id,
+                account_id=rollback_account.id,
+                balance=-1.0,
+            )); session.commit()
+            rollback_pending = scan_premium_shortfalls(session, rollback_ent.id)[0]
+            try:
+                with SessionLocal() as failing_session:
+                    failing_admin = failing_session.scalar(select(User).where(User.username == "admin"))
+                    with patch(
+                        "backend.routers.pending_terminations.affected_people_for_account",
+                        side_effect=RuntimeError("injected failure after claim"),
+                    ):
+                        confirm_pending_termination(rollback_pending.id, failing_admin, failing_session)
+                assert False, "expected injected confirmation failure"
+            except RuntimeError as error:
+                assert str(error) == "injected failure after claim"
+            with SessionLocal() as verification_session:
+                assert verification_session.get(PendingTermination, rollback_pending.id).status == "pending", "an exception must roll back the processing claim"
 
             # Confirmation always rechecks the locked balance row. A recharge
             # after task creation dismisses the task and must not stop anyone.
