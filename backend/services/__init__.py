@@ -19,6 +19,9 @@ from .employer_scopes import (
     allowed_employer_ids, assert_employer_access, grant_employer_scope,
     is_enterprise_owner, replace_primary_manager, revoke_employer_scope,
 )
+from .employment_facts import (
+    FACT_EXCLUDED_STATUSES, active_facts, correct_fact, serialize_fact,
+)
 
 __all__ = [
     "serialize", "amount",
@@ -35,4 +38,5 @@ __all__ = [
     "earliest_effective_at", "earliest_termination_at", "effective_person_status", "validate_person_policy_dates",
     "allowed_employer_ids", "assert_employer_access", "grant_employer_scope",
     "is_enterprise_owner", "replace_primary_manager", "revoke_employer_scope",
+    "FACT_EXCLUDED_STATUSES", "active_facts", "correct_fact", "serialize_fact",
 ]
