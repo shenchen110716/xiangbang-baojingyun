@@ -9,15 +9,29 @@ from ..models import (
     InsurancePlan, InsuredPerson, Policy, User, WorkPosition,
 )
 from .serialization import serialize
+from .employer_scopes import assert_employer_access, is_enterprise_owner
 
 CLAIM_REQUIRED_DOCS=[('id_card','被保险人身份证明'),('labor_relation','劳动关系证明'),('diagnosis','医疗诊断证明'),('medical_record','病历或出院记录'),('invoice','医疗发票和费用清单'),('accident_proof','事故经过及证明'),('bank_card','收款银行卡信息')]
 CLAIM_REQUIRED_TYPES={key for key,_ in CLAIM_REQUIRED_DOCS}
 CLAIM_TRANSITIONS={'reported':{'collecting'},'collecting':{'submitted'},'submitted':{'insurer_review','supplement'},'insurer_review':{'supplement','approved','rejected'},'supplement':{'submitted','insurer_review'},'approved':{'paid'},'paid':{'closed'},'rejected':{'closed'},'closed':set()}
 
 
-def claim_access(item:Claim,user:User):
+def person_claim_access(person:InsuredPerson,user:User,session:Session):
+    if user.role not in {'admin','enterprise'}: raise HTTPException(403,'无权访问理赔案件')
+    if user.role=='enterprise' and user.enterprise_id!=person.enterprise_id: raise HTTPException(403,'无权访问该理赔案件')
+    position=session.get(WorkPosition,person.position_id) if person.position_id else None
+    if position and position.actual_employer_id is not None:
+        assert_employer_access(session,user,position.actual_employer_id)
+    elif user.role=='enterprise' and not is_enterprise_owner(user):
+        raise HTTPException(403,'理赔员工未关联实际工作单位，项目负责人无权访问')
+
+
+def claim_access(item:Claim,user:User,session:Session):
     if user.role=='enterprise' and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,'无权访问该理赔案件')
     if user.role not in {'admin','enterprise'}: raise HTTPException(403,'无权访问理赔案件')
+    person=session.get(InsuredPerson,item.person_id)
+    if not person: raise HTTPException(404,'理赔员工不存在')
+    person_claim_access(person,user,session)
 
 def claim_payload(item:Claim,session:Session):
     result=serialize(item);enterprise=session.get(Enterprise,item.enterprise_id);person=session.get(InsuredPerson,item.person_id);position=session.get(WorkPosition,person.position_id) if person and person.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None;policy=session.get(Policy,person.policy_id) if person and person.policy_id else None;plan=session.get(InsurancePlan,policy.plan_id) if policy else None
@@ -33,7 +47,7 @@ def claim_payload(item:Claim,session:Session):
     return result
 
 def prepare_claim_upload(item:Claim,user:User,session:Session):
-    claim_access(item,user)
+    claim_access(item,user,session)
     if item.status=='closed': raise HTTPException(409,'已结案案件不能继续上传材料')
     if user.role=='enterprise' and item.status not in {'reported','collecting','supplement'}: raise HTTPException(409,'当前节点不允许企业上传材料')
     if item.status=='reported':

@@ -75,6 +75,12 @@ def run():
             session.commit()
             operator = add_operator(OperatorIn(enterprise_id=enterprise_id, username="smoke_operator", password="smoke123", name="测试操作员"), admin, session)
             user = session.get(User, operator["id"])
+            # This legacy direct-call fixture exercises enterprise-wide
+            # owner operations. New operators are intentionally zero-scope
+            # project managers, so make the fixture's authority explicit.
+            user.enterprise_role = "owner"
+            user.is_owner = True
+            session.commit()
 
             template_response = insured_import_template(user)
             template_data = asyncio.run(response_body(template_response))
