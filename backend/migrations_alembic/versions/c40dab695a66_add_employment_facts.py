@@ -40,6 +40,10 @@ def upgrade() -> None:
         sa.Column("source_type", sa.String(20), nullable=False),
         sa.Column("source_filename", sa.String(255), nullable=False, server_default=""),
         sa.Column("source_file_hash", sa.String(64), nullable=False, server_default=""),
+        # 原始上传文件必须私有、加密并设置保留期限（§6.4）。The file is stored
+        # encrypted outside the web root; only its path lives here. confirm
+        # re-derives the report from it rather than trusting the client.
+        sa.Column("source_file_path", sa.String(255), nullable=False, server_default=""),
         sa.Column("reported_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("imported_by", sa.Integer, sa.ForeignKey("users.id"), nullable=True),
         sa.Column("imported_at", sa.DateTime(timezone=True), nullable=True),

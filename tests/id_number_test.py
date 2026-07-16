@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.core.id_number import id_encrypt, id_decrypt, id_hash, mask_id_number
 
-RAW = "340123199001011234"
+RAW = "340123199001011238"
 
 
 def test_hash_is_deterministic_and_not_reversible():
@@ -35,7 +35,7 @@ def test_encrypt_roundtrips_and_is_not_deterministic():
 
 
 def test_mask_hides_the_birth_date_segment():
-    assert mask_id_number(RAW) == "340123********1234"
+    assert mask_id_number(RAW) == "340123********1238"
     assert mask_id_number("") == ""
     assert mask_id_number("123") == "***"
 

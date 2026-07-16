@@ -23,6 +23,7 @@ from .employment_facts import (
     FACT_EXCLUDED_STATUSES, active_facts, correct_fact, serialize_fact,
 )
 from .employment_matching import MatchResult, match_person
+from .employment_import import confirm_import, preview_import
 
 __all__ = [
     "serialize", "amount",
@@ -41,4 +42,5 @@ __all__ = [
     "is_enterprise_owner", "replace_primary_manager", "revoke_employer_scope",
     "FACT_EXCLUDED_STATUSES", "active_facts", "correct_fact", "serialize_fact",
     "MatchResult", "match_person",
+    "preview_import", "confirm_import",
 ]

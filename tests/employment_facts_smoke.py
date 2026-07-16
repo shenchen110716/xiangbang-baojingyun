@@ -32,8 +32,8 @@ TEMPLATE_HEADER = [
     "真实入职时间", "真实离职时间", "反馈时间", "外部用工记录号", "备注",
 ]
 
-VALID_ID = "340123199001011234"
-MASKED_ID = "340123********1234"
+VALID_ID = "340123199001011238"
+MASKED_ID = "340123********1238"
 
 
 def _free_port() -> int:
@@ -257,7 +257,7 @@ def _assert_duplicate_source_event_is_idempotent(preview_ok, call, facts, owner)
     """§17.2 同一 source_event_id 重复推送不产生重复事实。"""
     before = len(facts(owner))
     preview = preview_ok(owner, [_row(emp_no="E777", name="赵六",
-                                      id_number="11010119900307771X",
+                                      id_number="110101199003077715",
                                       source="EXT-DUP")])
     call("POST", "/api/employment-feedback/import/confirm", owner,
          {"batch_id": preview["batch_id"], "confirm_token": preview["confirm_token"]})
@@ -265,7 +265,7 @@ def _assert_duplicate_source_event_is_idempotent(preview_ok, call, facts, owner)
     assert after_first == before + 1
 
     replay = preview_ok(owner, [_row(emp_no="E777", name="赵六",
-                                     id_number="11010119900307771X",
+                                     id_number="110101199003077715",
                                      source="EXT-DUP")])
     call("POST", "/api/employment-feedback/import/confirm", owner,
          {"batch_id": replay["batch_id"], "confirm_token": replay["confirm_token"]})
@@ -296,7 +296,7 @@ def _assert_project_manager_is_confined(ok, call, upload, preview_ok, login,
 
     # 授权单位放行
     allowed = preview_ok(token, [_row(employer="项目 A", emp_no="E10", name="孙七",
-                                      id_number="11010119900307771X", source="EXT-A")])
+                                      id_number="110101199003077715", source="EXT-A")])
     assert allowed["valid_rows"] == 1, allowed
 
     # 列表只返回授权范围内的事实

@@ -77,6 +77,8 @@ class EmploymentFeedbackBatch(Base):
     source_type: Mapped[str] = mapped_column(String(20))
     source_filename: Mapped[str] = mapped_column(String(255), default="")
     source_file_hash: Mapped[str] = mapped_column(String(64), default="")
+    # 原始上传文件私有加密留存（§6.4）；仅存路径，文件不在 web 根下。
+    source_file_path: Mapped[str] = mapped_column(String(255), default="")
     reported_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     imported_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     imported_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

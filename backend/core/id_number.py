@@ -55,6 +55,15 @@ def id_decrypt(token: str) -> str:
     return _fernet().decrypt(token.encode()).decode()
 
 
+def encrypt_bytes(raw: bytes) -> bytes:
+    """For files at rest (§6.4: 原始上传文件必须私有、加密)."""
+    return _fernet().encrypt(raw)
+
+
+def decrypt_bytes(token: bytes) -> bytes:
+    return _fernet().decrypt(token)
+
+
 def mask_id_number(value: str) -> str:
     """响应、日志与审计中唯一允许出现的形式（§6.4）。"""
     raw = _normalise(value)

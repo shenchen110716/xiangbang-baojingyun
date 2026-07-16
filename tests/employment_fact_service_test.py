@@ -36,7 +36,7 @@ from backend.services.employment_facts import (
     serialize_fact,
 )
 
-RAW_ID = "340123199001011234"
+RAW_ID = "340123199001011238"
 
 
 def _dt(text: str) -> datetime:
@@ -209,7 +209,7 @@ def _test_serialize_never_leaks_plaintext_id(session, ctx):
     _clear(session)
     fact = _make_fact(session, ctx, id_number=RAW_ID)
     out = serialize_fact(fact)
-    assert out["id_number"] == "340123********1234"
+    assert out["id_number"] == "340123********1238"
     assert RAW_ID not in repr(out)
     assert "id_number_cipher" not in out and "id_number_hash" not in out
     print("  serialize masks id ok")
