@@ -16,7 +16,7 @@ from ..core.id_number import is_valid_id_number
 from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
 from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
-from ..services import activate_person_policy, correct_person_policy_dates, effective_person_status, plan_price_for_class, pricing_snapshot, require_usage_funded, serialize, strip_internal_pricing, terminate_person_policy
+from ..services import activate_person_policy, allowed_employer_ids, assert_employer_access, correct_person_policy_dates, effective_person_status, is_enterprise_owner, plan_price_for_class, pricing_snapshot, require_usage_funded, serialize, strip_internal_pricing, terminate_person_policy
 
 router = APIRouter(prefix="/api", tags=["insured"])
 MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024
@@ -45,10 +45,32 @@ def _person_payload(session: Session, item: InsuredPerson) -> dict:
     return payload
 
 
+def _person_employer_access(
+    session: Session, user: User, person: InsuredPerson
+) -> WorkPosition | None:
+    position = session.get(WorkPosition, person.position_id) if person.position_id else None
+    if position and position.actual_employer_id is not None:
+        assert_employer_access(session, user, position.actual_employer_id)
+        return position
+    if user.role == "enterprise":
+        if person.enterprise_id != user.enterprise_id:
+            raise HTTPException(403, "无权访问其他企业员工")
+        if not is_enterprise_owner(user):
+            raise HTTPException(403, "员工未关联实际工作单位，项目负责人无权访问")
+    elif user.role != "admin":
+        raise HTTPException(403, "无权访问参保员工")
+    return position
+
+
 @router.get("/insured")
 def insured(q: str = "", user: User = Depends(current_user), session: Session = Depends(db)):
     stmt = select(InsuredPerson).order_by(InsuredPerson.id.desc())
-    if user.role=='enterprise' and user.enterprise_id: stmt=stmt.where(InsuredPerson.enterprise_id==user.enterprise_id)
+    if user.role=='enterprise' and user.enterprise_id:
+        stmt=stmt.where(InsuredPerson.enterprise_id==user.enterprise_id)
+        allowed=allowed_employer_ids(session,user)
+        if allowed is not None:
+            stmt=stmt.join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(WorkPosition.actual_employer_id.in_(allowed))
+    elif user.role!='admin': raise HTTPException(403,'无权查看参保员工')
     if q: stmt = stmt.where(or_(InsuredPerson.name.contains(q), InsuredPerson.phone.contains(q)))
     result=[]
     for x in session.scalars(stmt):
@@ -82,7 +104,12 @@ def add_person(data: PersonIn, user: User = Depends(current_user), session: Sess
     if data.position_id:
         position=session.get(WorkPosition,data.position_id)
         if not position or position.enterprise_id!=data.enterprise_id or position.status!='approved': raise HTTPException(400,"只能选择本单位已审核通过的有效岗位")
+        if position.actual_employer_id is None:
+            if user.role=='enterprise' and not is_enterprise_owner(user): raise HTTPException(403,'岗位未关联实际工作单位，项目负责人无权操作')
+        else: assert_employer_access(session,user,position.actual_employer_id)
         payload['occupation']=position.name; payload['occupation_class']=position.occupation_class
+    elif user.role=='enterprise' and not is_enterprise_owner(user):
+        raise HTTPException(403,'项目负责人新增员工必须选择授权范围内的岗位')
     item = InsuredPerson(**payload); session.add(item); session.flush()
     member = correct_person_policy_dates(session, item, effective_at, terminated_at)
     if member is not None: item.status = "stopped" if member.terminated_at is not None else "active"
@@ -92,7 +119,7 @@ def add_person(data: PersonIn, user: User = Depends(current_user), session: Sess
 def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),session:Session=Depends(db)):
     item=session.get(InsuredPerson,item_id)
     if not item: raise HTTPException(404,'参保员工不存在')
-    if user.role=='enterprise' and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,'无权操作该员工')
+    _person_employer_access(session,user,item)
     require_usage_funded(session, session.get(Enterprise, item.enterprise_id), user)
     values=data.model_dump(exclude_unset=True)
     if 'id_number' in values and values['id_number']!=item.id_number:
@@ -101,6 +128,9 @@ def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),
     if 'position_id' in values:
         position=session.get(WorkPosition,values['position_id'])
         if not position or position.enterprise_id!=item.enterprise_id or position.status!='approved': raise HTTPException(400,'只能选择本单位已审核通过的有效岗位')
+        if position.actual_employer_id is None:
+            if user.role=='enterprise' and not is_enterprise_owner(user): raise HTTPException(403,'岗位未关联实际工作单位，项目负责人无权操作')
+        else: assert_employer_access(session,user,position.actual_employer_id)
         item.position_id=position.id;item.occupation=position.name;item.occupation_class=position.occupation_class
     for key in ('name','phone','id_number'):
         if key in values and values[key] is not None: setattr(item,key,values[key])
@@ -115,7 +145,7 @@ def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),
 def insured_status(item_id:int,status_value:Literal["active","stopped","pending"]=Query(...,alias="status"),user:User=Depends(current_user),session:Session=Depends(db)):
     item=session.get(InsuredPerson,item_id)
     if not item: raise HTTPException(404,"参保员工不存在")
-    if user.role=="enterprise" and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,"无权操作该员工")
+    _person_employer_access(session,user,item)
     require_usage_funded(session, session.get(Enterprise, item.enterprise_id), user)
     previous_status=item.status
     if status_value=="active" and previous_status!="active": activate_person_policy(session,item)
@@ -127,7 +157,7 @@ def insured_status(item_id:int,status_value:Literal["active","stopped","pending"
 def insured_policy_members(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):
     item = session.get(InsuredPerson, item_id)
     if not item: raise HTTPException(404, "参保员工不存在")
-    if user.role == "enterprise" and user.enterprise_id != item.enterprise_id: raise HTTPException(403, "无权查看该员工")
+    _person_employer_access(session,user,item)
     rows = session.scalars(select(PolicyMember).where(PolicyMember.person_id == item_id).order_by(PolicyMember.id.desc()))
     result = []
     for pm in rows:
@@ -193,6 +223,9 @@ def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Se
     require_usage_funded(session, enterprise, user)
     position=session.get(WorkPosition,data.position_id)
     if not position or position.enterprise_id!=data.enterprise_id or position.status!='approved': raise HTTPException(400,'只能选择本单位已审核通过的岗位')
+    if position.actual_employer_id is None:
+        if user.role=='enterprise' and not is_enterprise_owner(user): raise HTTPException(403,'岗位未关联实际工作单位，项目负责人无权操作')
+    else: assert_employer_access(session,user,position.actual_employer_id)
     errors=[];created=[];seen=set()
     for index,row in enumerate(data.rows,start=2):
         identity=row.id_number.strip();name=row.name.strip()
@@ -215,6 +248,9 @@ async def import_insured_file(kind:Literal['enrollment','termination']=Form(...)
     if kind=='enrollment' and position_id:
         default_position=session.get(WorkPosition,position_id)
         if not default_position or default_position.enterprise_id!=enterprise_id or default_position.status!='approved': raise HTTPException(400,'批量参保必须选择本单位已审核通过的岗位')
+        if default_position.actual_employer_id is None:
+            if user.role=='enterprise' and not is_enterprise_owner(user): raise HTTPException(403,'岗位未关联实际工作单位，项目负责人无权操作')
+        else: assert_employer_access(session,user,default_position.actual_employer_id)
     if file.size is not None and file.size > MAX_IMPORT_FILE_BYTES: raise HTTPException(413,'单个导入文件不能超过 10MB，请拆分后重试')
     content=await file.read();raw=_read_import_rows(content,file.filename or '')
     if len(raw)<2: raise HTTPException(400,'电子表格没有可导入的数据')
@@ -268,11 +304,19 @@ async def import_insured_file(kind:Literal['enrollment','termination']=Form(...)
                 if employer: position_query=position_query.where(WorkPosition.actual_employer_id==employer.id)
                 row_position=session.scalar(position_query) if row_position_name else None
                 if not row_position: errors.append({'row':row_no,'message':'未找到匹配的已审核岗位，请填写实际工作单位与岗位名称，或先在岗位管理中创建并完成审核'});continue
+            try:
+                if row_position.actual_employer_id is None:
+                    if user.role=='enterprise' and not is_enterprise_owner(user): raise HTTPException(403,'岗位未关联实际工作单位，项目负责人无权操作')
+                else: assert_employer_access(session,user,row_position.actual_employer_id)
+            except HTTPException as exc:
+                errors.append({'row':row_no,'message':exc.detail});continue
             if effective_at is not None and terminated_at is not None and terminated_at<=effective_at: errors.append({'row':row_no,'message':'停保日期必须晚于生效日期'});continue
             pending.append(('create',row_enterprise_id,row_position,person_name,identity,phone,effective_at,terminated_at,existing))
         else:
             if not existing: errors.append({'row':row_no,'message':'未找到该单位参保员工'});continue
             if existing.status=='stopped': errors.append({'row':row_no,'message':'该员工已停保'});continue
+            try: _person_employer_access(session,user,existing)
+            except HTTPException as exc: errors.append({'row':row_no,'message':exc.detail});continue
             pending.append(('stop',row_enterprise_id,None,person_name,identity,phone,None,terminated_at,existing))
     if errors: return {'ok':False,'kind':kind,'success':0,'errors':errors}
     affected=[]

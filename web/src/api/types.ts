@@ -1,4 +1,5 @@
 export type Role = 'admin' | 'enterprise' | 'salesperson'
+export type EnterpriseRole = 'owner' | 'project_manager'
 
 export interface User {
   id: number
@@ -6,6 +7,7 @@ export interface User {
   name: string
   role: Role
   enterprise_id: number | null
+  enterprise_role: EnterpriseRole | null
   phone: string
   is_owner: boolean
   active: boolean
@@ -312,9 +314,23 @@ export interface Operator {
   role: string
   enterprise_id: number | null
   enterprise_name: string
+  enterprise_role: EnterpriseRole | null
   is_owner: boolean
   active: boolean
   created_at: string
+}
+
+export interface EmployerScope {
+  id: number
+  user_id: number
+  user_name: string
+  enterprise_id: number
+  actual_employer_id: number
+  actual_employer_name: string
+  responsibility_type: 'primary' | 'collaborator'
+  assigned_at: string
+  revoked_at: string | null
+  status: 'active' | 'revoked'
 }
 
 export interface Invoice {

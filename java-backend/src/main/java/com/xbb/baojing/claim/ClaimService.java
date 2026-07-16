@@ -5,6 +5,7 @@ import com.xbb.baojing.common.User;
 import com.xbb.baojing.enterprise.ActualEmployerMapper;
 import com.xbb.baojing.enterprise.Enterprise;
 import com.xbb.baojing.enterprise.EnterpriseMapper;
+import com.xbb.baojing.enterprise.EmployerScopeAccess;
 import com.xbb.baojing.insured.InsuredPerson;
 import com.xbb.baojing.insured.InsuredPersonMapper;
 import com.xbb.baojing.insured.Policy;
@@ -55,10 +56,11 @@ public class ClaimService {
     private final InsurancePlanMapper planMapper;
     private final ClaimDocumentMapper documentMapper;
     private final ClaimTimelineMapper timelineMapper;
+    private final EmployerScopeAccess scopeAccess;
 
     public ClaimService(EnterpriseMapper enterpriseMapper, InsuredPersonMapper personMapper, WorkPositionMapper positionMapper,
                          ActualEmployerMapper actualEmployerMapper, PolicyMapper policyMapper, InsurancePlanMapper planMapper,
-                         ClaimDocumentMapper documentMapper, ClaimTimelineMapper timelineMapper) {
+                         ClaimDocumentMapper documentMapper, ClaimTimelineMapper timelineMapper, EmployerScopeAccess scopeAccess) {
         this.enterpriseMapper = enterpriseMapper;
         this.personMapper = personMapper;
         this.positionMapper = positionMapper;
@@ -67,6 +69,7 @@ public class ClaimService {
         this.planMapper = planMapper;
         this.documentMapper = documentMapper;
         this.timelineMapper = timelineMapper;
+        this.scopeAccess = scopeAccess;
     }
 
     public void claimAccess(Claim item, User user) {
@@ -76,6 +79,17 @@ public class ClaimService {
         if (!user.getRole().equals("admin") && !user.getRole().equals("enterprise")) {
             throw ApiException.forbidden("无权访问理赔案件");
         }
+        requirePersonScope(user, personMapper.findById(item.getPersonId()));
+    }
+
+    public void requirePersonScope(User user, InsuredPerson person) {
+        WorkPosition position = person != null && person.getPositionId() != null ? positionMapper.findById(person.getPositionId()) : null;
+        scopeAccess.requireEmployerAccess(user, position == null ? null : position.getActualEmployerId());
+    }
+
+    public boolean canAccessClaim(Claim item, User user) {
+        try { claimAccess(item, user); return true; }
+        catch (ApiException ignored) { return false; }
     }
 
     /** Ports prepare_claim_upload(): access check + closed-case guard +

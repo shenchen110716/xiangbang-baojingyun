@@ -5,6 +5,7 @@ import com.xbb.baojing.enterprise.ActualEmployer;
 import com.xbb.baojing.enterprise.ActualEmployerMapper;
 import com.xbb.baojing.enterprise.Enterprise;
 import com.xbb.baojing.enterprise.EnterpriseMapper;
+import com.xbb.baojing.enterprise.EmployerScopeAccess;
 import com.xbb.baojing.insured.InsuredPersonMapper;
 import com.xbb.baojing.plan.InsurancePlanMapper;
 import org.springframework.web.bind.annotation.*;
@@ -32,12 +33,14 @@ public class PositionController {
     private final UserMapper userMapper;
     private final AuditService auditService;
     private final FileTokenService fileTokenService;
+    private final EmployerScopeAccess scopeAccess;
     private final String uploadsDir;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     public PositionController(WorkPositionMapper positionMapper, PositionVideoMapper videoMapper, ActualEmployerMapper actualEmployerMapper,
                                EnterpriseMapper enterpriseMapper, InsuredPersonMapper personMapper, InsurancePlanMapper planMapper,
-                               UserMapper userMapper, AuditService auditService, FileTokenService fileTokenService, AppProperties props) {
+                               UserMapper userMapper, AuditService auditService, FileTokenService fileTokenService, AppProperties props,
+                               EmployerScopeAccess scopeAccess) {
         this.positionMapper = positionMapper;
         this.videoMapper = videoMapper;
         this.actualEmployerMapper = actualEmployerMapper;
@@ -47,6 +50,7 @@ public class PositionController {
         this.userMapper = userMapper;
         this.auditService = auditService;
         this.fileTokenService = fileTokenService;
+        this.scopeAccess = scopeAccess;
         this.uploadsDir = props.getUploadsDir();
     }
 
@@ -84,10 +88,15 @@ public class PositionController {
         return v;
     }
 
+    private void requirePositionAccess(User user, WorkPosition position) {
+        scopeAccess.requireEmployerAccess(user, position.getActualEmployerId());
+    }
+
     @GetMapping("/positions")
     public List<WorkPosition> list(User user) {
         Integer scoped = "enterprise".equals(user.getRole()) && user.getEnterpriseId() != null ? user.getEnterpriseId() : null;
-        return positionMapper.search(scoped).stream().map(this::enrich).toList();
+        Set<Integer> allowed = scopeAccess.allowedEmployerIds(user);
+        return positionMapper.search(scoped).stream().filter(item -> allowed == null || allowed.contains(item.getActualEmployerId())).map(this::enrich).toList();
     }
 
     @PostMapping("/positions")
@@ -96,6 +105,7 @@ public class PositionController {
         if (target == null || enterpriseMapper.findById(target) == null) throw ApiException.badRequest("请先绑定有效投保单位");
         ActualEmployer employer = data.actualEmployerId() != null ? actualEmployerMapper.findById(data.actualEmployerId()) : null;
         if (employer == null || !employer.getEnterpriseId().equals(target)) throw ApiException.badRequest("请选择本企业添加的有效实际工作单位");
+        scopeAccess.requireEmployerAccess(user, employer.getId());
         if (!"active".equals(employer.getStatus())) throw ApiException.badRequest("该工作单位已暂停，不能新增岗位");
         WorkPosition item = new WorkPosition();
         item.setEnterpriseId(target);
@@ -117,8 +127,10 @@ public class PositionController {
         WorkPosition item = positionMapper.findById(id);
         if (item == null) throw ApiException.notFound("岗位不存在");
         if ("enterprise".equals(user.getRole()) && !item.getEnterpriseId().equals(user.getEnterpriseId())) throw ApiException.forbidden("无权操作");
+        requirePositionAccess(user, item);
         ActualEmployer employer = data.actualEmployerId() != null ? actualEmployerMapper.findById(data.actualEmployerId()) : null;
         if (employer == null || !employer.getEnterpriseId().equals(item.getEnterpriseId())) throw ApiException.badRequest("请选择本企业添加的有效实际工作单位");
+        scopeAccess.requireEmployerAccess(user, employer.getId());
         item.setActualEmployerId(employer.getId());
         item.setActualEmployer(employer.getName());
         item.setName(data.name());
@@ -140,6 +152,7 @@ public class PositionController {
         WorkPosition item = positionMapper.findById(id);
         if (item == null) throw ApiException.notFound("岗位不存在");
         if ("enterprise".equals(user.getRole()) && !item.getEnterpriseId().equals(user.getEnterpriseId())) throw ApiException.forbidden("无权操作");
+        requirePositionAccess(user, item);
         if (positionMapper.countInsured(id) > 0) throw ApiException.conflict("该岗位已关联参保员工，不能删除");
         positionMapper.delete(id);
         auditService.log(user, "delete", "position", String.valueOf(id));
@@ -151,6 +164,7 @@ public class PositionController {
         WorkPosition pos = positionMapper.findById(id);
         if (pos == null) throw ApiException.notFound("岗位不存在");
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(pos.getEnterpriseId())) throw ApiException.forbidden("无权查看");
+        requirePositionAccess(user, pos);
         return videoMapper.findByPosition(id).stream().map(this::videoDto).toList();
     }
 
@@ -166,6 +180,7 @@ public class PositionController {
         WorkPosition pos = positionMapper.findById(id);
         if (pos == null) throw ApiException.notFound("岗位不存在");
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(pos.getEnterpriseId())) throw ApiException.forbidden("无权上传");
+        requirePositionAccess(user, pos);
         PositionVideo v = new PositionVideo();
         v.setPositionId(id);
         v.setName(data.name());
@@ -184,6 +199,7 @@ public class PositionController {
         WorkPosition pos = positionMapper.findById(id);
         if (pos == null) throw ApiException.notFound("岗位不存在");
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(pos.getEnterpriseId())) throw ApiException.forbidden("无权上传");
+        requirePositionAccess(user, pos);
         String original = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
         String suffix = original.contains(".") ? original.substring(original.lastIndexOf('.')).toLowerCase() : "";
         if (!Set.of(".mp4", ".mov", ".m4v").contains(suffix)) {

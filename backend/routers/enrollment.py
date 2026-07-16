@@ -14,16 +14,29 @@ from ..core.db import db
 from ..core.security import current_user
 from ..models import AgentCommission, Enterprise, EnrollmentEmail, InsurancePlan, InsuredPerson, User, WorkPosition
 from ..providers import email_provider, insurer_provider
-from ..services import plan_price_for_class, pricing_snapshot, serialize
+from ..services import allowed_employer_ids, plan_price_for_class, pricing_snapshot, serialize
 
 router = APIRouter(prefix="/api", tags=["enrollment"])
+
+
+def _scope_people_statement(stmt, user: User, session: Session):
+    if user.role == 'enterprise':
+        if not user.enterprise_id: return stmt.where(InsuredPerson.id.is_(None))
+        stmt=stmt.where(InsuredPerson.enterprise_id==user.enterprise_id)
+        allowed=allowed_employer_ids(session,user)
+        if allowed is not None:
+            scoped_positions=select(WorkPosition.id).where(WorkPosition.actual_employer_id.in_(allowed))
+            stmt=stmt.where(InsuredPerson.position_id.in_(scoped_positions))
+    elif user.role!='admin':
+        raise HTTPException(403,'无权访问参保名单')
+    return stmt
 
 
 @router.get("/enrollment/export")
 def enrollment_export(kind:Literal["enrollment","termination"],date_value:str=Query(default="",alias="date"),plan_id:Optional[int]=None,user:User=Depends(current_user),session:Session=Depends(db)):
     target_date=date_value or datetime.now(timezone.utc).strftime('%Y-%m-%d')
     stmt=select(InsuredPerson).order_by(InsuredPerson.id.asc())
-    if user.role=="enterprise" and user.enterprise_id: stmt=stmt.where(InsuredPerson.enterprise_id==user.enterprise_id)
+    stmt=_scope_people_statement(stmt,user,session)
     if plan_id:
         stmt=stmt.join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(WorkPosition.plan_id==plan_id)
     if kind=="termination": stmt=stmt.where(InsuredPerson.status=="stopped")
@@ -44,7 +57,7 @@ def enrollment_summary(date_value:str=Query(default="",alias="date"),user:User=D
     target=date_value or datetime.now(timezone.utc).strftime('%Y-%m-%d');result=[]
     for plan in session.scalars(select(InsurancePlan).order_by(InsurancePlan.id.desc())):
         stmt=select(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(WorkPosition.plan_id==plan.id)
-        if user.role=='enterprise': stmt=stmt.where(InsuredPerson.enterprise_id==user.enterprise_id)
+        stmt=_scope_people_statement(stmt,user,session)
         people=list(session.scalars(stmt));new_count=sum(1 for x in people if str(x.created_at or '')[:10]==target and x.status!='stopped');stop_count=sum(1 for x in people if str(x.created_at or '')[:10]==target and x.status=='stopped')
         result.append({'plan_id':plan.id,'insurer':plan.insurer,'insurer_email':plan.insurer_email,'product':plan.name,'insured_count':len([x for x in people if x.status!='stopped']),'new_count':new_count,'stop_count':stop_count})
     return result
@@ -55,6 +68,7 @@ def enrollment_send(enterprise_id:int, plan_id:int, kind:Literal["enrollment","t
     ent=session.get(Enterprise,enterprise_id);plan=session.get(InsurancePlan,plan_id)
     if not ent or not plan: raise HTTPException(404,"投保单位或方案不存在")
     stmt=select(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(InsuredPerson.enterprise_id==enterprise_id,WorkPosition.plan_id==plan_id)
+    stmt=_scope_people_statement(stmt,user,session)
     stmt=stmt.where(InsuredPerson.status=='stopped') if kind=='termination' else stmt.where(InsuredPerson.status.in_(['active','pending']))
     people=[serialize(x) for x in session.scalars(stmt)]
     payload={"enterprise":{"id":ent.id,"name":ent.name},"plan":serialize(plan),"people":people,"sent_at":datetime.now(timezone.utc).isoformat()}
@@ -68,6 +82,7 @@ def enrollment_email(enterprise_id:int,plan_id:int,kind:Literal['enrollment','te
     if not ent or not plan: raise HTTPException(404,'投保单位或产品不存在')
     if not plan.insurer_email: raise HTTPException(400,'该保险公司方案尚未配置接收邮箱')
     target_date=date_value or datetime.now(timezone.utc).strftime('%Y-%m-%d');stmt=select(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(InsuredPerson.enterprise_id==enterprise_id,WorkPosition.plan_id==plan_id)
+    stmt=_scope_people_statement(stmt,user,session)
     if kind=='termination': stmt=stmt.where(InsuredPerson.status=='stopped')
     else: stmt=stmt.where(InsuredPerson.created_at.like(f'{target_date}%'),InsuredPerson.status.in_(['active','pending']))
     rows=[]
@@ -81,6 +96,8 @@ def enrollment_email(enterprise_id:int,plan_id:int,kind:Literal['enrollment','te
 
 @router.get('/enrollment/emails')
 def enrollment_emails(user:User=Depends(current_user),session:Session=Depends(db)):
+    if user.role=='enterprise' and allowed_employer_ids(session,user) is not None:
+        return []
     stmt=select(EnrollmentEmail).order_by(EnrollmentEmail.id.desc())
     if user.role=='enterprise': stmt=stmt.where(EnrollmentEmail.enterprise_id==user.enterprise_id)
     result=[]

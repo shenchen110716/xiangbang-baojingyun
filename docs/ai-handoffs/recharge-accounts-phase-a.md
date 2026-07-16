@@ -19,7 +19,8 @@
 
 - 已合并到 `main`：合并提交 `788baf3`；随后 `8da8890` 修复小程序 `premium_balance` 回归，`bd72f8e` 完成 Java 运行时镜像。
 - 迁移 `c3e7aebc5c9a_add_recharge_accounts.py` 已在 `main` 迁移链中，迁移锁已释放（后续 `f7e2d9b1a4c8` 线性接在其后）。
-- 分支最后提交：`c4ee807`（首页按账户展示保费余额）。
+- 分支最后提交：`c4ee807`；Codex 在 `main@1c223e3` 复核 `git merge-base --is-ancestor c4ee807 main` 返回成功。
+- 原充值工作树已不在注册工作树列表中，迁移锁和公共模块所有权已释放。
 - Codex 独立验证已由下游任务承接：`usage-lock-pending-termination` 与 `usage-coverage-authority-hotfix` 均以含本功能的 `main` 为基线完成全量回归并合并，间接覆盖本功能的 API 兼容性与回归。
 
 ## 已占用的公共模块
@@ -40,7 +41,7 @@
 - `web/src/views/plans/PlansAdminView.vue`
 - Alembic 迁移头
 
-在本任务合并前，其他任务不得从旧 `main` 修改上述公共模块或创建新的迁移头。
+本任务已合并；后续任务必须从包含 `788baf3` 的最新 `main` 继续。
 
 ## 主要提交
 
@@ -53,6 +54,7 @@
 - `59544c3` — 充值账户模型
 
 完整提交列表以该分支 Git 历史为准。
+
 
 ## 合并前门槛（合并时状态）
 

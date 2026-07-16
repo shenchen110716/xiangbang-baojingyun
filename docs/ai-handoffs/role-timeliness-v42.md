@@ -1,14 +1,14 @@
 # 角色分权、佣金结算与真实入离职及时率 v4.2
 
 - task_id: `role-timeliness-v42`
-- owner: `Codex`
-- status: `planned`
-- branch: `待创建：feat/role-timeliness-v42-phase1`
-- worktree: `待创建，必须位于主仓库外`
-- base_commit: `使用费锁定/待停保合并后的 main（f2632f5 之后）`
-- migration_owner: `no（创建独立分支后申请）`
+- owner: `Claude Code`（自 Codex 接管，用户于 2026-07-16 明确授权；Codex 已停止该任务）
+- status: `review`
+- branch: `codex/role-timeliness-v42-scope`
+- worktree: `/private/tmp/xiangbang-role-v42-phase1`
+- base_commit: `cf8fcced6d6a41167d1ae8389ce762ea83e4661e`
+- migration_owner: `yes（复核及合并完成前保持）`
 - depends_on: `recharge-accounts-phase-a、usage-lock-pending-termination（均已合并）`
-- last_updated: `2026-07-16 10:16 AEST`
+- last_updated: `2026-07-16 11:05 AEST`
 
 ## 目标
 
@@ -28,7 +28,28 @@
 - `recharge-accounts-phase-a` 已合并。
 - `usage-lock-pending-termination` 已由 Codex 审查修复并合并，迁移头为 `f7e2d9b1a4c8`。
 - 合并后全量回归通过，当前无活动迁移所有者。
-- 下一步可按第一阶段计划创建独立分支和工作树，再将状态改为 `active`、申请迁移所有权。
+- 第一阶段独立分支和外部工作树最初从 `main@1c223e3` 创建，迁移所有权已申请。
+- 待停保保障期/并发热修复已由 `cf8fcce` 完整纳入 `main`；本分支在完成 Task 5 提交 `dbf5716` 后，以无冲突合并提交 `a8f0216` 刷新到该基线。
+- 热修复仅修改 `pending_terminations.py`、`policy_members.py`、`termination_scan.py`、`participation_lock_smoke.py` 及其交接；与 Phase 1 已提交文件无重叠，本任务没有手工修改这些文件。
+- 最新已合并 Alembic head 仍为 `f7e2d9b1a4c8`；本分支唯一新 head `d5a4c12f7b91` 线性接在该 revision 之后。
+- 业务员门户已由 `b664e20` 合并，当前没有活动业务员分支占用共享认证或 Web 文件。
+
+## Active Phase 1 Scope
+
+- 企业角色兼容字段与历史实际工作单位授权迁移。
+- `UserEmployerScope` 模型、Schema、服务、路由和审计。
+- 实际工作单位、岗位、参保、参停保批量及理赔的服务端数据范围过滤。
+- 企业主管维护项目负责人授权的 Web 界面和项目负责人导航收敛。
+- Java 模型、Mapper 和关键单位范围接口的语义同步；不建立第二套迁移。
+- 明确不做：真实入离职事实、及时率计算、佣金结算付款、生产迁移、部署或小程序上传。
+
+计划修改的公共区域包括 Alembic 最新迁移链、`backend/app.py`、模型/Schema/服务聚合入口、操作员与业务路由、Web 公共类型/认证状态/导航，以及对应 Java 模型和控制器。Phase 1 合并前，其他任务不得并行修改这些区域。
+
+## 旧分支处置
+
+- Claude 旧分支 `worktree-usage-lock-pending-termination@b63ff02` 在上一任务合并后新增了替代修复。
+- Codex 已只读审查：该提交直接改写已合并迁移 `f7e2d9b1a4c8`，并回退已验证的 SPA 路由、保费账户和受影响人员展示，不能整包合并。
+- 该分支不再持有迁移或公共模块所有权；其中原子通知去重等可取思路只能在未来单独立项、重新迁移并经 TDD 验证，不能覆盖当前主线。
 
 ## 设计进展
 
@@ -39,15 +60,56 @@
 - 完整独立设计基线：`SYSTEM-DESIGN-V4.2.md`。
 - 设计已由用户确认；实施总路线图：`docs/superpowers/plans/2026-07-16-role-timeliness-v42-roadmap.md`。
 - 第一阶段执行计划：`docs/superpowers/plans/2026-07-16-employer-scope-phase.md`。
-- 本轮仅更新设计和交接，不创建迁移或修改业务代码。
+- Phase 1 Task 1–5 已完成：红灯安全契约、历史授权迁移、集中式 scope 服务、授权管理 API，以及实际单位/岗位/参保/理赔/看板/参保导出的服务端范围强制。
+
+## Phase 1 实施进展
+
+- `c4d45e2` — 定义项目负责人实际工作单位授权安全契约。
+- `743e5b1` — 增加企业角色兼容字段与历史授权迁移 `d5a4c12f7b91`。
+- `4a8cc3e` — 集中实现 scope 查询、校验、授权、撤销和主要负责人替换。
+- `8c61ea7` — 增加授权管理 API、operator `enterprise_role` 和审计。
+- `dbf5716` — 在实际单位、岗位、参保、理赔、看板和参保名单中强制 fail-closed 范围。
+- `a8f0216` — 无冲突刷新到包含保障期/并发热修复的 `main@cf8fcce`。
+- `b0e8450` — 增加企业主管授权实际工作单位 UI、主要负责人替换入口及项目负责人导航收敛。
+- Task 5 验证：`employer_scope_smoke.py`、`security_smoke.py`、`system_smoke.py`、`recharge_smoke.py` 均通过；当前系统 Python 未安装 `pytest`，focused pytest 待可用环境补跑。
+- Task 6 验证：`web/npm run build` 与 `employer_scope_smoke.py` 均通过。
+- Task 7（由 Claude Code 接管完成）：Java 运行时镜像同步 `enterprise_role`、`UserEmployerScope` 模型/Mapper、`EmployerScopeAccess` 门禁，以及实际单位、岗位、理赔控制器的 fail-closed 过滤。未新建 Java 迁移，Alembic 仍为唯一权威。
+
+## 接管说明（Codex → Claude Code）
+
+Codex 在 Task 7 中途停止，工作树遗留未提交且**无法编译**的 Java 改动。接管后修复两处：
+
+- 编译中断：`ClaimController.create()` 调用了并不存在的 `claimService.requirePersonScope(...)`，控制器同时缺少 `WorkPosition` 导入与 `positionMapper` 字段。改为在 `ClaimService` 内实现 `requirePersonScope(User, InsuredPerson)`，由服务自身完成人员→岗位→用工单位解析；`claimAccess()` 复用同一方法，控制器无需新增导入或字段。
+- fail-open 缺陷：`User.enterpriseRole` 原初始化为 `"owner"`。MyBatis 默认 `callSettersOnNulls=false`，`enterprise_role` 为 NULL 时不调用 setter，字段保留 `"owner"`，该用户将被判定为企业主管并取得全企业数据访问权；而 Python 权威实现对同一用户返回 403。已改为可空默认（与 `backend/models/user.py` 的 `nullable=True` 一致），并新增回归测试 `enterpriseUserWithoutEnterpriseRoleFailsClosed`。当前 Python 建号路径始终写入该字段（seed 写 `owner`、`routers/operators.py` 写 `project_manager`），故该缺陷为潜伏风险而非线上已触发问题。
+
+## Phase 1 验收矩阵（2026-07-16，Claude Code 执行）
+
+- `[x]` `python3 tests/employer_scope_smoke.py`
+- `[x]` `python3 tests/employer_scope_model_test.py`、`tests/employer_scope_service_test.py`
+- `[x]` `python3 tests/security_smoke.py`
+- `[x]` `python3 tests/system_smoke.py`
+- `[x]` `python3 tests/recharge_smoke.py`
+- `[x]` `python3 tests/participation_lock_smoke.py`
+- `[x]` `python3 tests/salesperson_portal_smoke.py`
+- `[x]` `web/npm run build`
+- `[x]` `java-backend` Maven `test`：3 tests / 0 failures（Maven 未在 PATH，实际路径 `~/Library/ApacheMaven/apache-maven-3.9.16/bin/mvn`）
+- `[x]` `alembic heads` 单一 head `d5a4c12f7b91`
+- `[x]` `python3 -m compileall -q backend`、`git diff --check`
+
+## 已知风险与阻塞
+
+- Java 侧仅有 `EmployerScopeAccess` 的单元测试，控制器层过滤无集成测试覆盖；Java 为运行时镜像，权威语义与回归以 Python 为准。
+- 系统未安装 `pytest`，计划中的 focused pytest 仍待可用环境补跑；现有 `*_test.py` 以独立脚本方式运行并通过。
+- 本任务未部署、未推送、未上传小程序。
+- Phase 2 在 Phase 1 合并且迁移锁释放前，不得创建新的 Alembic 迁移。
 
 ## 依赖解除条件
 
 - `[x]` `recharge-accounts-phase-a` 状态为 `merged`。
 - `[x]` `usage-lock-pending-termination` 状态为 `merged`。
 - `[x]` `main` 已通过合并后回归。
-- `[ ]` 新任务分支以更新后的 `main` 为基线。
-- `[ ]` 新 Alembic 迁移接在最新迁移头 `f7e2d9b1a4c8` 之后。
+- `[x]` 新任务分支以更新后的 `main` 为基线。
+- `[x]` 新 Alembic 迁移 `d5a4c12f7b91` 线性接在最新迁移头 `f7e2d9b1a4c8` 之后。
 
 ## 后续实施顺序
 

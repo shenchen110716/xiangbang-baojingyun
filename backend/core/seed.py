@@ -17,12 +17,19 @@ def seed_default_accounts(s: Session) -> None:
         if not demo_enterprise:
             demo_enterprise = Enterprise(name="演示参保单位", kind="企业", contact="演示管理员", phone="", status="active")
             s.add(demo_enterprise); s.flush()
-        s.add(User(username="enterprise", password_hash=pwd.hash(os.getenv("ENTERPRISE_PASSWORD", "enterprise123")), name=f"{demo_enterprise.name}管理员", role="enterprise", enterprise_id=demo_enterprise.id, is_owner=True))
+        s.add(User(username="enterprise", password_hash=pwd.hash(os.getenv("ENTERPRISE_PASSWORD", "enterprise123")), name=f"{demo_enterprise.name}管理员", role="enterprise", enterprise_id=demo_enterprise.id, enterprise_role="owner", is_owner=True))
         s.commit()
     # 旧数据升级：每个投保单位至少保留一个可管理操作员的单位主管。
-    enterprise_ids={row[0] for row in s.execute(select(User.enterprise_id).where(User.role=="enterprise",User.enterprise_id.is_not(None))).all()}
+    enterprise_users=s.scalars(select(User).where(User.role=="enterprise",User.enterprise_id.is_not(None))).all()
+    for enterprise_user in enterprise_users:
+        expected_role="owner" if enterprise_user.is_owner else "project_manager"
+        if enterprise_user.enterprise_role!=expected_role:
+            enterprise_user.enterprise_role=expected_role
+    enterprise_ids={enterprise_user.enterprise_id for enterprise_user in enterprise_users}
     for enterprise_id in enterprise_ids:
         if not s.scalar(select(User).where(User.role=="enterprise",User.enterprise_id==enterprise_id,User.is_owner.is_(True))):
             owner=s.scalar(select(User).where(User.role=="enterprise",User.enterprise_id==enterprise_id).order_by(User.id.asc()))
-            if owner: owner.is_owner=True
+            if owner:
+                owner.is_owner=True
+                owner.enterprise_role="owner"
     s.commit()

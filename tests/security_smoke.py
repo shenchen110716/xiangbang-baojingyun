@@ -126,6 +126,10 @@ def run():
             ent_a = call_json("POST", "/api/enterprises", admin, {"name": "租户A"})[1]
             ent_b = call_json("POST", "/api/enterprises", admin, {"name": "租户B"})[1]
             op_a = call_json("POST", "/api/operators", admin, {"enterprise_id": ent_a["id"], "username": "sec_op_a", "password": "pass1234", "name": "A操作员"})[1]
+            # This account drives the legacy enterprise-wide security cases
+            # below.  Make that broad access explicit now that newly created
+            # enterprise operators default to zero-scope project managers.
+            call_json("PATCH", f"/api/operators/{op_a['id']}", admin, {"enterprise_role": "owner"})
             token_a = call_json("POST", "/api/auth/login", body={"username": "sec_op_a", "password": "pass1234", "portal": "enterprise"})[1]["access_token"]
 
             status, employers = call_json("GET", "/api/actual-employers", token_a)
