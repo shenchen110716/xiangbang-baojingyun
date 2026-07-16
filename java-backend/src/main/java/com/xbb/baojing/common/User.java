@@ -12,6 +12,7 @@ public class User {
     private String name;
     private String role; // admin | enterprise | salesperson
     private Integer enterpriseId;
+    private String enterpriseRole;
     private String phone = "";
     private String status = "active";
     private boolean active = true;
@@ -37,6 +38,9 @@ public class User {
     public void setRole(String v) { this.role = v; }
     public Integer getEnterpriseId() { return enterpriseId; }
     public void setEnterpriseId(Integer v) { this.enterpriseId = v; }
+    @JsonProperty("enterprise_role")
+    public String getEnterpriseRole() { return enterpriseRole; }
+    public void setEnterpriseRole(String v) { this.enterpriseRole = v; }
     public String getPhone() { return phone; }
     public void setPhone(String v) { this.phone = v; }
     public String getStatus() { return status; }

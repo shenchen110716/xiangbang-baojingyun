@@ -75,7 +75,7 @@ public class ClaimController {
                              @RequestParam(required = false) String risk, @RequestParam(name = "enterprise_id", required = false) Integer enterpriseId,
                              User user) {
         Integer scoped = "enterprise".equals(user.getRole()) ? user.getEnterpriseId() : enterpriseId;
-        List<Claim> rows = claimMapper.search(scoped, status).stream().map(claimService::buildPayload).collect(java.util.stream.Collectors.toList());
+        List<Claim> rows = claimMapper.search(scoped, status).stream().filter(item -> claimService.canAccessClaim(item, user)).map(claimService::buildPayload).collect(java.util.stream.Collectors.toList());
         if (!q.isBlank()) {
             String needle = q.toLowerCase();
             rows = rows.stream().filter(c -> (c.getClaimNo() + c.getPersonName() + c.getEnterpriseName() + c.getActualEmployerName()).toLowerCase().contains(needle)).toList();
@@ -97,6 +97,7 @@ public class ClaimController {
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(data.enterpriseId())) throw ApiException.forbidden("无权提交该单位理赔");
         InsuredPerson person = personMapper.findById(data.personId());
         if (person == null || !person.getEnterpriseId().equals(data.enterpriseId())) throw ApiException.badRequest("被保险人不属于该投保单位");
+        claimService.requirePersonScope(user, person);
         if (!"active".equals(person.getStatus())) throw ApiException.conflict("只能为当前在保员工提交工伤报案");
         if (person.getPolicyId() != null) {
             Policy policy = policyMapper.findById(person.getPolicyId());

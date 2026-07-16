@@ -1,12 +1,12 @@
 # 角色分权、佣金结算与真实入离职及时率 v4.2
 
 - task_id: `role-timeliness-v42`
-- owner: `Codex`
-- status: `active`
+- owner: `Claude Code`（自 Codex 接管，用户于 2026-07-16 明确授权；Codex 已停止该任务）
+- status: `review`
 - branch: `codex/role-timeliness-v42-scope`
 - worktree: `/private/tmp/xiangbang-role-v42-phase1`
 - base_commit: `cf8fcced6d6a41167d1ae8389ce762ea83e4661e`
-- migration_owner: `yes（Phase 1 独占）`
+- migration_owner: `yes（复核及合并完成前保持）`
 - depends_on: `recharge-accounts-phase-a、usage-lock-pending-termination（均已合并）`
 - last_updated: `2026-07-16 11:05 AEST`
 
@@ -73,6 +73,35 @@
 - `b0e8450` — 增加企业主管授权实际工作单位 UI、主要负责人替换入口及项目负责人导航收敛。
 - Task 5 验证：`employer_scope_smoke.py`、`security_smoke.py`、`system_smoke.py`、`recharge_smoke.py` 均通过；当前系统 Python 未安装 `pytest`，focused pytest 待可用环境补跑。
 - Task 6 验证：`web/npm run build` 与 `employer_scope_smoke.py` 均通过。
+- Task 7（由 Claude Code 接管完成）：Java 运行时镜像同步 `enterprise_role`、`UserEmployerScope` 模型/Mapper、`EmployerScopeAccess` 门禁，以及实际单位、岗位、理赔控制器的 fail-closed 过滤。未新建 Java 迁移，Alembic 仍为唯一权威。
+
+## 接管说明（Codex → Claude Code）
+
+Codex 在 Task 7 中途停止，工作树遗留未提交且**无法编译**的 Java 改动。接管后修复两处：
+
+- 编译中断：`ClaimController.create()` 调用了并不存在的 `claimService.requirePersonScope(...)`，控制器同时缺少 `WorkPosition` 导入与 `positionMapper` 字段。改为在 `ClaimService` 内实现 `requirePersonScope(User, InsuredPerson)`，由服务自身完成人员→岗位→用工单位解析；`claimAccess()` 复用同一方法，控制器无需新增导入或字段。
+- fail-open 缺陷：`User.enterpriseRole` 原初始化为 `"owner"`。MyBatis 默认 `callSettersOnNulls=false`，`enterprise_role` 为 NULL 时不调用 setter，字段保留 `"owner"`，该用户将被判定为企业主管并取得全企业数据访问权；而 Python 权威实现对同一用户返回 403。已改为可空默认（与 `backend/models/user.py` 的 `nullable=True` 一致），并新增回归测试 `enterpriseUserWithoutEnterpriseRoleFailsClosed`。当前 Python 建号路径始终写入该字段（seed 写 `owner`、`routers/operators.py` 写 `project_manager`），故该缺陷为潜伏风险而非线上已触发问题。
+
+## Phase 1 验收矩阵（2026-07-16，Claude Code 执行）
+
+- `[x]` `python3 tests/employer_scope_smoke.py`
+- `[x]` `python3 tests/employer_scope_model_test.py`、`tests/employer_scope_service_test.py`
+- `[x]` `python3 tests/security_smoke.py`
+- `[x]` `python3 tests/system_smoke.py`
+- `[x]` `python3 tests/recharge_smoke.py`
+- `[x]` `python3 tests/participation_lock_smoke.py`
+- `[x]` `python3 tests/salesperson_portal_smoke.py`
+- `[x]` `web/npm run build`
+- `[x]` `java-backend` Maven `test`：3 tests / 0 failures（Maven 未在 PATH，实际路径 `~/Library/ApacheMaven/apache-maven-3.9.16/bin/mvn`）
+- `[x]` `alembic heads` 单一 head `d5a4c12f7b91`
+- `[x]` `python3 -m compileall -q backend`、`git diff --check`
+
+## 已知风险与阻塞
+
+- Java 侧仅有 `EmployerScopeAccess` 的单元测试，控制器层过滤无集成测试覆盖；Java 为运行时镜像，权威语义与回归以 Python 为准。
+- 系统未安装 `pytest`，计划中的 focused pytest 仍待可用环境补跑；现有 `*_test.py` 以独立脚本方式运行并通过。
+- 本任务未部署、未推送、未上传小程序。
+- Phase 2 在 Phase 1 合并且迁移锁释放前，不得创建新的 Alembic 迁移。
 
 ## 依赖解除条件
 

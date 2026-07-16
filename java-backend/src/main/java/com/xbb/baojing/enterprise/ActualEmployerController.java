@@ -18,13 +18,15 @@ public class ActualEmployerController {
     private final EnterpriseMapper enterpriseMapper;
     private final WorkPositionMapper positionMapper;
     private final AuditService auditService;
+    private final EmployerScopeAccess scopeAccess;
 
     public ActualEmployerController(ActualEmployerMapper mapper, EnterpriseMapper enterpriseMapper,
-                                     WorkPositionMapper positionMapper, AuditService auditService) {
+                                     WorkPositionMapper positionMapper, AuditService auditService, EmployerScopeAccess scopeAccess) {
         this.mapper = mapper;
         this.enterpriseMapper = enterpriseMapper;
         this.positionMapper = positionMapper;
         this.auditService = auditService;
+        this.scopeAccess = scopeAccess;
     }
 
     public record ActualEmployerIn(Integer enterpriseId, String name, String creditCode, String contact, String phone) {}
@@ -33,11 +35,13 @@ public class ActualEmployerController {
     @GetMapping("/actual-employers")
     public List<ActualEmployer> list(User user) {
         Integer scoped = "enterprise".equals(user.getRole()) && user.getEnterpriseId() != null ? user.getEnterpriseId() : null;
-        return mapper.search(scoped);
+        Set<Integer> allowed = scopeAccess.allowedEmployerIds(user);
+        return mapper.search(scoped).stream().filter(item -> allowed == null || allowed.contains(item.getId())).toList();
     }
 
     @PostMapping("/actual-employers")
     public ActualEmployer create(@RequestBody ActualEmployerIn data, User user) {
+        if ("project_manager".equals(user.getEnterpriseRole())) throw ApiException.forbidden("项目经理不能创建实际用工单位");
         Integer eid = "enterprise".equals(user.getRole()) ? user.getEnterpriseId() : data.enterpriseId();
         if (eid == null || enterpriseMapper.findById(eid) == null) throw ApiException.badRequest("请指定有效投保单位");
         ActualEmployer e = new ActualEmployer();
@@ -57,6 +61,7 @@ public class ActualEmployerController {
         ActualEmployer e = mapper.findById(id);
         if (e == null) throw ApiException.notFound("实际工作单位不存在");
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(e.getEnterpriseId())) throw ApiException.forbidden("无权操作");
+        scopeAccess.requireEmployerAccess(user, id);
         if (!user.getRole().equals("admin") && !user.getRole().equals("enterprise")) throw ApiException.forbidden("无权操作");
         if (data.name() != null) e.setName(data.name().strip());
         if (data.creditCode() != null) e.setCreditCode(data.creditCode().strip());
@@ -72,6 +77,7 @@ public class ActualEmployerController {
         ActualEmployer e = mapper.findById(id);
         if (e == null) throw ApiException.notFound("实际工作单位不存在");
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(e.getEnterpriseId())) throw ApiException.forbidden("无权操作");
+        scopeAccess.requireEmployerAccess(user, id);
         if (!user.getRole().equals("admin") && !user.getRole().equals("enterprise")) throw ApiException.forbidden("无权操作");
         if (mapper.countPositions(id) > 0) throw ApiException.conflict("该工作单位已关联岗位，不能删除；可先暂停使用");
         mapper.delete(id);
@@ -85,6 +91,7 @@ public class ActualEmployerController {
         ActualEmployer e = mapper.findById(id);
         if (e == null) throw ApiException.notFound("实际用工单位不存在");
         if ("enterprise".equals(user.getRole()) && !user.getEnterpriseId().equals(e.getEnterpriseId())) throw ApiException.forbidden("无权操作");
+        scopeAccess.requireEmployerAccess(user, id);
         e.setStatus(status);
         mapper.update(e);
         auditService.log(user, "status_change", "actual_employer", String.valueOf(id), status);
