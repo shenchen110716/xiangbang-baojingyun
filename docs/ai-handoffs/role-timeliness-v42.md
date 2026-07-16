@@ -2,11 +2,11 @@
 
 - task_id: `role-timeliness-v42`
 - owner: `Claude Code`（自 Codex 接管，用户于 2026-07-16 明确授权；Codex 已停止该任务）
-- status: `review`
+- status: `merged`（Phase 1 已合并并发布生产）
 - branch: `codex/role-timeliness-v42-scope`
 - worktree: `/private/tmp/xiangbang-role-v42-phase1`
 - base_commit: `cf8fcced6d6a41167d1ae8389ce762ea83e4661e`
-- migration_owner: `yes（复核及合并完成前保持）`
+- migration_owner: `no（已释放；Phase 1 迁移 d5a4c12f7b91 已合并并在生产执行）`
 - depends_on: `recharge-accounts-phase-a、usage-lock-pending-termination（均已合并）`
 - last_updated: `2026-07-16 11:05 AEST`
 
@@ -96,12 +96,21 @@ Codex 在 Task 7 中途停止，工作树遗留未提交且**无法编译**的 J
 - `[x]` `alembic heads` 单一 head `d5a4c12f7b91`
 - `[x]` `python3 -m compileall -q backend`、`git diff --check`
 
+## 合并与发布（2026-07-16，用户明确授权「合并，推送并部署」）
+
+- 合并提交：`9b988bd`（`Merge branch 'codex/role-timeliness-v42-scope'`）。唯一冲突为 `recharge-accounts-phase-a.md` 交接文档，两侧描述同一已合并事实，已取 `main` 版并并入 Codex 的 `merge-base` 核验记录。
+- 合并后在 `main` 上重跑全量门槛：8 项 Python 烟测/单测、`web/npm run build`、Maven 3 tests、Alembic 单头 `d5a4c12f7b91`、`compileall`、`git diff --check` 全部通过。
+- 推送：`717e1a9..9b988bd`，本次为统一发布窗口，一并发布充值账户、使用费锁定/待确认停保、保障期权威热修复与 v4.2 Phase 1，共 39 个提交 / 67 文件。
+- 部署：`render.yaml` 配置 `autoDeployTrigger: commit`，推送即自动部署，无独立部署命令。Dockerfile 启动命令为 `alembic upgrade head && uvicorn ...`。
+- 生产验证：`/api/health` 返回 200；`/api/employer-scopes` 由 404 转为 401（路由存在并正确要求鉴权），`openapi.json` 含 90 条路由且覆盖 employer-scopes、pending-terminations、recharge。迁移失败则容器无法启动，新路由正常服务即证明 `d5a4c12f7b91` 已在生产 PostgreSQL 成功执行。
+
 ## 已知风险与阻塞
 
 - Java 侧仅有 `EmployerScopeAccess` 的单元测试，控制器层过滤无集成测试覆盖；Java 为运行时镜像，权威语义与回归以 Python 为准。
 - 系统未安装 `pytest`，计划中的 focused pytest 仍待可用环境补跑；现有 `*_test.py` 以独立脚本方式运行并通过。
-- 本任务未部署、未推送、未上传小程序。
-- Phase 2 在 Phase 1 合并且迁移锁释放前，不得创建新的 Alembic 迁移。
+- 本任务未上传或提交微信小程序。
+- Phase 1 迁移锁已释放，Phase 2 可基于 `main@9b988bd` 创建新分支与迁移，新迁移须线性接在 `d5a4c12f7b91` 之后。
+- 生产已执行 `d5a4c12f7b91`；该迁移此后只可追加修正，不可改写。
 
 ## 依赖解除条件
 
