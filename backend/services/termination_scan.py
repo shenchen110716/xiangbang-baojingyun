@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from ..models import (
     InsurerAccountLink,
     PendingTermination,
     Policy,
+    PolicyMember,
 )
 from .notify import notify_enterprise
 
@@ -37,13 +38,26 @@ def affected_people_for_account(
     if not insurers:
         return [], []
 
+    now = business_now()
+    latest_coverage_id = (
+        select(PolicyMember.id)
+        .where(
+            PolicyMember.person_id == InsuredPerson.id,
+            PolicyMember.effective_at <= now,
+            or_(PolicyMember.terminated_at.is_(None), PolicyMember.terminated_at > now),
+        )
+        .order_by(PolicyMember.id.desc())
+        .limit(1)
+        .correlate(InsuredPerson)
+        .scalar_subquery()
+    )
     people = session.scalars(
         select(InsuredPerson)
-        .join(Policy, InsuredPerson.policy_id == Policy.id)
+        .join(PolicyMember, PolicyMember.id == latest_coverage_id)
+        .join(Policy, PolicyMember.policy_id == Policy.id)
         .join(InsurancePlan, Policy.plan_id == InsurancePlan.id)
         .where(
             InsuredPerson.enterprise_id == enterprise_id,
-            InsuredPerson.status == "active",
             Policy.status == "active",
             InsurancePlan.insurer.in_(insurers),
         )

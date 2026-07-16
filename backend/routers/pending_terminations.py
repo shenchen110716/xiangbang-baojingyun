@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..core.audit import audit
@@ -57,15 +57,20 @@ def confirm_pending_termination(
     user: User = Depends(current_user),
     session: Session = Depends(db),
 ):
-    item = session.scalar(
-        select(PendingTermination)
-        .where(PendingTermination.id == item_id)
-        .with_for_update()
+    claimed = session.execute(
+        update(PendingTermination)
+        .where(
+            PendingTermination.id == item_id,
+            PendingTermination.status == "pending",
+        )
+        .values(status="processing")
     )
-    if not item:
-        raise HTTPException(404, "待处理停保任务不存在")
-    if item.status != "pending":
+    if claimed.rowcount != 1:
+        session.rollback()
+        if session.get(PendingTermination, item_id) is None:
+            raise HTTPException(404, "待处理停保任务不存在")
         raise HTTPException(400, "该任务已处理，不能重复确认")
+    item = session.get(PendingTermination, item_id)
 
     premium_account = session.scalar(
         select(EnterprisePremiumAccount)
