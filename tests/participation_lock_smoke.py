@@ -331,11 +331,17 @@ def run():
             )
             session.add(moved_position); session.flush()
             safe_person.position_id = moved_position.id
+            current_target_member = session.scalar(
+                select(PolicyMember)
+                .where(PolicyMember.person_id == target_person.id)
+                .order_by(PolicyMember.id.asc())
+            )
+            coverage_scan_time = business_now()
             future_target_member = PolicyMember(
                 policy_id=target_policy.id,
                 person_id=target_person.id,
                 status="active",
-                effective_at=business_now() + timedelta(days=1),
+                effective_at=coverage_scan_time + timedelta(hours=1),
             )
             session.add(future_target_member)
             session.flush()
@@ -356,15 +362,19 @@ def run():
                 {"id": temporary_person.id, "name": temporary_person.name},
             ]
 
-            result = confirm_pending_termination(fresh_pending[0].id, admin_user, session)
+            with patch("backend.services.termination_scan.business_now", return_value=coverage_scan_time), patch(
+                "backend.services.policy_members.business_now",
+                return_value=coverage_scan_time + timedelta(hours=2),
+            ):
+                result = confirm_pending_termination(fresh_pending[0].id, admin_user, session)
             assert result["status"] == "confirmed" and result["terminated_count"] == 2
             session.refresh(target_person); session.refresh(safe_person); session.refresh(temporary_person); session.refresh(legacy_person)
             assert target_person.status == "stopped"
             assert safe_person.status == "active", "a funded live policy remains authoritative even if the current position changed"
             assert temporary_person.status == "stopped"
             assert legacy_person.status == "active", "an unattributed row must not be affected"
-            terminated_member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == target_person.id))
-            assert terminated_member.status == "terminated" and terminated_member.terminated_at is not None
+            session.refresh(current_target_member)
+            assert current_target_member.status == "terminated" and current_target_member.terminated_at is not None
             session.refresh(future_target_member)
             assert future_target_member.status == "active" and future_target_member.terminated_at is None, "future coverage must not replace the current period selected for termination"
             session.refresh(temporary_member)
@@ -438,7 +448,7 @@ def run():
                 with SessionLocal() as failing_session:
                     failing_admin = failing_session.scalar(select(User).where(User.username == "admin"))
                     with patch(
-                        "backend.routers.pending_terminations.affected_people_for_account",
+                        "backend.routers.pending_terminations.affected_coverage_for_account",
                         side_effect=RuntimeError("injected failure after claim"),
                     ):
                         confirm_pending_termination(rollback_pending.id, failing_admin, failing_session)

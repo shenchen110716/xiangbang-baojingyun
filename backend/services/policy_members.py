@@ -114,6 +114,7 @@ def terminate_person_policy(
     terminated_at: datetime | None = None,
     *,
     enforce_timing: bool = True,
+    coverage_member_id: int | None = None,
 ) -> PolicyMember | None:
     """Call when person.status transitions OUT of 'active'. Closes (never
     deletes/reuses) the person's currently-open coverage period; no-ops if
@@ -129,7 +130,9 @@ def terminate_person_policy(
     """
     operation = business_now()
     member_stmt = select(PolicyMember).where(PolicyMember.person_id == person.id)
-    if enforce_timing:
+    if coverage_member_id is not None:
+        member_stmt = member_stmt.where(PolicyMember.id == coverage_member_id)
+    elif enforce_timing:
         member_stmt = member_stmt.where(
             PolicyMember.status == "active",
             PolicyMember.terminated_at.is_(None),

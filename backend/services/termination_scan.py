@@ -15,17 +15,16 @@ from ..models import (
 from .notify import notify_enterprise
 
 
-def affected_people_for_account(
+def affected_coverage_for_account(
     session: Session,
     enterprise_id: int,
     account_id: int,
-) -> tuple[list[str], list[InsuredPerson]]:
-    """Return only active people whose current policy belongs to this account.
+) -> tuple[list[str], list[tuple[InsuredPerson, PolicyMember]]]:
+    """Return people and the exact live coverage funded by this account.
 
-    Account balance is pooled by insurer mapping.  A person's current
-    ``policy_id`` is the durable link to the plan/insurer that is actually
-    covering them; enterprise-wide or position-only matching can stop people
-    funded by another account and is therefore unsafe.
+    Account balance is pooled by insurer mapping. The live ``PolicyMember``
+    is authoritative; callers that terminate coverage must use this exact row
+    rather than re-selecting by person at a later time.
     """
     insurers = sorted({
         insurer
@@ -51,8 +50,8 @@ def affected_people_for_account(
         .correlate(InsuredPerson)
         .scalar_subquery()
     )
-    people = session.scalars(
-        select(InsuredPerson)
+    coverage = session.execute(
+        select(InsuredPerson, PolicyMember)
         .join(PolicyMember, PolicyMember.id == latest_coverage_id)
         .join(Policy, PolicyMember.policy_id == Policy.id)
         .join(InsurancePlan, Policy.plan_id == InsurancePlan.id)
@@ -63,7 +62,16 @@ def affected_people_for_account(
         )
         .order_by(InsuredPerson.id)
     ).all()
-    return insurers, list(people)
+    return insurers, list(coverage)
+
+
+def affected_people_for_account(
+    session: Session,
+    enterprise_id: int,
+    account_id: int,
+) -> tuple[list[str], list[InsuredPerson]]:
+    insurers, coverage = affected_coverage_for_account(session, enterprise_id, account_id)
+    return insurers, [person for person, _member in coverage]
 
 
 def scan_premium_shortfalls(session: Session, enterprise_id: int | None = None) -> list[PendingTermination]:

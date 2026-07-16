@@ -15,6 +15,7 @@ from ..services import (
     serialize,
     terminate_person_policy,
 )
+from ..services.termination_scan import affected_coverage_for_account
 
 router = APIRouter(prefix="/api", tags=["pending-terminations"])
 
@@ -87,11 +88,12 @@ def confirm_pending_termination(
         audit(session, user, "auto_dismiss", "pending_termination", str(item.id), "balance_recovered")
         raise HTTPException(409, "该账户已充值，待停保任务已自动撤销")
 
-    insurers, affected = affected_people_for_account(
+    insurers, affected_coverage = affected_coverage_for_account(
         session,
         item.enterprise_id,
         item.account_id,
     )
+    affected = [person for person, _member in affected_coverage]
     if not affected:
         item.status = "dismissed"
         item.dismissed_at = business_now()
@@ -100,12 +102,13 @@ def confirm_pending_termination(
         raise HTTPException(409, "该账户当前没有可停保人员，任务已自动撤销")
 
     terminated_at = business_now()
-    for person in affected:
+    for person, member in affected_coverage:
         terminate_person_policy(
             session,
             person,
             terminated_at=terminated_at,
             enforce_timing=False,
+            coverage_member_id=member.id,
         )
         person.status = "stopped"
 
