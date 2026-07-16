@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..core.business_time import business_today
 from ..core.db import db
+from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import Claim, Enterprise, InsurancePlan, InsuredPerson, PendingTermination, Policy, PolicyMember, User, WorkPosition
 from ..services import allowed_employer_ids, amount, effective_person_status, policy_dict, premium_accounts_for_enterprise, pricing_snapshot, scan_premium_shortfalls, strip_internal_pricing, usage_person_days
@@ -11,7 +12,10 @@ from ..services import allowed_employer_ids, amount, effective_person_status, po
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
 
-@router.get("/dashboard")
+# Both endpoints aggregate enterprise sales, participation and operating data
+# across every enterprise when the caller is not enterprise-scoped. Salespeople
+# get their own figures from /agents/me instead (SYSTEM-DESIGN-V4.2 5.1).
+@router.get("/dashboard", dependencies=[Depends(require_role("admin", "enterprise", detail="业务员请在业务员门户查看本人数据"))])
 def dashboard(user: User = Depends(current_user), session: Session = Depends(db)):
     enterprise_filter = [user.enterprise_id] if user.role == "enterprise" and user.enterprise_id else None
     employer_filter = allowed_employer_ids(session,user) if user.role=='enterprise' else None
@@ -64,7 +68,7 @@ def dashboard(user: User = Depends(current_user), session: Session = Depends(db)
         claim_query=claim_query.filter(Claim.person_id.in_(scoped_people))
     return {"portal": "enterprise" if user.role == "enterprise" else "admin", "enterprises": len(enterprises), "people": len(people), "active_people":len(active_people), "active_policies": policy_query.count(), "pending_enterprises": session.query(Enterprise).filter(Enterprise.status == "pending").count() if not enterprise_filter else 0, "pending_people": len([x for x in people if x.status == "pending"]), "claims_open": claim_query.count(), "premium_accounts": list(premium_agg.values()), "usage_balance": 0 if project_scoped else sum(x.usage_balance for x in enterprises), "balance_alerts": alerts, "pending_terminations_count": session.query(PendingTermination).filter(PendingTermination.status == "pending").count() if user.role == "admin" else 0}
 
-@router.get("/screen/products")
+@router.get("/screen/products", dependencies=[Depends(require_role("admin", "enterprise", detail="业务员请在业务员门户查看本人数据"))])
 def screen_products(user: User = Depends(current_user), session: Session = Depends(db)):
     result=[]
     employer_filter=allowed_employer_ids(session,user) if user.role=='enterprise' else None

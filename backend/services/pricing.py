@@ -69,9 +69,22 @@ _INTERNAL_PRICING_FIELDS = {
     'minimum_sale_price', 'minimum_sale_total',
 }
 
+# A salesperson browses the whole catalogue and needs the platform minimum sale
+# price to quote from (SYSTEM-DESIGN-V4.2 5.1), but must never see the cost
+# basis behind it. Same cut as the enterprise set, minus the floor price they
+# are allowed to quote.
+_AGENT_VISIBLE_PRICING_FIELDS = {'minimum_sale_price', 'minimum_sale_total'}
+_AGENT_INTERNAL_PRICING_FIELDS = _INTERNAL_PRICING_FIELDS - _AGENT_VISIBLE_PRICING_FIELDS
+
+_HIDDEN_PRICING_FIELDS_BY_ROLE = {
+    'enterprise': _INTERNAL_PRICING_FIELDS,
+    'salesperson': _AGENT_INTERNAL_PRICING_FIELDS,
+}
+
 def strip_internal_pricing(data:dict,user) -> dict:
-    if user.role != 'enterprise': return data
-    return {k:v for k,v in data.items() if k not in _INTERNAL_PRICING_FIELDS}
+    hidden = _HIDDEN_PRICING_FIELDS_BY_ROLE.get(getattr(user, 'role', None))
+    if not hidden: return data
+    return {k:v for k,v in data.items() if k not in hidden}
 
 def validate_commission_price(data,plan:InsurancePlan):
     mode='price' if data.mode in {'price','markup'} else 'rebate'
