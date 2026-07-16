@@ -6,7 +6,7 @@
 - branch: `codex/role-timeliness-v42-scope`
 - worktree: `/private/tmp/xiangbang-role-v42-phase1`
 - base_commit: `cf8fcced6d6a41167d1ae8389ce762ea83e4661e`
-- migration_owner: `no（已释放；Phase 1 迁移 d5a4c12f7b91 已合并并在生产执行）`
+- migration_owner: `no（已释放；Phase 1 迁移 d5a4c12f7b91 已合并并在生产执行。迁移锁现由 employment-facts-phase2 持有）`
 - depends_on: `recharge-accounts-phase-a、usage-lock-pending-termination（均已合并）`
 - last_updated: `2026-07-16 11:05 AEST`
 
