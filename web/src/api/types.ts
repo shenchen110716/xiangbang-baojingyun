@@ -635,3 +635,82 @@ export interface TimelinessDetail {
   calculation_version: number
   calculated_at: string | null
 }
+
+/** v4.2 §5.1 业务员可见的产品视图——白名单，绝不含成本构成。 */
+export interface AgentProduct {
+  id: number
+  insurer: string
+  name: string
+  coverage: string
+  occupation_classes: string
+  billing_mode: string
+  effective_mode: string
+  status: string
+  min_sale_price: number
+  my_commission_status: string
+}
+
+export interface AgentBalances {
+  agent_id: number
+  estimated_total: number
+  pending_settlement: number
+  pending_payment: number
+  paid: number
+}
+
+export interface AgentCommissionSummary {
+  agent_id: number
+  enterprise_count: number
+  product_count: number
+  insured_count: number
+  estimated_total: number
+}
+
+export interface AgentCommissionRow {
+  enterprise_id: number | null
+  enterprise_name: string
+  plan_id: number | null
+  plan_name: string
+  insurer: string
+  mode: string
+  status: string
+  insured_count: number
+  amount: number
+  unit_amount: number
+  accrual_as_of: string
+}
+
+export interface AgentStatementItem {
+  id: number
+  source_type: string
+  plan_id: number | null
+  enterprise_id: number | null
+  amount: number
+  status: string
+  adjusts_item_id: number | null
+  created_at: string | null
+}
+
+export interface AgentStatement {
+  id: number
+  statement_no: string
+  period_start: string
+  period_end: string
+  currency: string
+  total_amount: number
+  status: string
+  confirmed_at: string | null
+  created_at: string | null
+  items: AgentStatementItem[]
+}
+
+export interface AgentPayment {
+  id: number
+  amount: number
+  channel: string
+  transaction_no: string
+  paid_at: string | null
+  voucher_url: string
+  allocated_amount: number
+  created_at: string | null
+}

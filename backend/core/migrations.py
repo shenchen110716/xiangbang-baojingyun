@@ -25,6 +25,14 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     from ..models import EmploymentTimelinessResult, ParticipationOperation, TimelinessOutbox
     for table in (ParticipationOperation, EmploymentTimelinessResult, TimelinessOutbox):
         table.__table__.create(bind=s.connection(), checkfirst=True)
+    # v4.2 Phase 5 业务员佣金结算账本；只建空表，不回填历史结算（金额只能来自真实计提）。
+    from ..models import (
+        AgentCommissionPayment, AgentCommissionPaymentAllocation,
+        AgentCommissionStatement, AgentCommissionStatementItem,
+    )
+    for table in (AgentCommissionStatement, AgentCommissionStatementItem,
+                  AgentCommissionPayment, AgentCommissionPaymentAllocation):
+        table.__table__.create(bind=s.connection(), checkfirst=True)
     enterprise_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(enterprises)")}
     if "agent_id" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN agent_id INTEGER")
     if "usage_fee_daily" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN usage_fee_daily FLOAT DEFAULT 0.1")

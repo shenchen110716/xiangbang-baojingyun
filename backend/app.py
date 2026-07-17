@@ -56,6 +56,7 @@ from .routers.pending_terminations import router as pending_terminations_router
 from .routers.employer_scopes import router as employer_scopes_router
 from .routers.employment_facts import router as employment_facts_router
 from .routers.timeliness import router as timeliness_router
+from .routers.agent_portal import router as agent_portal_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
@@ -81,6 +82,7 @@ app.include_router(pending_terminations_router)
 app.include_router(employer_scopes_router)
 app.include_router(employment_facts_router)
 app.include_router(timeliness_router)
+app.include_router(agent_portal_router)
 
 # SYSTEM-DESIGN-V4.md Phase 0 stop-loss item #1: the project root (source
 # code, data.db, .env, requirements.txt, ...) must never be reachable over

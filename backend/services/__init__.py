@@ -40,6 +40,10 @@ from .timeliness_recalc import (
 from .timeliness_reporting import (
     REQUIRED_CARD_FIELDS, build_export, detail_rows, summary_for,
 )
+from .agent_settlement import (
+    PORTAL_PRODUCT_FIELDS, adjust_item, agent_balances, allocate, build_statement,
+    confirm_statement, portal_commission_summary, portal_products, record_payment,
+)
 
 __all__ = [
     "serialize", "amount",
@@ -67,4 +71,7 @@ __all__ = [
     "recalculate", "enqueue", "process_outbox", "record_operation", "system_facts",
     "drain_due", "retire_results",
     "REQUIRED_CARD_FIELDS", "summary_for", "detail_rows", "build_export",
+    "PORTAL_PRODUCT_FIELDS", "portal_products", "portal_commission_summary",
+    "build_statement", "confirm_statement", "adjust_item", "record_payment",
+    "allocate", "agent_balances",
 ]
