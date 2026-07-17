@@ -2,11 +2,11 @@
 
 - task_id: `timeliness-engine-phase3`
 - owner: `Claude Code`
-- status: `review`
+- status: `merged`（已合并到本地 main，**尚未推送、尚未部署**）
 - branch: `feat/timeliness-engine-phase3`
 - worktree: `/private/tmp/xiangbang-timeliness`
 - base_commit: `269357d`
-- migration_owner: `yes（Phase 3 独占）`
+- migration_owner: `no（已释放；迁移 7f0a1fa05267 已合并进 main，尚未在生产执行）`
 - depends_on: `employment-facts-phase2（已合并并发布）`
 - last_updated: `2026-07-17`
 
@@ -73,6 +73,13 @@
 - `[x]` 引擎纯度自检：模块内无 `now()`、无 `session`、无 `select`
 - `[ ]` **真实 PostgreSQL 未执行本阶段迁移**：门槛脚本已入库但缺凭据（见阻塞）。
 - `[ ]` Web 构建与 Maven：本阶段未改前端与 Java，按计划不要求。
+
+## 合并
+
+- 合并提交：`59810c5`，无冲突；合并后在 `main` 上重跑 14 项测试、单一 head `7f0a1fa05267`、
+  `compileall` 全部通过。
+- **未推送**：`autoDeployTrigger: commit` 使推送即部署，而本阶段迁移未经真实 PostgreSQL 执行。
+  Phase 2 正是从同样的位置发版并失败。推送前应先完成 PostgreSQL 门槛。
 
 ## 已知风险
 
