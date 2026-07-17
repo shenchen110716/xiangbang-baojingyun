@@ -101,6 +101,7 @@ _FRONTEND_ROUTES = {
     "/agents", "/insurance", "/policy", "/claims", "/insurers", "/exports",
     "/report", "/billing", "/recharge", "/pending-terminations", "/promotion",
     "/operators", "/message", "/settings", "/login", "/agent-portal",
+    "/timeliness",
 }
 
 
