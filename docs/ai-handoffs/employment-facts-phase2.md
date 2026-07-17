@@ -96,6 +96,14 @@
 
 新增依赖 `cryptography` 已写入 `requirements.txt`。
 
+## 后续修正（已发布）
+
+- `fix/batch-owner-only`（合并提交 `e6b6e96`）：本阶段的批次列表、批次详情与导入确认
+  端点原挂 `require_role("admin","enterprise")`，而项目负责人的 role 正是 `enterprise`，
+  导致零授权单位的项目负责人可读取全企业导入批次（文件名、归属单位、行数、导入人），
+  违反 §13.2。已改为 owner-only（对齐 Phase 1 `is_enterprise_owner` 的写法）。
+  预览保留项目负责人权限，因其已实现为逐行范围阻断。
+
 ## 已知风险
 
 - 旧 SQLite 空库纯 Alembic 全链升级仍在既有迁移 `96b709380f70` 处失败（SQLite 不支持

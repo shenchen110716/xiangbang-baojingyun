@@ -2,11 +2,11 @@
 
 - task_id: `timeliness-engine-phase3`
 - owner: `Claude Code`
-- status: `merged`（已合并到本地 main，**尚未推送、尚未部署**）
+- status: `merged`（已合并、已推送、已发布生产）
 - branch: `feat/timeliness-engine-phase3`
 - worktree: `/private/tmp/xiangbang-timeliness`
 - base_commit: `269357d`
-- migration_owner: `no（已释放；迁移 7f0a1fa05267 已合并进 main，尚未在生产执行）`
+- migration_owner: `no（已释放；迁移 7f0a1fa05267 已在生产 PostgreSQL 执行）`
 - depends_on: `employment-facts-phase2（已合并并发布）`
 - last_updated: `2026-07-17`
 
@@ -78,8 +78,13 @@
 
 - 合并提交：`59810c5`，无冲突；合并后在 `main` 上重跑 14 项测试、单一 head `7f0a1fa05267`、
   `compileall` 全部通过。
-- **未推送**：`autoDeployTrigger: commit` 使推送即部署，而本阶段迁移未经真实 PostgreSQL 执行。
-  Phase 2 正是从同样的位置发版并失败。推送前应先完成 PostgreSQL 门槛。
+- 已推送 `fdd3228..e6b6e96` 并经 Render 自动部署，`e6b6e96` 状态 `live`。
+- 生产验证：`/api/health` 200；路由 103 → **107**，四条及时率路由就位；
+  `/api/timeliness/summary` 与 `/data-quality` 未带 token 返回 401。容器启动命令为
+  `alembic upgrade head && uvicorn`，服务正常即证明 `7f0a1fa05267` 已在生产 PostgreSQL 执行。
+- **本次迁移未经合并前的真实 PostgreSQL 验证**（凭据未提供），实际是靠部署本身作为验证。
+  本次通过属于结果良好，不代表流程到位；`CLAUDE.md` 已要求新迁移合并前必须过
+  `scripts/pg_migration_check.py`，该脚本仍待凭据启用。
 
 ## 已知风险
 
