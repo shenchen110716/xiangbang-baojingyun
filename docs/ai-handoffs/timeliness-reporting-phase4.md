@@ -2,7 +2,7 @@
 
 - task_id: `timeliness-reporting-phase4`
 - owner: `Claude Code`
-- status: `review`
+- status: `merged`（已合并、已推送、已发布生产）
 - branch: `feat/timeliness-reporting-phase4`
 - worktree: `/private/tmp/xiangbang-timeliness-report`
 - base_commit: `81b6eeb`
@@ -76,6 +76,16 @@ Task 1 的断言「项目负责人访问 `/api/employment-feedback/batches` 应 
   身份证仅脱敏形式、原文不存在、审计摘要与文件字节一致
 - `[x]` 小程序语法与 JSON 校验通过
 - `[ ]` 小程序编译预览：未在开发者工具中实机预览（见风险）；**未上传、未提交**
+
+## 合并与发布（2026-07-17）
+
+- 合并提交：`c1172c9`，无冲突；合并后在 `main` 上重跑 12 项测试、`web/npm run build`、
+  `compileall` 全部通过，head 仍为 `7f0a1fa05267`。
+- 推送 `81b6eeb..c1172c9`，经 Render 自动部署成功（事件 `deploy_ended: succeeded`；
+  注意 `deploys?limit=1` 的 status 字段有滞后，以事件为准）。
+- 生产验证：路由 107 → **108**（新增 `/api/timeliness/export`）；五条及时率端点未带 token
+  均返回 401；**`/timeliness` 直接打开返回 200**（SPA 白名单生效，页面可收藏可刷新），
+  而 `/nonexistent-page` 返回 404（未退化为通配回退）。
 
 ## 与计划的差异
 
