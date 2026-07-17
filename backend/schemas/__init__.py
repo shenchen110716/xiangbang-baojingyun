@@ -33,3 +33,9 @@ __all__ = [
     "NotificationIn",
     "EmployerScopeIn", "EmployerScopeOut", "PrimaryManagerIn",
 ]
+
+from .agent_portal import (
+    AgentProductOut, AgentProductListOut, AgentCommissionRowOut,
+    AgentCommissionListOut, AgentCommissionSummaryOut, AgentBalancesOut,
+    AgentStatementOut, AgentStatementItemOut, AgentPaymentOut,
+)
