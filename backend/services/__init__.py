@@ -40,7 +40,7 @@ from .timeliness_recalc import (
 from .timeliness_reporting import (
     REQUIRED_CARD_FIELDS, build_export, detail_rows, summary_for,
 )
-from .agent_settlements import (
+from .agent_settlement import (
     PORTAL_PRODUCT_FIELDS, adjust_item, agent_balances, allocate, build_statement,
     confirm_statement, portal_commission_summary, portal_products, record_payment,
 )
