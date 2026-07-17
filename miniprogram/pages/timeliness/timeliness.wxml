@@ -1,0 +1,29 @@
+<view class="page">
+  <view class="cards">
+    <view class="card" wx:for="{{cards}}" wx:key="label">
+      <view class="card-label">{{item.label}}</view>
+      <view class="card-value">{{item.value}}</view>
+      <view class="card-hint" wx:if="{{item.hint}}">{{item.hint}}</view>
+    </view>
+  </view>
+
+  <radio-group class="filter" bindchange="onFilterChange">
+    <label class="filter-item"><radio value="" checked="{{filter === ''}}" />全部</label>
+    <label class="filter-item"><radio value="enrollment" checked="{{filter === 'enrollment'}}" />参保</label>
+    <label class="filter-item"><radio value="termination" checked="{{filter === 'termination'}}" />停保</label>
+  </radio-group>
+
+  <view class="empty" wx:if="{{!loading && items.length === 0}}">暂无及时率结果</view>
+
+  <view class="row" wx:for="{{items}}" wx:key="id">
+    <view class="row-head">
+      <text class="row-type">{{item.type_text}}</text>
+      <text class="row-status status-{{item.timeliness_status}}">{{item.status_text}}</text>
+    </view>
+    <view class="row-line">真实业务时间：{{item.actual_business_at || '—'}}</view>
+    <view class="row-line">应保障：{{item.expected_coverage_at || '—'}}</view>
+    <view class="row-line">实际保障：{{item.actual_coverage_at || '—'}}</view>
+    <view class="row-line">延迟 {{item.delay_text}} · 缺口 {{item.gap_text}}</view>
+    <view class="row-line">责任：{{item.reason_text}}</view>
+  </view>
+</view>

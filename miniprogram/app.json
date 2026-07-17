@@ -24,7 +24,8 @@
     "pages/claim-detail/claim-detail",
     "pages/messages/messages",
     "pages/reports/reports",
-    "pages/settings/settings"
+    "pages/settings/settings",
+    "pages/timeliness/timeliness"
   ],
   "window": {
     "navigationBarTitleText": "响帮帮保经云",
@@ -40,10 +41,22 @@
     "backgroundColor": "#ffffff",
     "borderStyle": "white",
     "list": [
-      { "pagePath": "pages/home/home", "text": "首页" },
-      { "pagePath": "pages/employees/employees", "text": "员工" },
-      { "pagePath": "pages/claims/claims", "text": "理赔" },
-      { "pagePath": "pages/profile/profile", "text": "我的" }
+      {
+        "pagePath": "pages/home/home",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/employees/employees",
+        "text": "员工"
+      },
+      {
+        "pagePath": "pages/claims/claims",
+        "text": "理赔"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的"
+      }
     ]
   },
   "style": "v2",

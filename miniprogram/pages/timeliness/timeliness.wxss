@@ -1,0 +1,17 @@
+.page { padding: 24rpx; }
+.cards { display: flex; flex-wrap: wrap; justify-content: space-between; }
+.card { width: 48%; background: #fff; border-radius: 12rpx; padding: 20rpx; margin-bottom: 16rpx; }
+.card-label { font-size: 24rpx; color: #909399; }
+.card-value { font-size: 40rpx; font-weight: 600; margin: 6rpx 0; }
+.card-hint { font-size: 22rpx; color: #c0c4cc; }
+.filter { display: flex; margin: 8rpx 0 16rpx; }
+.filter-item { margin-right: 32rpx; font-size: 26rpx; }
+.empty { text-align: center; color: #909399; padding: 60rpx 0; font-size: 26rpx; }
+.row { background: #fff; border-radius: 12rpx; padding: 20rpx; margin-bottom: 16rpx; }
+.row-head { display: flex; justify-content: space-between; margin-bottom: 10rpx; }
+.row-type { font-weight: 600; }
+.row-status { font-size: 24rpx; padding: 2rpx 12rpx; border-radius: 20rpx; background: #f4f4f5; color: #909399; }
+.status-timely, .status-early { background: #f0f9eb; color: #67c23a; }
+.status-late { background: #fdf6ec; color: #e6a23c; }
+.status-missing, .status-premature, .status-conflict { background: #fef0f0; color: #f56c6c; }
+.row-line { font-size: 24rpx; color: #606266; line-height: 1.7; }
