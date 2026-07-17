@@ -2,7 +2,7 @@
 
 - task_id: `cross-runtime-release-phase6`
 - owner: `Claude Code`
-- status: `merged`（用户于 2026-07-18 授权合并；无冲突合并提交 `e1b9330`，功能提交 `c77dd8d`）
+- status: `merged-deployed`（用户于 2026-07-18 授权合并并部署；无冲突合并提交 `e1b9330`，功能提交 `c77dd8d`）
 - branch: `feat/cross-runtime-parity-phase6`
 - worktree: `/private/tmp/xiangbang-parity`
 - base_commit: `33336e7`
@@ -136,4 +136,13 @@
 - 按范围决策，Java 侧的及时率 `/summary` 比率聚合、业务员佣金明细/汇总/导出、两阶段导入与
   外部签名接入认证**未镜像**，生产读写流量仍走 Python。Java 镜像只保证数据结构一致与只读
   鉴权对齐；此偏离已在此显式记录。
-- 未经用户授权，本阶段不合并、不部署、不改生产密钥、不上传小程序。
+- 未经用户授权，本阶段不改生产密钥、不上传小程序。
+
+## 发布记录（2026-07-18，用户授权）
+
+- 合并：`git merge --no-ff feat/cross-runtime-parity-phase6` → 合并提交 `e1b9330`。
+- 部署：`git push origin main`（`285a026..1148878`）触发 Render `autoDeployTrigger: commit`
+  自动重建部署。生产健康检查 `GET /api/health` → `200 {"ok":true}`。
+- 运行时影响为零：Dockerfile 只构建 web 前端 + Python 后端并执行 `alembic upgrade head`，
+  `java-backend/` 不进生产镜像；本阶段零迁移（单 head `27951ec2f8ee` 已在生产执行）。
+  因此本次发布使 main 与生产同源，但不改变生产业务行为。
