@@ -18,6 +18,7 @@ from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan,
 from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
 from ..services import activate_person_policy, allowed_employer_ids, assert_employer_access, correct_person_policy_dates, effective_person_status, is_enterprise_owner, plan_price_for_class, pricing_snapshot, require_usage_funded, serialize, strip_internal_pricing, terminate_person_policy
 from ..services.spreadsheet import MAX_IMPORT_FILE_BYTES, read_import_rows
+from ..services.timeliness_recalc import record_operation
 
 router = APIRouter(prefix="/api", tags=["insured"])
 
@@ -113,6 +114,9 @@ def add_person(data: PersonIn, user: User = Depends(current_user), session: Sess
     item = InsuredPerson(**payload); session.add(item); session.flush()
     member = correct_person_policy_dates(session, item, effective_at, terminated_at)
     if member is not None: item.status = "stopped" if member.terminated_at is not None else "active"
+    record_operation(session, user=user, person=item, operation_type="enrollment")
+    if member is not None and member.terminated_at is not None:
+        record_operation(session, user=user, person=item, operation_type="termination")
     session.commit(); session.refresh(item); audit(session, user, "create", "insured_person", str(item.id)); return _person_payload(session, item)
 
 @router.patch("/insured/{item_id}")
@@ -139,6 +143,8 @@ def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),
     if effective_at is not None or terminated_at is not None:
         member = correct_person_policy_dates(session, item, effective_at, terminated_at)
         if member is not None: item.status = 'stopped' if member.terminated_at is not None else 'active'
+        record_operation(session, user=user, person=item,
+                         operation_type='termination' if terminated_at is not None else 'enrollment')
     session.commit();audit(session,user,'update','insured_person',str(item.id));return _person_payload(session,item)
 
 @router.patch("/insured/{item_id}/status")
@@ -148,8 +154,12 @@ def insured_status(item_id:int,status_value:Literal["active","stopped","pending"
     _person_employer_access(session,user,item)
     require_usage_funded(session, session.get(Enterprise, item.enterprise_id), user)
     previous_status=item.status
-    if status_value=="active" and previous_status!="active": activate_person_policy(session,item)
-    elif previous_status=="active" and status_value!="active": terminate_person_policy(session,item)
+    if status_value=="active" and previous_status!="active":
+        activate_person_policy(session,item)
+        record_operation(session, user=user, person=item, operation_type="enrollment")
+    elif previous_status=="active" and status_value!="active":
+        terminate_person_policy(session,item)
+        record_operation(session, user=user, person=item, operation_type="termination")
     item.status=status_value
     session.commit();audit(session,user,"status_change","insured_person",str(item.id),status_value);return _person_payload(session,item)
 
@@ -213,6 +223,9 @@ def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Se
         if identity in seen or session.scalar(select(InsuredPerson.id).where(InsuredPerson.id_number==identity).limit(1)): errors.append({'row':index,'message':'身份证号重复'});continue
         seen.add(identity);item=InsuredPerson(enterprise_id=data.enterprise_id,position_id=position.id,name=name,id_number=identity,phone=row.phone.strip(),occupation=position.name,occupation_class=position.occupation_class,status='pending');session.add(item);created.append(item)
     if errors: session.rollback();return {'ok':False,'created':0,'errors':errors}
+    session.flush()
+    for item in created:
+        record_operation(session, user=user, person=item, operation_type='enrollment')
     session.commit()
     for item in created: session.refresh(item)
     audit(session,user,'bulk_create','insured_person',','.join(str(x.id) for x in created),f'count={len(created)}')
@@ -309,10 +322,12 @@ async def import_insured_file(kind:Literal['enrollment','termination']=Form(...)
             if effective_at is not None:
                 member=correct_person_policy_dates(session,item,effective_at,terminated_at)
                 if member is not None: item.status='stopped' if member.terminated_at is not None else 'active'
+            record_operation(session, user=user, person=item, operation_type='enrollment')
         else:
             item=existing
             if item.status=='active': terminate_person_policy(session,item,terminated_at)
             item.status='stopped'
+            record_operation(session, user=user, person=item, operation_type='termination')
         affected.append(item)
     session.commit();audit(session,user,'bulk_enrollment' if kind=='enrollment' else 'bulk_termination','insured_person','',f'count={len(affected)};file={file.filename}')
     return {'ok':True,'kind':kind,'success':len(affected),'errors':[]}

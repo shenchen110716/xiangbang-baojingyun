@@ -2,7 +2,7 @@
 
 - task_id: `timeliness-engine-phase3`
 - owner: `Claude Code`
-- status: `active`
+- status: `review`
 - branch: `feat/timeliness-engine-phase3`
 - worktree: `/private/tmp/xiangbang-timeliness`
 - base_commit: `269357d`
@@ -50,9 +50,40 @@
 - Java 镜像（Phase 6）、Web 与小程序界面（Phase 4）。
 - 佣金结算（Phase 5）。
 
-## 验证
+## 提交
 
-待 Task 6 阶段门槛填写。
+- `9b7953e` — 红灯引擎契约 + CONTRACT-PROVISIONAL 校准
+- `67be881` — 版本化产品规则服务（唯一日期算法）
+- `ee57368` — 纯函数及时率引擎
+- `22d3ba1` — 操作快照、结果表与 Outbox 迁移 `7f0a1fa05267`
+- `f4e57cc` — 责任归属（事件时点负责人）
+- 本次 — 重算、Outbox、五个写入点快照与 §14.3 API
+
+## 验证（2026-07-17，均在最终提交状态上执行）
+
+- `[x]` `timeliness_engine_test`（21）、`timeliness_rules_test`（11）、
+  `timeliness_responsibility_test`（6）、`timeliness_model_test`（7）、`timeliness_smoke`（7）
+- `[x]` Phase 2 回归：`employment_facts_smoke`、`employment_import_test`、
+  `employment_matching_test`、`employment_integration_test`、`id_number_test`
+- `[x]` 既有回归：`employer_scope_smoke`、`security_smoke`、`system_smoke`、
+  `participation_lock_smoke`、`recharge_smoke`、`salesperson_portal_smoke`、
+  `agent_pricing_visibility_test`
+- `[x]` `compileall`、`git diff --check`、单一 head `7f0a1fa05267`
+- `[x]` 迁移在线双向：SQLite 上 downgrade 干净删表、upgrade 重建表与索引
+- `[x]` 引擎纯度自检：模块内无 `now()`、无 `session`、无 `select`
+- `[ ]` **真实 PostgreSQL 未执行本阶段迁移**：门槛脚本已入库但缺凭据（见阻塞）。
+- `[ ]` Web 构建与 Maven：本阶段未改前端与 Java，按计划不要求。
+
+## 已知风险
+
+- `RULE_VERSION`/`CALCULATION_VERSION` 提升会使既有结果的幂等键变化，旧结果不再是
+  当前版本；这是设计意图（可重算而非静默过期），但升级时需要一次全量重算。
+- **Outbox 没有调度器**：本阶段只提供按需处理（`POST /api/timeliness/recalculate`）。
+  §12 允许 Worker 重试，但定时调度需由 Phase 4 或运维接入，否则导入后的结果只在
+  有人手动触发时才刷新。
+- `business_time.py` 仍是进程级全局时区，而规则快照自带时区（见"跨阶段隐患"）。
+- 责任归属的 `_late_reason` 只在有操作记录时能分辨环节；历史数据没有
+  `ParticipationOperation`，会落到事件时点负责人或 `unassigned_responsibility`。
 
 ## 实施中发现的跨阶段隐患
 
