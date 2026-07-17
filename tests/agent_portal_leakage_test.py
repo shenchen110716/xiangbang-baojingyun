@@ -27,7 +27,7 @@ if str(ROOT) not in sys.path:
 
 from backend.core.db import Base
 from backend.models import AgentCommission, Enterprise, InsurancePlan, User
-from backend.services.agent_settlements import (
+from backend.services.agent_settlement import (
     PORTAL_PRODUCT_FIELDS,
     portal_commission_summary,
     portal_products,
