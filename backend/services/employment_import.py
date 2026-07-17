@@ -316,6 +316,14 @@ def confirm_import(session: Session, user: User, *, batch_id: int,
 
     created = [_write_fact(session, user, batch, row) for row in report]
 
+    # Queue each new fact so the import actually produces timeliness results.
+    # Without this the batch sits at imported_pending_calculation forever and
+    # the reports stay empty until somebody presses recalculate.
+    from .timeliness_recalc import enqueue
+
+    for fact in created:
+        enqueue(session, fact_id=fact.id, reason="imported")
+
     batch.confirm_token_digest = None          # 一次性
     batch.imported_at = business_now()
     batch.updated_at = business_now()

@@ -33,7 +33,10 @@ from .timeliness_engine import (
     judge_enrollment, judge_feedback, judge_termination, summarise,
 )
 from .timeliness_responsibility import attribute, primary_manager_at
-from .timeliness_recalc import enqueue, process_outbox, recalculate, record_operation, system_facts
+from .timeliness_recalc import (
+    drain_due, enqueue, process_outbox, recalculate, record_operation,
+    retire_results, system_facts,
+)
 from .timeliness_reporting import (
     REQUIRED_CARD_FIELDS, build_export, detail_rows, summary_for,
 )
@@ -62,5 +65,6 @@ __all__ = [
     "judge_enrollment", "judge_termination", "judge_feedback", "summarise",
     "attribute", "primary_manager_at",
     "recalculate", "enqueue", "process_outbox", "record_operation", "system_facts",
+    "drain_due", "retire_results",
     "REQUIRED_CARD_FIELDS", "summary_for", "detail_rows", "build_export",
 ]

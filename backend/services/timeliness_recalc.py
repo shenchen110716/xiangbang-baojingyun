@@ -20,7 +20,7 @@ import json
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from ..core.business_time import business_now
@@ -173,6 +173,10 @@ def recalculate(session: Session, *, fact_id: int, now: Optional[datetime] = Non
     fact = session.get(EmploymentFact, fact_id)
     if not fact:
         return []
+    if fact.status == "superseded":
+        # 已被纠错取代：撤下其判定，而不是给它一个新判定。
+        retire_results(session, fact_id=fact.id)
+        return []
     moment = _utc(now) or _utc(business_now())
     results = []
 
@@ -318,3 +322,33 @@ def record_operation(session: Session, *, user, person: InsuredPerson,
     session.add(row)
     session.flush()
     return row
+
+
+def retire_results(session: Session, *, fact_id: int) -> int:
+    """Take a fact's verdicts off the books.
+
+    A superseded fact must not keep a `current` verdict: the user corrected it,
+    and a report that still shows the old judgement — with nothing marking it
+    stale — is worse than showing nothing.
+    """
+    return session.execute(
+        update(EmploymentTimelinessResult)
+        .where(EmploymentTimelinessResult.employment_fact_id == fact_id,
+               EmploymentTimelinessResult.status == "current")
+        .values(status="superseded")).rowcount
+
+
+def drain_due(session: Session, *, limit: int = 50) -> dict:
+    """Process queued recalcs on a read path, the way scan_premium_shortfalls
+    already does for premium shortfalls.
+
+    There is no scheduler in this deployment, so the alternative is results that
+    only refresh when somebody remembers to press a button. Cheap when idle: a
+    single indexed count, no writes.
+    """
+    pending = session.scalar(
+        select(func.count(TimelinessOutbox.id))
+        .where(TimelinessOutbox.status == "pending"))
+    if not pending:
+        return {"processed": 0, "failed": 0}
+    return process_outbox(session, limit=limit)

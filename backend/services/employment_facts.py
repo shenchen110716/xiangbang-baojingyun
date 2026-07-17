@@ -103,6 +103,16 @@ def correct_fact(
     old.status = "superseded"  # 只改状态，绝不覆盖旧时间值
     session.add(new)
     session.flush()
+
+    # Queue both versions: the old one must have its verdict retired, the new
+    # one needs a verdict of its own. Kept here rather than in the router
+    # because it is a correctness invariant of correcting a fact — a future
+    # caller that forgot it would leave reports showing a judgement the user
+    # already corrected. Imported lazily: timeliness_recalc imports this module.
+    from .timeliness_recalc import enqueue
+
+    enqueue(session, fact_id=old.id, reason="fact_superseded")
+    enqueue(session, fact_id=new.id, reason="fact_corrected")
     return new
 
 

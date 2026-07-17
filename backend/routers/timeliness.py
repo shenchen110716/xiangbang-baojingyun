@@ -19,7 +19,7 @@ from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import EmploymentFact, EmploymentTimelinessResult, User
 from ..services.employer_scopes import allowed_employer_ids, is_enterprise_owner
-from ..services.timeliness_recalc import enqueue, process_outbox, system_facts
+from ..services.timeliness_recalc import drain_due, enqueue, process_outbox, system_facts
 from ..services.timeliness_reporting import (
     build_export, detail_rows, summary_for,
 )
@@ -92,6 +92,10 @@ def timeliness_summary(
     user: User = Depends(current_user),
     session: Session = Depends(db),
 ):
+    # 无调度器：读之前先排空队列，否则数字会停在上一次有人手动重算的时刻。
+    # 队列为空时这是一次索引计数，无写入。
+    drain_due(session)
+    session.commit()
     return summary_for(session, user, operation_type=operation_type,
                        actual_employer_id=actual_employer_id,
                        responsible_user_id=responsible_user_id,
@@ -110,6 +114,8 @@ def timeliness_details(
     user: User = Depends(current_user),
     session: Session = Depends(db),
 ):
+    drain_due(session)
+    session.commit()
     return {"items": detail_rows(
         session, user, operation_type=operation_type,
         timeliness_status=timeliness_status,
