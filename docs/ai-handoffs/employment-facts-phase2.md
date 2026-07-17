@@ -2,7 +2,7 @@
 
 - task_id: `employment-facts-phase2`
 - owner: `Claude Code`
-- status: `merged`（已合并到本地 main，**尚未推送、尚未部署**）
+- status: `merged`（已合并、已推送、已发布生产）
 - branch: `feat/employment-facts-phase2`
 - worktree: `/private/tmp/xiangbang-employment-facts`
 - base_commit: `8bc04e0`
@@ -83,7 +83,8 @@
 - `[x]` 离线 SQL：SQLite 与 PostgreSQL 均生成，部分唯一索引 `WHERE` 子句正确
 - `[x]` 空库初始化（30 表）与旧库补齐（25 表 → 补齐 5 张新表）
 - `[ ]` Web 构建与 Maven：本阶段未改前端与 Java，按计划不要求；Java 镜像属 Phase 6。
-- `[ ]` 生产 PostgreSQL 实测：本地无实例，仅验证离线 SQL。
+- `[x]` 生产 PostgreSQL 实测：首次部署失败并暴露真实缺陷（见下），修复后 `d052b34` 成功上线，
+  迁移 `c40dab695a66` 已在生产 PostgreSQL 执行。
 
 ## 部署前置（需用户操作，阻断性）
 
@@ -113,9 +114,31 @@
   而 `ID_ENCRYPTION_KEY` 尚未在 Render 配置，届时 `_check_production_config()` 会阻断启动，
   造成生产不可用。必须先配好该密钥再推送。
 
-## 下一动作
+## 发布（2026-07-17）
 
-- 用户在 Render 配置 `ID_ENCRYPTION_KEY` 后方可推送发布。
+- `ID_ENCRYPTION_KEY` 已按用户明确授权，经 Render API 写入服务
+  `srv-d9apncrtqb8s739nilog`（64 字符随机串，指纹 sha256[:16]=`5883d4f74ce067c2`）。
+  密钥值未出现在任何日志或对话记录中，可在 Render 后台查看。
+- **首次部署失败**：迁移 `c40dab695a66` 的 `active` 列使用 `server_default=sa.text("1")`，
+  PostgreSQL 拒绝在布尔列上使用整数默认值（`column "active" is of type boolean but default
+  expression is of type integer`）。该写法直接源自计划的 Task 8 片段；SQLite 接受 `1`，
+  故全部本地测试通过，离线 SQL 也只验证语法不校验类型——正是本交接原先记录的验证缺口。
+- 迁移在 PostgreSQL 的 DDL 事务内整体回滚，生产未应用任何结构变更，旧版本持续服务，
+  **无停机、无数据损坏**。
+- 修复 `fix/pg-boolean-default` 改用 `sa.true()`（PostgreSQL 渲染 `DEFAULT true`，
+  SQLite 渲染 `DEFAULT 1`），并扫描全部迁移确认无同类问题。合并提交 `d052b34`。
+- 生产验证：`/api/health` 200；路由 90 → **103**，13 条 employment 路由全部就位；
+  `/api/employment-facts` 与 `/api/employment-feedback/batches` 未带 token 返回 401（非 404）；
+  `/api/integrations/employment-events` 无签名返回 401。容器启动命令为
+  `alembic upgrade head && uvicorn`，服务正常即证明迁移已成功执行。
+
+## 经验
+
+离线 SQL 生成只能证明语法，不能证明类型兼容；SQLite 通过不代表 PostgreSQL 通过。
+本机无 Docker/PostgreSQL，无法在合并前执行真实 PostgreSQL 迁移——这是当前流程的已知缺口，
+后续阶段若涉及新迁移应优先补上可执行的 PostgreSQL 验证环境。
+
+## 下一动作
 - 迁移锁已释放，Phase 3（及时率引擎）可基于 `main@b314cbc` 创建新分支与迁移，
   新迁移须线性接在 `c40dab695a66` 之后。
 - Phase 3 消费的接口：`active_facts`、`correct_fact`、`serialize_fact`、
