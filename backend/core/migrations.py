@@ -21,6 +21,10 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     from ..models import EmploymentFact, EmploymentFactMatch, EmploymentFeedbackBatch
     for table in (EmploymentFeedbackBatch, EmploymentFact, EmploymentFactMatch):
         table.__table__.create(bind=s.connection(), checkfirst=True)
+    # v4.2 Phase 3 及时率表；结果由重算派生，不回填历史（§16、§20.6）。
+    from ..models import EmploymentTimelinessResult, ParticipationOperation, TimelinessOutbox
+    for table in (ParticipationOperation, EmploymentTimelinessResult, TimelinessOutbox):
+        table.__table__.create(bind=s.connection(), checkfirst=True)
     enterprise_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(enterprises)")}
     if "agent_id" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN agent_id INTEGER")
     if "usage_fee_daily" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN usage_fee_daily FLOAT DEFAULT 0.1")

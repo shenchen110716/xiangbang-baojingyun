@@ -24,6 +24,16 @@ from .employment_facts import (
 )
 from .employment_matching import MatchResult, match_person
 from .employment_import import confirm_import, preview_import
+from .timeliness_rules import (
+    RULE_VERSION, feedback_deadline, normalize_enrollment, normalize_termination,
+    rule_snapshot,
+)
+from .timeliness_engine import (
+    Coverage, EnrollmentInput, TerminationInput, Verdict,
+    judge_enrollment, judge_feedback, judge_termination, summarise,
+)
+from .timeliness_responsibility import attribute, primary_manager_at
+from .timeliness_recalc import enqueue, process_outbox, recalculate, record_operation, system_facts
 
 __all__ = [
     "serialize", "amount",
@@ -43,4 +53,10 @@ __all__ = [
     "FACT_EXCLUDED_STATUSES", "active_facts", "correct_fact", "serialize_fact",
     "MatchResult", "match_person",
     "preview_import", "confirm_import",
+    "RULE_VERSION", "rule_snapshot", "normalize_enrollment", "normalize_termination",
+    "feedback_deadline",
+    "Coverage", "EnrollmentInput", "TerminationInput", "Verdict",
+    "judge_enrollment", "judge_termination", "judge_feedback", "summarise",
+    "attribute", "primary_manager_at",
+    "recalculate", "enqueue", "process_outbox", "record_operation", "system_facts",
 ]
