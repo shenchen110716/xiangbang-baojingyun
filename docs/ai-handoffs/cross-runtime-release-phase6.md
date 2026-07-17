@@ -2,7 +2,7 @@
 
 - task_id: `cross-runtime-release-phase6`
 - owner: `Claude Code`
-- status: `review`（Task 1-5 全部完成并通过全量验证，待用户授权合并）
+- status: `merged`（用户于 2026-07-18 授权合并；无冲突合并提交 `e1b9330`，功能提交 `c77dd8d`）
 - branch: `feat/cross-runtime-parity-phase6`
 - worktree: `/private/tmp/xiangbang-parity`
 - base_commit: `33336e7`
