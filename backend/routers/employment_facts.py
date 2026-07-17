@@ -28,7 +28,7 @@ from ..schemas.employment import (
     ImportPreviewOut,
     ManualMatchIn,
 )
-from ..services.employer_scopes import allowed_employer_ids, assert_employer_access
+from ..services.employer_scopes import allowed_employer_ids, assert_employer_access, is_enterprise_owner
 from ..services.employment_facts import active_facts, correct_fact, serialize_fact
 from ..services.employment_import import TEMPLATE_HEADER, confirm_import, preview_import
 
@@ -36,6 +36,20 @@ router = APIRouter(prefix="/api", tags=["employment-facts"])
 
 # 用工事实属于企业用工数据，业务员无关；平台管理员可跨企业查看。
 _ENTERPRISE_OR_ADMIN = require_role("admin", "enterprise", detail="无权访问用工事实数据")
+
+
+def require_owner_or_admin(user: User = Depends(current_user)) -> User:
+    """Batch surfaces are enterprise-wide by nature (§13.1: 上传预览、确认和批次
+    详情 are owner capabilities; §13.2: 项目负责人不提供全企业用工事实批次确认).
+
+    The coarse login role is not enough here: a project manager's role is also
+    `enterprise`, so gating on that alone hands them every project's batches.
+    """
+    if user.role == "admin":
+        return user
+    if not is_enterprise_owner(user):
+        raise HTTPException(403, "仅企业主管或平台管理员可操作用工事实批次")
+    return user
 
 
 def _enterprise_id(user: User, requested: int | None = None) -> int:
@@ -90,7 +104,7 @@ async def import_preview(file: UploadFile = File(...),
 
 
 @router.post("/employment-feedback/import/confirm", response_model=ImportConfirmOut,
-             dependencies=[Depends(_ENTERPRISE_OR_ADMIN)])
+             dependencies=[Depends(require_owner_or_admin)])
 def import_confirm(data: ImportConfirmIn, user: User = Depends(current_user),
                    session: Session = Depends(db)):
     result = confirm_import(session, user, batch_id=data.batch_id,
@@ -109,14 +123,14 @@ def _batch_scope(session: Session, user: User):
 
 
 @router.get("/employment-feedback/batches", response_model=list[BatchOut],
-            dependencies=[Depends(_ENTERPRISE_OR_ADMIN)])
+            dependencies=[Depends(require_owner_or_admin)])
 def list_batches(user: User = Depends(current_user), session: Session = Depends(db)):
     stmt = _batch_scope(session, user).order_by(EmploymentFeedbackBatch.id.desc())
     return list(session.scalars(stmt))
 
 
 @router.get("/employment-feedback/batches/{item_id}", response_model=BatchOut,
-            dependencies=[Depends(_ENTERPRISE_OR_ADMIN)])
+            dependencies=[Depends(require_owner_or_admin)])
 def get_batch(item_id: int, user: User = Depends(current_user),
               session: Session = Depends(db)):
     batch = session.get(EmploymentFeedbackBatch, item_id)
