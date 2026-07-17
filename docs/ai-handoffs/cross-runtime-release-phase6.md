@@ -2,7 +2,7 @@
 
 - task_id: `cross-runtime-release-phase6`
 - owner: `Claude Code`
-- status: `active`
+- status: `review`（Task 1-5 全部完成并通过全量验证，待用户授权合并）
 - branch: `feat/cross-runtime-parity-phase6`
 - worktree: `/private/tmp/xiangbang-parity`
 - base_commit: `33336e7`
@@ -99,10 +99,41 @@
 - 两阶段导入、XLSX 导出、Outbox 调度、外部签名接入认证的 Java 完整重实现（见范围决策）。
 - 未经用户授权的部署、生产密钥变更、小程序上传提交。
 
-## 验证
+## Task 3/4：Java 镜像与 fail-closed 只读 controller（已完成）
 
-待 Task 5 阶段门槛填写。
+12 张新表的 entity + Mapper 全部落地，字段级与可空性由契约测试逐列校验。三条范围敏感读取
+路径以最小化 controller 镜像，鉴权全部复用 Phase 1 的 `EmployerScopeAccess`，不另立第二套：
+
+- `EmploymentFactController` → `GET /api/employment-facts`：经 `EmploymentFactAccess`，
+  只返回 `status='active'` 事实；项目经理限授权用工单位、admin 跨企业、其余角色 403。
+- `TimelinessController` → `GET /api/timeliness/details`：经 `TimelinessResultAccess`，
+  只返回 `status='current'` 结果，范围过滤与 `/summary` 共用同一边界。
+- `AgentPortalController` → `GET /api/agent-portal/{statements,payments}`：仅 salesperson，
+  `agent_id` 只取登录身份 `user.getId()`，不接受任何请求参数（§17.1）。
+
+镜像修正（两处 WIP bug，均在本阶段发现并修）：`EmploymentFactMapper.findActiveScoped` 与
+`EmploymentTimelinessResultMapper.findCurrentScoped` 原将 `enterprise_id = #{enterpriseId}`
+写死，admin（enterpriseId 为 null）会退化成 `= NULL` 而永不命中；改为条件式，镜像 Python
+「企业过滤只在 role=='enterprise' 时施加」。`EmploymentFactAccess` 原对 enterpriseId 为 null
+一律 403 会误挡 admin，改为把 fail-closed 判定完全交给 `EmployerScopeAccess`。
+
+## 验证（2026-07-18，均在最终提交状态上执行）
+
+- `[x]` Java 编译：`mvn -o compile` BUILD SUCCESS（Maven 3.9.9，Temurin JDK 21）。
+- `[x]` Java 单测：`mvn -o test` → Tests run: 8, Failures: 0, Errors: 0, Skipped: 0；
+      含新增 `adminReadsAllActiveFactsAcrossEnterprises`（证明 admin 不再被误挡）。
+- `[x]` 跨运行时契约测试：`python3 tests/cross_runtime_contract_test.py` 三项全过
+      （逐列映射、可空列无 Java 侧默认值、check 约束状态值均有 Java 侧常量/注释）。
+- `[x]` 完整 Python 回归：`tests/` 下 29 个测试文件全绿（模型/服务/引擎/导入/匹配/及时率/
+      业务员门户/安全与系统 smoke 等）。smoke 类需 `web/dist`，本阶段不改前端，直接复用
+      main 已构建产物（`web/` 与 main 无差异）。
+- `[x]` 单一 Alembic head 未变：`python3 -m alembic heads` = `27951ec2f8ee`，本阶段零迁移。
 
 ## 风险与阻塞
 
-- 待补充。
+- 本机默认无 Maven，验证时临时下载 apache-maven-3.9.9 至 `/tmp` 完成编译与单测；
+  CI/其他代理需自备 Maven。此为环境事项，不影响代码。
+- 按范围决策，Java 侧的及时率 `/summary` 比率聚合、业务员佣金明细/汇总/导出、两阶段导入与
+  外部签名接入认证**未镜像**，生产读写流量仍走 Python。Java 镜像只保证数据结构一致与只读
+  鉴权对齐；此偏离已在此显式记录。
+- 未经用户授权，本阶段不合并、不部署、不改生产密钥、不上传小程序。
