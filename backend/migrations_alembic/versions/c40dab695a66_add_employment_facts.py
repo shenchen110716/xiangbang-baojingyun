@@ -140,7 +140,11 @@ def upgrade() -> None:
         sa.Column("key_id", sa.String(32), nullable=False, unique=True),
         sa.Column("secret_cipher", sa.Text, nullable=False),
         sa.Column("allowed_employer_ids", sa.Text, nullable=False, server_default=""),
-        sa.Column("active", sa.Boolean, nullable=False, server_default=sa.text("1")),
+        # sa.true(), not text("1"): PostgreSQL rejects an integer default on a
+        # boolean column ("column active is of type boolean but default
+        # expression is of type integer"), while SQLite accepts either. Let the
+        # dialect render its own literal.
+        sa.Column("active", sa.Boolean, nullable=False, server_default=sa.true()),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_table(
