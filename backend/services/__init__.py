@@ -24,6 +24,10 @@ from .employment_facts import (
 )
 from .employment_matching import MatchResult, match_person
 from .employment_import import confirm_import, preview_import
+from .timeliness_rules import (
+    RULE_VERSION, feedback_deadline, normalize_enrollment, normalize_termination,
+    rule_snapshot,
+)
 
 __all__ = [
     "serialize", "amount",
@@ -43,4 +47,6 @@ __all__ = [
     "FACT_EXCLUDED_STATUSES", "active_facts", "correct_fact", "serialize_fact",
     "MatchResult", "match_person",
     "preview_import", "confirm_import",
+    "RULE_VERSION", "rule_snapshot", "normalize_enrollment", "normalize_termination",
+    "feedback_deadline",
 ]
