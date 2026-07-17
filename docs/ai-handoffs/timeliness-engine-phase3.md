@@ -90,9 +90,12 @@
 
 - `RULE_VERSION`/`CALCULATION_VERSION` 提升会使既有结果的幂等键变化，旧结果不再是
   当前版本；这是设计意图（可重算而非静默过期），但升级时需要一次全量重算。
-- **Outbox 没有调度器**：本阶段只提供按需处理（`POST /api/timeliness/recalculate`）。
-  §12 允许 Worker 重试，但定时调度需由 Phase 4 或运维接入，否则导入后的结果只在
-  有人手动触发时才刷新。
+- ~~**Outbox 没有调度器**~~ **已由 `fix/outbox-wiring`（`4dbe6cd`）修复并发布**。
+  实际问题比"没有调度器"严重：`enqueue` 全仓只有手动重算端点一个调用方，Outbox 是摆设。
+  由此产生的**正确性缺陷**：纠错后，被作废事实的判定仍为 `current`，而新版本没有任何结果，
+  报表持续显示用户已纠正的错误判定。现已：纠错在服务层（而非路由）同时排队新旧版本；
+  导入确认为每条新事实排队；`recalculate` 对 `superseded` 事实撤下判定而非另给新判定；
+  summary/details 读取前惰性排空队列（沿用 `scan_premium_shortfalls` 既有做法）。
 - `business_time.py` 仍是进程级全局时区，而规则快照自带时区（见"跨阶段隐患"）。
 - 责任归属的 `_late_reason` 只在有操作记录时能分辨环节；历史数据没有
   `ParticipationOperation`，会落到事件时点负责人或 `unassigned_responsibility`。
