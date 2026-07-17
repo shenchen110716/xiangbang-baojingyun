@@ -11,6 +11,9 @@ from .employment import (
     EmploymentFeedbackBatch, EmploymentFact, EmploymentFactMatch,
     IntegrationApiKey, IntegrationNonce,
 )
+from .timeliness import (
+    ParticipationOperation, EmploymentTimelinessResult, TimelinessOutbox,
+)
 from .misc import AuditLog, EnrollmentEmail
 
 __all__ = [
@@ -43,6 +46,9 @@ __all__ = [
     "EmploymentFactMatch",
     "IntegrationApiKey",
     "IntegrationNonce",
+    "ParticipationOperation",
+    "EmploymentTimelinessResult",
+    "TimelinessOutbox",
     "AuditLog",
     "EnrollmentEmail",
 ]
