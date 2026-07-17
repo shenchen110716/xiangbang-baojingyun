@@ -2,7 +2,7 @@
 
 - task_id: `timeliness-reporting-phase4`
 - owner: `Claude Code`
-- status: `active`
+- status: `review`
 - branch: `feat/timeliness-reporting-phase4`
 - worktree: `/private/tmp/xiangbang-timeliness-report`
 - base_commit: `81b6eeb`
@@ -51,9 +51,48 @@ Task 1 的断言「项目负责人访问 `/api/employment-feedback/batches` 应 
 - 新建迁移（若发现需要，说明 Phase 3 的 schema 错了，应回到那里修）。
 - Java 镜像（Phase 6）、佣金门户（Phase 5）。
 
-## 验证
+## 提交
 
-待 Task 6 阶段门槛填写。
+- `3236c6d` — 红灯报表契约 + CONTRACT-PROVISIONAL 校准
+- `9843912` — 报表聚合服务与带审计的 XLSX 导出
+- `ffb228d` — 企业主管 Web 页面 + SPA 白名单结构性守卫
+- `a3bd68d` — 小程序项目负责人只读页面
+
+## 验证（2026-07-17，均在最终提交状态上执行）
+
+- `[x]` `timeliness_reporting_test`（8）：卡片字段完整、反馈率、操作员可归责率、
+  缺口与额外保费求和、项目负责人范围、筛选、导出脱敏、导出摘要与文件一致
+- `[x]` `frontend_routes_test`：24 个 Vue 路由全部在 `_FRONTEND_ROUTES` 中；
+  **已反证**：临时移除条目后测试变红并指出缺失路由
+- `[x]` Phase 3 回归：`timeliness_smoke`、`timeliness_engine_test`、`timeliness_rules_test`、
+  `timeliness_responsibility_test`、`timeliness_model_test`
+- `[x]` Phase 1/2 回归：`batch_owner_only_test`、`employment_facts_smoke`、
+  `employment_import_test`、`employment_integration_test`、`employer_scope_smoke`
+- `[x]` 既有回归：`security_smoke`、`system_smoke`、`recharge_smoke`、
+  `participation_lock_smoke`、`salesperson_portal_smoke`、`agent_pricing_visibility_test`
+- `[x]` `web/npm run build`、`compileall`、`git diff --check`
+- `[x]` **Alembic head 未变**，仍为 `7f0a1fa05267`（本阶段不建迁移）
+- `[x]` **导出文件打开验证**（§18）：实际生成并用 openpyxl 打开，18 列、表头正确、
+  身份证仅脱敏形式、原文不存在、审计摘要与文件字节一致
+- `[x]` 小程序语法与 JSON 校验通过
+- `[ ]` 小程序编译预览：未在开发者工具中实机预览（见风险）；**未上传、未提交**
+
+## 与计划的差异
+
+- 计划的 `tests/timeliness_reporting_smoke.py` 以 `tests/timeliness_reporting_test.py`
+  实现：直测服务层，断言覆盖相同（含导出脱敏与审计元数据），但不起 HTTP 服务，更快。
+  端点层的鉴权由 `batch_owner_only_test` 与既有安全烟测覆盖。
+
+## 已知风险
+
+- **导出同步且无上限**：大企业导出可能在 Render 免费套餐上超时。当前无分页与异步任务，
+  行数多时需要改为后台生成 + 短时签名下载。
+- **Outbox 仍无调度器**（Phase 3 遗留）：及时率结果只在有人手动触发重算时刷新，
+  报表因此可能滞后于最新导入。
+- 小程序页面已写并通过语法/JSON 校验，但**未在微信开发者工具中实机预览**；
+  按 `CLAUDE.md` 未上传、未提交。
+- **PostgreSQL 门槛仍未启用**：本阶段不建迁移故不受影响；Phase 5 将新建结算/付款表，
+  届时应先就绪。
 
 ## 风险与阻塞
 
