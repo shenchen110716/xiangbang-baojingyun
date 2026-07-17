@@ -28,6 +28,10 @@ from .timeliness_rules import (
     RULE_VERSION, feedback_deadline, normalize_enrollment, normalize_termination,
     rule_snapshot,
 )
+from .timeliness_engine import (
+    Coverage, EnrollmentInput, TerminationInput, Verdict,
+    judge_enrollment, judge_feedback, judge_termination, summarise,
+)
 
 __all__ = [
     "serialize", "amount",
@@ -49,4 +53,6 @@ __all__ = [
     "preview_import", "confirm_import",
     "RULE_VERSION", "rule_snapshot", "normalize_enrollment", "normalize_termination",
     "feedback_deadline",
+    "Coverage", "EnrollmentInput", "TerminationInput", "Verdict",
+    "judge_enrollment", "judge_termination", "judge_feedback", "summarise",
 ]
