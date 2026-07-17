@@ -2,13 +2,13 @@
 
 - task_id: `agent-commission-portal-phase5`
 - owner: `Claude Code`
-- status: `review`
-- branch: `feat/agent-commission-portal-phase5`
-- worktree: `/private/tmp/xiangbang-agent-portal`
+- status: `merged-deployed`
+- branch: `feat/agent-commission-portal-phase5`（已合并至 `main`，合并提交 `285a026`）
+- worktree: `/private/tmp/xiangbang-agent-portal`（可清理）
 - base_commit: `ad35576`
-- migration_owner: `yes（Phase 5 独占）`
+- migration_owner: `no（迁移 `27951ec2f8ee` 已在生产验证通过，锁已释放）`
 - depends_on: `salesperson-portal（已合并 b664e20）`
-- last_updated: `2026-07-17`
+- last_updated: `2026-07-18`
 
 ## 目标
 
@@ -85,15 +85,24 @@ billing_mode/effective_mode/status/min_sale_price/my_commission_status`），
 `min_sale_price` 正确显示为底价+利润（100 原价、30% 费率、10 利润 → 80），
 原价 100、底价 70、利润 10、费率 0.3、返佣 30 均未以任何字段出现。
 
-## 风险与阻塞
+## 合并与部署（2026-07-18）
 
-- **本阶段新建迁移 `27951ec2f8ee`，PostgreSQL 门槛仍未启用**（缺凭据）。
-  用户已在本次任务开始前明确指示"直接开 Phase5……迁移靠部署验证"，接受该风险。
-  已核实本迁移**不含布尔列**（金额为 Float、状态为 String），规避了 Phase 2 那类
-  "SQLite 接受、PostgreSQL 拒绝"的整数默认值问题；但离线 SQL 生成与在线 SQLite
-  验证仍不能替代真实 PostgreSQL 执行，其余类型/约束问题（如唯一索引、外键、
-  CHECK 语法差异）尚未在真实 PostgreSQL 上验证。
+- 合并提交：`285a026`（`Merge branch 'feat/agent-commission-portal-phase5'`），无冲突。
+- 合并后在 `main` 上重跑完整验证矩阵（14 个测试 + web build + compileall + 单一迁移头
+  `27951ec2f8ee`），全部通过；`git diff --check` 报告的空白问题出自与本次合并无关的
+  既有未提交文件 `SYSTEM-DESIGN-V4.md`。
+- 推送 `ad35576..285a026`，触发生产部署。**容器启动命令为
+  `alembic upgrade head && uvicorn ...`（串行执行）**，故生产健康检查通过即可作为
+  迁移在真实 PostgreSQL 上执行成功的证据（迁移失败会导致容器崩溃、uvicorn 不会启动）。
+- 生产验证：`GET /api/health` → 200；`openapi.json` 中出现全部 8 条
+  `/api/agent-portal/*` 路由；未鉴权请求 `/api/agent-portal/products` → 401
+  （符合预期，非 500/崩溃）。
+- 迁移 `27951ec2f8ee` 现已在真实 PostgreSQL 生产环境验证通过，风险已解除，迁移锁释放。
+
+## 已知风险（迁移已验证后仍然存在）
+
 - 结算单生成为人工触发，无周期自动结算调度。
 - 分配余额上限（付款可分配余额、结算单未付余额）在服务层用行锁 + 事务强制，
-  已在 SQLite 单连接下验证；未在真实两连接并发的 PostgreSQL 环境下压测。
+  已在 SQLite 单连接下验证；未在真实两连接并发的 PostgreSQL 环境下专门压测
+  （生产部署本身未暴露该并发场景的测试信号）。
 - 凭证上传复用既有短时签名下载模式，不做静态挂载。
