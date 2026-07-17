@@ -18,6 +18,7 @@ export const routes: Array<RouteRecordRaw & { meta: NavMeta }> = [
   { path: '/dispatch', name: 'dispatch', component: () => import('@/views/positions/PositionsView.vue'), meta: { title: '岗位管理', group: '业务管理' } },
   { path: '/workers', name: 'workers', component: () => import('@/views/insured/WorkersView.vue'), meta: { title: '参保员工管理', group: '业务管理' } },
   { path: '/work-relations', name: 'workRelations', component: () => import('@/views/insured/WorkRelationsView.vue'), meta: { title: '劳动关系管理', group: '业务管理' } },
+  { path: '/timeliness', name: 'timeliness', component: () => import('@/views/timeliness/TimelinessView.vue'), meta: { title: '参停保及时率', group: '业务管理' } },
   { path: '/agents', name: 'agents', component: () => import('@/views/agents/AgentsView.vue'), meta: { title: '业务员管理', group: '业务管理', adminOnly: true } },
   { path: '/insurance', name: 'insurance', component: () => import('@/views/plans/ProductsView.vue'), meta: { title: '保险产品管理', group: '产品与保司', adminOnly: true } },
   { path: '/policy', name: 'policy', component: () => import('@/views/policies/PolicyListView.vue'), meta: { title: '保单管理', group: '产品与保司' } },

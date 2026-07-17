@@ -584,3 +584,54 @@ export interface ProviderStatus {
   email: boolean
   payment: boolean
 }
+
+/** v4.2 §13.4 及时率统计卡片。比率在无应办事件时为 null，不是 0 —— 空项目既不完美也不糟糕。 */
+export interface TimelinessSummary {
+  enrollment_due: number
+  enrollment_timely: number
+  enrollment_late: number
+  enrollment_missing: number
+  termination_due: number
+  termination_timely: number
+  termination_premature: number
+  termination_late: number
+  termination_missing: number
+  enrollment_rate: number | null
+  termination_rate: number | null
+  composite_rate: number | null
+  feedback_due: number
+  feedback_timely: number
+  feedback_rate: number | null
+  operator_attributable_due: number
+  operator_attributable_rate: number | null
+  coverage_gap_seconds: number
+  excess_premium: number
+  early_premium: number
+}
+
+export interface TimelinessDetail {
+  id: number
+  employment_fact_id: number
+  employment_fact_revision_no: number
+  operation_type: string
+  enterprise_id: number
+  actual_employer_id: number
+  person_id: number | null
+  responsible_user_id: number | null
+  actual_business_at: string | null
+  expected_coverage_at: string | null
+  actual_coverage_at: string | null
+  timeliness_status: string
+  delay_seconds: number
+  early_seconds: number
+  coverage_gap_seconds: number
+  excess_premium: number
+  early_premium: number
+  feedback_status: string
+  feedback_deadline_at: string | null
+  responsibility_reason: string
+  responsibility_evidence: Record<string, unknown>
+  product_rule_version: number
+  calculation_version: number
+  calculated_at: string | null
+}
