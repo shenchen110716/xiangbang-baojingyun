@@ -32,6 +32,7 @@ from .timeliness_engine import (
     Coverage, EnrollmentInput, TerminationInput, Verdict,
     judge_enrollment, judge_feedback, judge_termination, summarise,
 )
+from .timeliness_responsibility import attribute, primary_manager_at
 
 __all__ = [
     "serialize", "amount",
@@ -55,4 +56,5 @@ __all__ = [
     "feedback_deadline",
     "Coverage", "EnrollmentInput", "TerminationInput", "Verdict",
     "judge_enrollment", "judge_termination", "judge_feedback", "summarise",
+    "attribute", "primary_manager_at",
 ]

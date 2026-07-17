@@ -54,6 +54,17 @@
 
 待 Task 6 阶段门槛填写。
 
+## 实施中发现的跨阶段隐患
+
+`UserEmployerScope.assigned_at/revoked_at`（Phase 1 及更早的全部 9 个模型文件）声明为
+**无时区** `DateTime`，存 UTC 裸值；而 Phase 2/3 的时间列声明为 `DateTime(timezone=True)`。
+两者直接比较会抛 `can't compare offset-naive and offset-aware datetimes`，在 SQL 条件里
+更糟——不会报错，而是比较两种不同表示，静默出错。
+
+本阶段在 `timeliness_responsibility._scope_frame()` 做显式桥接并保留注释标明接缝，
+**未改写历史模型**（改遍 9 个文件风险大且超出本阶段范围）。这是全仓范围的隐患，
+建议单独立项统一，否则每个跨 Phase 1/2 边界的新查询都要重新踩一次。
+
 ## 风险与阻塞
 
 - **PostgreSQL 验证门槛尚未就绪**：`scripts/pg_migration_check.py` 已入库但因缺少 Neon
