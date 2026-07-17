@@ -104,7 +104,14 @@ def enterprise_admins(item_id: int, user: User = Depends(current_user), session:
 def add_enterprise_admin(item_id: int, data: AgentIn, user: User = Depends(current_user), session: Session = Depends(db)):
     if not session.get(Enterprise, item_id): raise HTTPException(404, "投保单位不存在")
     if session.scalar(select(User).where(User.username == data.username)): raise HTTPException(409, "账号已存在")
-    item=User(username=data.username,password_hash=pwd.hash(data.password),name=data.name,phone=data.phone,role="enterprise",enterprise_id=item_id);session.add(item);session.commit();session.refresh(item);audit(session,user,"create","enterprise_admin",str(item.id));return {"id":item.id,"username":item.username,"name":item.name,"phone":item.phone,"active":item.active}
+    # The first admin created for an enterprise is its owner; without this the
+    # authoritative is_enterprise_owner() returns False, denying them operator
+    # management and every employer-scoped read. A later admin is a project
+    # manager — one active owner per enterprise (mirrors seed.py's invariant and
+    # the single-primary-manager design).
+    has_owner = session.scalar(select(User.id).where(User.enterprise_id == item_id, User.role == "enterprise", User.is_owner.is_(True)).limit(1)) is not None
+    is_owner = not has_owner
+    item=User(username=data.username,password_hash=pwd.hash(data.password),name=data.name,phone=data.phone,role="enterprise",enterprise_id=item_id,is_owner=is_owner,enterprise_role="owner" if is_owner else "project_manager");session.add(item);session.commit();session.refresh(item);audit(session,user,"create","enterprise_admin",str(item.id));return {"id":item.id,"username":item.username,"name":item.name,"phone":item.phone,"active":item.active,"is_owner":item.is_owner,"enterprise_role":item.enterprise_role}
 
 @router.get("/enterprises/{item_id}/products")
 def enterprise_products(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
