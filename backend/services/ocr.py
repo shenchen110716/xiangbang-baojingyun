@@ -57,3 +57,35 @@ def recognize_id_card(image: bytes) -> dict:
         result.setdefault("message", "")
         return result
     return {**_MOCK, "mock": True, "message": "模拟识别结果，请核对后再提交（配置真实 OCR 后自动识别）"}
+
+
+def _call_real_amount(url: str, image: bytes) -> float:
+    payload = {
+        "app_id": settings.get("OCR_APP_ID"),
+        "app_key": settings.get("OCR_APP_KEY"),
+        "image_base64": base64.b64encode(image).decode(),
+        "type": "invoice",
+    }
+    body = json.dumps(payload, ensure_ascii=False).encode()
+    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=15) as res:
+        data = json.loads(res.read() or "{}")
+    src = data.get("data", data)
+    raw = src.get("amount") or src.get("total") or src.get("Amount") or src.get("total_amount") or 0
+    try:
+        return round(float(str(raw).replace(",", "").replace("¥", "").strip()), 2)
+    except (TypeError, ValueError):
+        raise OcrError("未能从票据识别出金额，请手动填写")
+
+
+def recognize_receipt_amount(image: bytes) -> dict:
+    """识别转账回单/发票金额，返回 {amount, mock, message}，供充值时自动带出金额。
+    识别值仅作预填，充值到账仍由平台人工确认（自动入账不绕过审核）。"""
+    if not settings.get_bool("OCR_ENABLED"):
+        raise OcrError("票据识别未启用，请联系平台在「系统设置」中开启 OCR")
+    if not image:
+        raise OcrError("未收到图片")
+    url = settings.get("OCR_PROVIDER_URL")
+    if url and provider_mode() == "real":
+        return {"amount": _call_real_amount(url, image), "mock": False, "message": ""}
+    return {"amount": 5000.0, "mock": True, "message": "模拟识别金额，请核对后再提交（配置真实 OCR 后自动识别）"}
