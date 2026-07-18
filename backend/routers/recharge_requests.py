@@ -15,9 +15,16 @@ from ..core.file_tokens import make_download_token, verify_download_token
 from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import Enterprise, RechargeRequest, User
-from ..services import get_or_create_premium_account, notify_enterprise, post_ledger_entry, resolve_account_for_insurer, serialize
+from ..services import get_or_create_premium_account, notify_enterprise, post_ledger_entry, recharge_payment_account_view, resolve_account_for_insurer, serialize
 
 router = APIRouter(prefix="/api", tags=["recharge-requests"])
+
+
+@router.get("/recharge/payment-account", dependencies=[Depends(require_role("admin", "enterprise", detail="无权查看收款账户"))])
+def recharge_payment_account(account_type: str = Query(...), insurer: str = Query(""), session: Session = Depends(db)):
+    """发起充值时展示"往哪个账户转账"：保费按保司、使用费按平台使用费收款账户解析。
+    企业端也可访问（现有收款账户管理接口仅限管理员），未配置返回 null。"""
+    return recharge_payment_account_view(session, account_type, insurer)
 
 
 def _recharge_dict(item: RechargeRequest, session: Session) -> dict:

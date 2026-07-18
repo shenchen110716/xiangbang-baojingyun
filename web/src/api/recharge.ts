@@ -5,6 +5,21 @@ export function listInsurerAccounts() {
   return client.get<InsurerAccount[]>('/insurer-accounts').then((r) => r.data)
 }
 
+export interface RechargePaymentAccount {
+  label: string
+  bank_name: string
+  account_no: string
+  account_holder: string
+  insurers: string[]
+}
+
+// 发起充值时展示的收款账户；企业端也可访问。未配置返回 null。
+export function getRechargePaymentAccount(account_type: 'premium' | 'usage', insurer = '') {
+  return client
+    .get<RechargePaymentAccount | null>('/recharge/payment-account', { params: { account_type, insurer } })
+    .then((r) => r.data)
+}
+
 export function createInsurerAccount(data: { label: string; bank_name: string; account_no: string; account_holder: string }) {
   return client.post<InsurerAccount>('/insurer-accounts', data).then((r) => r.data)
 }

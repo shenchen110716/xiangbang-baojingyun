@@ -5,12 +5,44 @@ from ..models import EnterprisePremiumAccount, InsurerAccount, InsurerAccountLin
 from .serialization import amount, serialize
 
 
+# 平台使用费没有"保司"，但它同样需要一个收款账户告诉企业往哪里转账。为了不新建
+# 一张表/一列（免迁移），复用 InsurerAccountLink：用这个保留键把某个收款账户标记
+# 为"平台使用费收款账户"。管理员在收款账户管理里用这个保司名绑定即可。
+PLATFORM_USAGE_INSURER_KEY = "平台使用费"
+
+
 def resolve_account_for_insurer(session: Session, insurer: str) -> InsurerAccount | None:
     link = session.scalar(select(InsurerAccountLink).where(InsurerAccountLink.insurer == insurer))
     if not link:
         return None
     account = session.get(InsurerAccount, link.account_id)
     return account if account and account.status == "active" else None
+
+
+def usage_payment_account(session: Session) -> InsurerAccount | None:
+    """平台使用费的收款账户（通过保留键映射解析），未配置则 None。"""
+    return resolve_account_for_insurer(session, PLATFORM_USAGE_INSURER_KEY)
+
+
+def recharge_payment_account_view(session: Session, account_type: str, insurer: str = "") -> dict | None:
+    """企业/管理员发起充值时要展示的收款账户（户名/开户行/账号），按账户类型解析：
+    保费按所选保司，使用费按平台使用费保留键。未配置返回 None，前端提示联系平台。"""
+    if account_type == "usage":
+        account = usage_payment_account(session)
+    elif account_type == "premium" and insurer.strip():
+        account = resolve_account_for_insurer(session, insurer.strip())
+    else:
+        account = None
+    if not account:
+        return None
+    return {
+        "label": account.label,
+        "bank_name": account.bank_name,
+        "account_no": account.account_no,
+        "account_holder": account.account_holder,
+        # 共用账户下也一并展示，但隐藏内部的平台使用费保留键。
+        "insurers": [i for i in insurers_for_account(session, account.id) if i != PLATFORM_USAGE_INSURER_KEY],
+    }
 
 
 def insurers_for_account(session: Session, account_id: int) -> list[str]:
