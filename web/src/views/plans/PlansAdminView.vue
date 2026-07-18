@@ -74,6 +74,8 @@ const linkForm = reactive({ insurer: '', account_id: null as number | null })
 // 平台使用费收款账户复用同一张映射表（免迁移），用固定保留键绑定。
 const PLATFORM_USAGE_KEY = '平台使用费'
 const linkKind = ref<'premium' | 'usage'>('premium')
+// 绑定保司时从保险产品里的保险公司去重下拉选择，避免手填与产品名称不一致（导致保单匹配不上）。
+const insurerOptions = computed(() => [...new Set(list.value.map((p) => p.insurer).filter((v): v is string => !!v))])
 function onLinkKindChange() {
   linkForm.insurer = linkKind.value === 'usage' ? PLATFORM_USAGE_KEY : ''
 }
@@ -346,8 +348,11 @@ async function submitTier() {
             <el-radio-button value="usage">平台使用费</el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item v-if="linkKind === 'premium'" label="保司名称" required>
-          <el-input v-model="linkForm.insurer" placeholder="需与保险产品里的保险公司名称一致" />
+        <el-form-item v-if="linkKind === 'premium'" label="保险公司" required>
+          <el-select v-model="linkForm.insurer" filterable placeholder="请选择保险公司（取自保险产品）" style="width: 100%">
+            <el-option v-for="ins in insurerOptions" :key="ins" :label="ins" :value="ins" />
+          </el-select>
+          <div class="muted" style="font-size: 12px; line-height: 1.5; margin-top: 4px">从已录入的保险产品中选择，确保与保单的保险公司完全一致。</div>
         </el-form-item>
         <el-form-item v-else label="说明">
           <span class="muted">绑定为平台使用费收款账户后，企业充值"使用费"时会看到该收款账户。</span>
