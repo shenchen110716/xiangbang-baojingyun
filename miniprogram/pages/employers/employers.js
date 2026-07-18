@@ -9,7 +9,7 @@ Page({
   },
   add() { wx.navigateTo({ url: '/pages/employer-edit/employer-edit' }); },
   edit(e) { wx.navigateTo({ url: `/pages/employer-edit/employer-edit?id=${e.currentTarget.dataset.id}` }); },
-  remove(e) { const id = e.currentTarget.dataset.id; wx.showModal({ title: '删除工作单位', content: '已关联岗位的单位不能删除，可改为暂停使用。确认继续？', confirmColor: '#d94357', success: (res) => res.confirm && app.request(`/actual-employers/${id}`, { method: 'DELETE' }).then(() => { wx.showToast({ title: '已删除' }); this.load(); }) }); },
+  remove(e) { const id = e.currentTarget.dataset.id; wx.showModal({ title: '删除工作单位', content: '已关联岗位的单位不能删除，可改为暂停使用。确认继续？', confirmColor: '#dc2626', success: (res) => res.confirm && app.request(`/actual-employers/${id}`, { method: 'DELETE' }).then(() => { wx.showToast({ title: '已删除' }); this.load(); }) }); },
   toggle(e) {
     const item = this.data.items.find((row) => row.id === e.currentTarget.dataset.id); if (!item) return;
     const target = item.status === 'active' ? 'paused' : 'active';

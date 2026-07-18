@@ -29,7 +29,7 @@ Page({
       wx.navigateTo({ url: `/pages/employee-edit/employee-edit?id=${item.id}` });
       return;
     }
-    wx.showModal({ title: '申请恢复参保', content: '恢复后将重新进入人工审核。', confirmColor: '#3157e5', success: (res) => {
+    wx.showModal({ title: '申请恢复参保', content: '恢复后将重新进入人工审核。', confirmColor: '#1d4ed8', success: (res) => {
       if (!res.confirm) return; this.setData({ operating: true });
       app.request(`/insured/${item.id}/status?status=pending`, { method: 'PATCH' }).then(() => { wx.showToast({ title: '已提交审核' }); this.setData({ operating: false }); this.load(); }).catch(() => this.setData({ operating: false }));
     } });
