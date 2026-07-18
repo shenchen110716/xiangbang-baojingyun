@@ -322,6 +322,7 @@ export interface Operator {
   enterprise_role: EnterpriseRole | null
   is_owner: boolean
   active: boolean
+  has_data?: boolean
   created_at: string
 }
 

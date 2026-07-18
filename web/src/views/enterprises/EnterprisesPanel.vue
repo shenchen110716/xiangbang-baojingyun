@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as enterprisesApi from '@/api/enterprises'
 import * as agentsApi from '@/api/agents'
@@ -13,6 +14,7 @@ import StatTile from '@/components/StatTile.vue'
 import TablePagination from '@/components/TablePagination.vue'
 import { usePagedList } from '@/composables/usePagedList'
 
+const router = useRouter()
 const loading = ref(true)
 const list = ref<Enterprise[]>([])
 const agents = ref<Agent[]>([])
@@ -92,27 +94,9 @@ async function submitRecharge() {
   }
 }
 
-// ---- admins ----
-const adminsVisible = ref(false)
-const adminsTarget = ref<Enterprise | null>(null)
-const adminsList = ref<Array<{ id: number; username: string; name: string; phone: string; active: boolean }>>([])
-const newAdmin = reactive({ username: '', password: '123456', name: '', phone: '' })
-async function openAdmins(item: Enterprise) {
-  adminsTarget.value = item
-  Object.assign(newAdmin, { username: '', password: '123456', name: '', phone: '' })
-  adminsVisible.value = true
-  adminsList.value = await enterprisesApi.listEnterpriseAdmins(item.id)
-}
-async function submitNewAdmin() {
-  if (!adminsTarget.value || !newAdmin.username || !newAdmin.password || !newAdmin.name) { ElMessage.error('请填写账号、密码、姓名'); return }
-  try {
-    await enterprisesApi.createEnterpriseAdmin(adminsTarget.value.id, { ...newAdmin })
-    ElMessage.success('管理员账号已创建')
-    adminsList.value = await enterprisesApi.listEnterpriseAdmins(adminsTarget.value.id)
-    Object.assign(newAdmin, { username: '', password: '123456', name: '', phone: '' })
-  } catch (e) {
-    ElMessage.error((e as Error).message)
-  }
+// ---- accounts: 单位账号（主管/操作员）统一到「单位账号管理」页管理 ----
+function goManageAccounts(item: Enterprise) {
+  router.push({ name: 'operators', query: { enterprise_id: item.id } })
 }
 
 // ---- products (read-only) ----
@@ -187,7 +171,7 @@ async function removeEnterprise(item: Enterprise) {
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-button link type="primary" size="small" @click="openRecharge(row)">充值</el-button>
-            <el-button link type="primary" size="small" @click="openAdmins(row)">管理员</el-button>
+            <el-button link type="primary" size="small" @click="goManageAccounts(row)">管理账号</el-button>
             <el-button link type="primary" size="small" @click="openProducts(row)">参保产品</el-button>
             <el-button link type="danger" size="small" @click="removeEnterprise(row)">删除</el-button>
           </template>
@@ -247,28 +231,6 @@ async function removeEnterprise(item: Enterprise) {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="adminsVisible" title="管理员账号" width="560px">
-      <el-table :data="adminsList" size="small" style="margin-bottom: 16px">
-        <el-table-column prop="username" label="账号" />
-        <el-table-column prop="name" label="姓名" />
-        <el-table-column prop="phone" label="手机号" />
-        <el-table-column label="状态" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.active ? 'success' : 'info'" size="small">{{ row.active ? '启用' : '停用' }}</el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-form :model="newAdmin" label-width="90px">
-        <el-form-item label="登录账号" required><el-input v-model="newAdmin.username" /></el-form-item>
-        <el-form-item label="初始密码" required><el-input v-model="newAdmin.password" /></el-form-item>
-        <el-form-item label="姓名" required><el-input v-model="newAdmin.name" /></el-form-item>
-        <el-form-item label="手机号"><el-input v-model="newAdmin.phone" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="adminsVisible = false">关闭</el-button>
-        <el-button type="primary" @click="submitNewAdmin">新增管理员</el-button>
-      </template>
-    </el-dialog>
 
     <DetailModal v-model="productsVisible" title="参保产品">
       <el-table :data="productsList" size="small">
