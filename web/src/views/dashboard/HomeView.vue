@@ -34,7 +34,7 @@ const peopleDonutOption = computed(() => {
   return {
     tooltip: { trigger: 'item' },
     legend: { bottom: 0, textStyle: { fontSize: 11 } },
-    color: ['#5b6ff3', '#f39b50', '#c3c9dc'],
+    color: ['#1d4ed8', '#d97706', '#cbd5e1'],
     series: [
       {
         type: 'pie',
@@ -68,7 +68,7 @@ const alertBarOption = computed(() => {
         type: 'bar',
         data: sorted.map((a) => ({
           value: Math.min(a.days_left, 30),
-          itemStyle: { color: a.level === 'critical' ? '#ef6e76' : '#f39b50' },
+          itemStyle: { color: a.level === 'critical' ? '#dc2626' : '#d97706' },
         })),
         barMaxWidth: 18,
       },

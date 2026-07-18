@@ -193,12 +193,11 @@ async function openPasswordChange() {
 .app-shell {
   display: flex;
   min-height: 100vh;
-  background: var(--el-fill-color-light);
+  background: var(--el-bg-color-page);
 }
 .sidebar {
   width: 240px;
-  background: #fff;
-  border-right: 1px solid var(--el-border-color-lighter);
+  background: #0f172a;
   display: flex;
   flex-direction: column;
 }
@@ -209,17 +208,19 @@ async function openPasswordChange() {
   gap: 10px;
   padding: 0 20px;
   font-weight: 700;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 .logo {
-  background: linear-gradient(135deg, #6576f6, #465bea);
+  background: var(--app-brand-gradient);
   color: #fff;
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: 9px;
   display: grid;
   place-items: center;
   font-weight: 700;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
 }
 .brand-title {
   font-size: 15px;
@@ -228,7 +229,7 @@ async function openPasswordChange() {
   margin: 14px;
   padding: 10px;
   border-radius: 10px;
-  background: var(--el-fill-color-light);
+  background: rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
   gap: 9px;
@@ -237,8 +238,8 @@ async function openPasswordChange() {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: #e3e7ff;
-  color: #5769e8;
+  background: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
   display: grid;
   place-items: center;
   font-size: 12px;
@@ -247,24 +248,27 @@ async function openPasswordChange() {
   width: 22px;
   height: 22px;
   font-size: 10px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
 }
 .account-info {
   display: grid;
   font-size: 12px;
+  color: #e2e8f0;
 }
 .account-info small {
-  color: var(--el-text-color-secondary);
+  color: #94a3b8;
 }
 .account-card.clickable {
   cursor: pointer;
 }
 .account-card.clickable:hover {
-  background: var(--el-fill-color);
+  background: rgba(255, 255, 255, 0.1);
 }
 .switch-hint {
   margin-left: auto;
   font-size: 11px;
-  color: var(--el-color-primary);
+  color: #93c5fd;
 }
 .switch-list {
   display: grid;
@@ -296,11 +300,31 @@ async function openPasswordChange() {
   flex: 1;
   border-right: none;
   overflow: auto;
+  background: transparent;
+  padding: 6px 10px 20px;
 }
 .nav-group-label {
-  padding: 14px 20px 4px;
+  padding: 16px 12px 6px;
   font-size: 11px;
-  color: var(--el-text-color-placeholder);
+  letter-spacing: 0.04em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+.side-nav :deep(.el-menu-item) {
+  height: 42px;
+  line-height: 42px;
+  margin: 2px 0;
+  border-radius: 8px;
+  color: #cbd5e1;
+}
+.side-nav :deep(.el-menu-item:hover) {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+.side-nav :deep(.el-menu-item.is-active) {
+  background: var(--el-color-primary);
+  color: #fff;
+  font-weight: 600;
 }
 .nav-badge {
   margin-left: 6px;

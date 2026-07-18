@@ -1,15 +1,44 @@
-/* Brand palette carried forward from the legacy styles.css :root block,
-   remapped onto Element Plus's CSS custom properties. */
+/* 响帮帮保经云 · 设计系统 v5 —— 专业金融蓝
+   统一三端基调：稳重、可信、克制。Web 端所有 Element Plus 组件（按钮、
+   链接、标签、菜单选中、表格）都通过下面这组 CSS 变量换肤，改一处、全站传导。 */
 :root {
-  --el-color-primary: #5b6ff3;
-  --el-color-success: #27b688;
-  --el-color-warning: #f39b50;
-  --el-color-danger: #ef6e76;
-  --el-text-color-primary: #20283f;
-  --el-text-color-regular: #20283f;
-  --el-text-color-secondary: #8991a5;
-  --el-border-color-lighter: #e9ecf3;
-  --el-fill-color-light: #f6f7fb;
+  /* 主色阶（由 #1D4ED8 按 Element Plus 混白比例推导，保证组件各态协调） */
+  --el-color-primary: #1d4ed8;
+  --el-color-primary-light-3: #6183e4;
+  --el-color-primary-light-5: #8ea7ec;
+  --el-color-primary-light-7: #bbcaf3;
+  --el-color-primary-light-8: #d2dcf7;
+  --el-color-primary-light-9: #eaf0fd;
+  --el-color-primary-dark-2: #1e40af;
+
+  /* 语义色 */
+  --el-color-success: #059669;
+  --el-color-warning: #d97706;
+  --el-color-danger: #dc2626;
+  --el-color-error: #dc2626;
+  --el-color-info: #64748b;
+
+  /* 中性色 */
+  --el-text-color-primary: #1e293b;
+  --el-text-color-regular: #334155;
+  --el-text-color-secondary: #64748b;
+  --el-text-color-placeholder: #94a3b8;
+  --el-border-color: #e2e8f0;
+  --el-border-color-light: #e8edf3;
+  --el-border-color-lighter: #eef2f7;
+  --el-border-color-extra-light: #f1f5f9;
+  --el-fill-color: #eef2f7;
+  --el-fill-color-light: #f4f7fb;
+  --el-fill-color-lighter: #f8fafc;
+  --el-bg-color-page: #f1f5f9;
+
+  /* 圆角与阴影（全局统一） */
+  --el-border-radius-base: 8px;
+  --app-radius-card: 12px;
+  --app-shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.05);
+
+  /* 品牌渐变（外壳 logo、首图） */
+  --app-brand-gradient: linear-gradient(135deg, #1e40af 0%, #2563eb 55%, #3b82f6 100%);
 }
 
 * {
@@ -18,14 +47,61 @@
 
 body {
   margin: 0;
-  font-family: 'Manrope', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
   font-size: 13px;
   color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 金额、数字列等宽对齐，表格读数更整齐 */
+.el-table,
+.el-statistic__number,
+.amount,
+.mono-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 卡片统一质感 */
+.el-card {
+  border-radius: var(--app-radius-card) !important;
+  border-color: var(--el-border-color-lighter) !important;
+  box-shadow: var(--app-shadow-card) !important;
+}
+
+/* 表格：更清爽的表头与描边 */
+.el-table th.el-table__cell {
+  background: var(--el-fill-color-lighter) !important;
+  color: var(--el-text-color-regular);
+  font-weight: 600;
+}
+
+/* 主按钮更沉稳的悬停/按下 */
+.el-button--primary {
+  --el-button-hover-bg-color: #2563eb;
+  --el-button-active-bg-color: var(--el-color-primary-dark-2);
 }
 
 .page-placeholder {
   background: #fff;
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 9px;
+  border-radius: var(--app-radius-card);
   padding: 60px 0;
+}
+
+/* 细滚动条，减少视觉噪音 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }
