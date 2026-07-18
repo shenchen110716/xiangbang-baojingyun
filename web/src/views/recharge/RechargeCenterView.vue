@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as rechargeApi from '@/api/recharge'
 import { listEnterprises } from '@/api/enterprises'
@@ -12,6 +13,7 @@ import TablePagination from '@/components/TablePagination.vue'
 import { usePagedList } from '@/composables/usePagedList'
 
 const auth = useAuthStore()
+const route = useRoute()
 const loading = ref(true)
 const requests = ref<RechargeRequest[]>([])
 const insurerAccountLinks = ref<InsurerAccountLink[]>([])
@@ -34,7 +36,20 @@ async function load() {
     loading.value = false
   }
 }
-onMounted(load)
+// Deep-link from a dashboard balance / alert: open the recharge dialog already
+// pointed at the enterprise and account that needs topping up, so the click
+// lands on the exact thing to fix instead of a blank form.
+onMounted(async () => {
+  await load()
+  const q = route.query
+  if (q.enterprise_id || q.account_type) {
+    openSubmit({
+      enterprise_id: q.enterprise_id ? Number(q.enterprise_id) : undefined,
+      account_type: q.account_type === 'usage' ? 'usage' : q.account_type === 'premium' ? 'premium' : undefined,
+      insurer: typeof q.insurer === 'string' ? q.insurer : undefined,
+    })
+  }
+})
 
 const { page, pageSize, total: pagedTotal, paged } = usePagedList(requests)
 const pendingCount = computed(() => requests.value.filter((r) => r.status === 'pending').length)
@@ -50,8 +65,14 @@ const matchedAccount = computed(() => {
   const link = insurerAccountLinks.value.find((l) => l.insurer === submitForm.insurer.trim())
   return link ? insurerAccounts.value.find((a) => a.id === link.account_id) ?? null : null
 })
-function openSubmit() {
-  Object.assign(submitForm, { enterprise_id: auth.isEnterprise() ? auth.user?.enterprise_id ?? null : null, account_type: 'premium', insurer: '', amount: 0, file: null })
+function openSubmit(prefill?: { enterprise_id?: number; account_type?: 'premium' | 'usage'; insurer?: string }) {
+  Object.assign(submitForm, {
+    enterprise_id: prefill?.enterprise_id ?? (auth.isEnterprise() ? auth.user?.enterprise_id ?? null : null),
+    account_type: prefill?.account_type ?? 'premium',
+    insurer: prefill?.insurer ?? '',
+    amount: 0,
+    file: null,
+  })
   submitVisible.value = true
 }
 function handleFileChange(e: Event) {
@@ -112,7 +133,7 @@ async function rejectRequest(row: RechargeRequest) {
 
     <PageCard title="充值记录" :count="requests.length">
       <template #actions>
-        <el-button type="primary" @click="openSubmit">＋ 发起充值</el-button>
+        <el-button type="primary" @click="openSubmit()">＋ 发起充值</el-button>
       </template>
       <el-table :data="paged" size="small">
         <el-table-column v-if="auth.isAdmin()" prop="enterprise_name" label="投保单位" min-width="140" />
