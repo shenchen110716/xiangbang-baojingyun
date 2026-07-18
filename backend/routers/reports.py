@@ -244,7 +244,7 @@ def billing(user: User = Depends(current_user), session: Session = Depends(db)):
         zeroed={key:0 if key != "as_of_date" else today.isoformat() for key in common}
         for acc in premium_accounts_for_enterprise(session, x.id):
             rows.append({"id":x.id,"enterprise_name":x.name,"account":f"保费账户（{acc['label'] or '未命名账户'}）","account_type":"premium","account_id":acc["account_id"],"balance":acc["balance"],"status":"正常","daily_rate":0,"estimated_daily":0,"monthly_estimate":0,**zeroed})
-        rows.append({"id":x.id,"enterprise_name":x.name,"account":"平台使用费账户","balance":x.usage_balance,"status":"正常","daily_rate":rate,"estimated_daily":amount(month["active_people"]*rate),"monthly_estimate":amount(month["person_days"]*rate),**common})
+        rows.append({"id":x.id,"enterprise_name":x.name,"account":"平台使用费账户","balance":x.usage_balance,"recharged":amount(x.usage_balance),"available":amount(x.usage_balance-common["total_accrued"]),"status":"正常","daily_rate":rate,"estimated_daily":amount(month["active_people"]*rate),"monthly_estimate":amount(month["person_days"]*rate),**common})
     return rows
 
 @router.get("/policies")

@@ -10,7 +10,7 @@ from ..core.rbac import require_role
 from ..core.security import current_user, pwd
 from ..models import AgentCommission, Enterprise, InsurancePlan, InsuredPerson, LedgerEntry, Policy, User, WorkPosition
 from ..schemas import AgentIn, EnterpriseIn, EnterpriseUpdate, RechargeIn
-from ..services import ledger_dict, post_ledger_entry, premium_accounts_for_enterprise, pricing_snapshot, reconcile_enterprise_ledger, serialize, strip_internal_pricing
+from ..services import ledger_dict, post_ledger_entry, premium_accounts_for_enterprise, pricing_snapshot, reconcile_enterprise_ledger, serialize, strip_internal_pricing, usage_account_view
 
 router = APIRouter(prefix="/api", tags=["enterprises"])
 
@@ -25,7 +25,7 @@ def enterprises(q: str = "", status_filter: Optional[str] = Query(None, alias="s
     for x in session.scalars(stmt):
         linked = session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id == x.id).order_by(AgentCommission.id.asc())) if not x.agent_id else None
         agent_id = x.agent_id or (linked.agent_id if linked else None)
-        item=serialize(x); agent=session.get(User,agent_id) if agent_id else None; item["agent_id"]=agent_id; item["agent_name"]=agent.name if agent else "未分配"; item["premium_balance_total"]=sum(row["balance"] for row in premium_accounts_for_enterprise(session, x.id)); result.append(item)
+        item=serialize(x); agent=session.get(User,agent_id) if agent_id else None; item["agent_id"]=agent_id; item["agent_name"]=agent.name if agent else "未分配"; item["premium_balance_total"]=sum(row["balance"] for row in premium_accounts_for_enterprise(session, x.id)); uview=usage_account_view(session,x); item["usage_recharged"]=uview["recharged"]; item["usage_consumed"]=uview["consumed"]; item["usage_available"]=uview["available"]; result.append(item)
     return result
 
 @router.post("/enterprises", dependencies=[Depends(require_role("admin", detail="仅总后台可新增投保单位"))])

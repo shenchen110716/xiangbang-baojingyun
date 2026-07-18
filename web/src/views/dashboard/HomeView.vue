@@ -94,9 +94,9 @@ const alertBarOption = computed(() => {
         @click="data && data.pending_terminations_count > 0 && router.push({ name: 'pendingTerminations' })"
       />
       <StatTile
-        label="服务费账户余额"
-        :value="data ? money(data.usage_balance) : '—'"
-        hint="点击去充值"
+        label="服务费可用余额"
+        :value="data ? money(data.usage_available) : '—'"
+        :hint="data ? `充值 ${money(data.usage_recharged)} · 已用 ${money(data.usage_consumed)}` : '点击去充值'"
         hint-type="info"
         style="cursor: pointer"
         @click="router.push({ name: 'recharge', query: { account_type: 'usage' } })"

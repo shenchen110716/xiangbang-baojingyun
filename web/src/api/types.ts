@@ -26,6 +26,9 @@ export interface Enterprise {
   premium_balance: number
   premium_balance_total?: number
   usage_balance: number
+  usage_recharged?: number
+  usage_consumed?: number
+  usage_available?: number
   usage_fee_daily: number
   alert_days: number
   created_at: string
@@ -353,6 +356,8 @@ export interface BillingRow {
   account_type?: 'premium' | 'usage'
   account_id?: number
   balance: number
+  recharged?: number
+  available?: number
   status: string
   daily_rate: number
   estimated_daily: number
@@ -404,6 +409,9 @@ export interface DashboardData {
   claims_open: number
   premium_accounts: PremiumAccountRow[]
   usage_balance: number
+  usage_recharged: number
+  usage_consumed: number
+  usage_available: number
   pending_terminations_count: number
   balance_alerts: Array<{
     enterprise_id: number

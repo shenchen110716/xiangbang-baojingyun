@@ -1,7 +1,7 @@
 from .serialization import serialize, amount
 from .pricing import plan_price_for_class, pricing_snapshot, plan_dict, validate_commission_price, strip_internal_pricing
 from .commissions import commission_accrual, commission_dict, agent_commission_rows, agent_commission_summary
-from .accruals import billable_date_range, last_billable_date, period_amount, usage_person_days
+from .accruals import billable_date_range, last_billable_date, period_amount, usage_person_days, usage_account_view
 from .policies import policy_dict
 from .ledger import post_ledger_entry, ledger_dict, reconcile_enterprise_ledger
 from .participation_lock import require_usage_funded
@@ -50,7 +50,7 @@ __all__ = [
     "serialize", "amount",
     "plan_price_for_class", "pricing_snapshot", "plan_dict", "validate_commission_price", "strip_internal_pricing",
     "commission_accrual", "commission_dict", "agent_commission_rows", "agent_commission_summary",
-    "billable_date_range", "last_billable_date", "period_amount", "usage_person_days",
+    "billable_date_range", "last_billable_date", "period_amount", "usage_person_days", "usage_account_view",
     "policy_dict",
     "post_ledger_entry", "ledger_dict", "reconcile_enterprise_ledger", "require_usage_funded",
     "affected_people_for_account", "scan_premium_shortfalls",

@@ -5,17 +5,20 @@ from sqlalchemy.orm import Session
 
 from ..core.business_time import BUSINESS_TIMEZONE, business_now
 from ..models import AuditLog, Enterprise, User
+from .accruals import usage_account_view
 from .notify import notify_enterprise
 
 
 def require_usage_funded(session: Session, enterprise: Enterprise, user: User) -> None:
     """Real-time usage-fee gate for participation-changing endpoints. No
-    caching, no precomputation — queries the live enterprise.usage_balance
-    value every call, so a just-confirmed recharge unlocks the very next
-    request with no separate "unlock" step needed.
+    caching, no precomputation — recomputes the available usage balance
+    (充值总额 − 总使用费) every call, so a just-confirmed recharge unlocks the
+    very next request with no separate "unlock" step needed.
 
+    Gating uses the same available-balance figure the three portals display,
+    so "余额不足锁定" and the number the enterprise sees never disagree.
     """
-    if enterprise.usage_balance <= 0:
+    if usage_account_view(session, enterprise)["available"] <= 0:
         _notify_lock_once_per_day(session, enterprise, user)
         raise HTTPException(403, "使用费余额不足，请先充值后再操作参停保")
 

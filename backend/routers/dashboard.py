@@ -7,7 +7,7 @@ from ..core.db import db
 from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import Claim, Enterprise, InsurancePlan, InsuredPerson, PendingTermination, Policy, PolicyMember, User, WorkPosition
-from ..services import allowed_employer_ids, amount, effective_person_status, policy_dict, premium_accounts_for_enterprise, pricing_snapshot, scan_premium_shortfalls, strip_internal_pricing, usage_person_days
+from ..services import allowed_employer_ids, amount, effective_person_status, policy_dict, premium_accounts_for_enterprise, pricing_snapshot, scan_premium_shortfalls, strip_internal_pricing, usage_account_view, usage_person_days
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
@@ -35,10 +35,12 @@ def dashboard(user: User = Depends(current_user), session: Session = Depends(db)
 
     alerts=[]
     premium_agg: dict[int, dict] = {}
+    usage_recharged_total = usage_consumed_total = usage_available_total = 0.0
     for ent in enterprises:
         if project_scoped: continue
-        today=business_today(); enterprise_active_count=usage_person_days(session,ent.id,today,today)['active_people']
-        daily_usage=enterprise_active_count*float(ent.usage_fee_daily or 0.1)
+        uview=usage_account_view(session,ent)
+        daily_usage=uview['active_people']*uview['daily_rate']
+        usage_recharged_total+=uview['recharged']; usage_consumed_total+=uview['consumed']; usage_available_total+=uview['available']
         active_policies=list(session.scalars(select(Policy).where(Policy.enterprise_id==ent.id,Policy.status=='active')))
         for row in premium_accounts_for_enterprise(session, ent.id):
             insurer_set = set(row["insurers"])
@@ -54,8 +56,8 @@ def dashboard(user: User = Depends(current_user), session: Session = Depends(db)
             premium_agg[row["account_id"]]["balance"] += row["balance"]
             if days_left <= int(ent.alert_days or 3):
                 alerts.append({'enterprise_id':ent.id,'enterprise_name':ent.name,'account':'premium','account_id':row["account_id"],'label':row["label"],'balance':row["balance"],'daily_burn':daily_premium,'days_left':round(days_left,1),'alert_days':ent.alert_days or 3,'level':'critical' if days_left<=1 else 'warning'})
-        usage_days_left=999999 if daily_usage<=0 else ent.usage_balance/daily_usage
-        if usage_days_left <= int(ent.alert_days or 3): alerts.append({'enterprise_id':ent.id,'enterprise_name':ent.name,'account':'usage','balance':ent.usage_balance,'daily_burn':daily_usage,'days_left':round(usage_days_left,1),'alert_days':ent.alert_days or 3,'level':'critical' if usage_days_left<=1 else 'warning'})
+        usage_days_left=999999 if daily_usage<=0 else uview['available']/daily_usage
+        if usage_days_left <= int(ent.alert_days or 3): alerts.append({'enterprise_id':ent.id,'enterprise_name':ent.name,'account':'usage','balance':uview['available'],'daily_burn':daily_usage,'days_left':round(usage_days_left,1),'alert_days':ent.alert_days or 3,'level':'critical' if usage_days_left<=1 else 'warning'})
 
     policy_query=session.query(Policy).filter(Policy.status=='active')
     claim_query=session.query(Claim).filter(Claim.status.not_in(['paid','closed']))
@@ -66,7 +68,7 @@ def dashboard(user: User = Depends(current_user), session: Session = Depends(db)
         scoped_people=select(InsuredPerson.id).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(WorkPosition.actual_employer_id.in_(employer_filter))
         policy_query=policy_query.join(PolicyMember,Policy.id==PolicyMember.policy_id).filter(PolicyMember.person_id.in_(scoped_people)).distinct()
         claim_query=claim_query.filter(Claim.person_id.in_(scoped_people))
-    return {"portal": "enterprise" if user.role == "enterprise" else "admin", "enterprises": len(enterprises), "people": len(people), "active_people":len(active_people), "active_policies": policy_query.count(), "pending_enterprises": session.query(Enterprise).filter(Enterprise.status == "pending").count() if not enterprise_filter else 0, "pending_people": len([x for x in people if x.status == "pending"]), "claims_open": claim_query.count(), "premium_accounts": list(premium_agg.values()), "usage_balance": 0 if project_scoped else sum(x.usage_balance for x in enterprises), "balance_alerts": alerts, "pending_terminations_count": session.query(PendingTermination).filter(PendingTermination.status == "pending").count() if user.role == "admin" else 0}
+    return {"portal": "enterprise" if user.role == "enterprise" else "admin", "enterprises": len(enterprises), "people": len(people), "active_people":len(active_people), "active_policies": policy_query.count(), "pending_enterprises": session.query(Enterprise).filter(Enterprise.status == "pending").count() if not enterprise_filter else 0, "pending_people": len([x for x in people if x.status == "pending"]), "claims_open": claim_query.count(), "premium_accounts": list(premium_agg.values()), "usage_balance": 0 if project_scoped else amount(usage_available_total), "usage_recharged": 0 if project_scoped else amount(usage_recharged_total), "usage_consumed": 0 if project_scoped else amount(usage_consumed_total), "usage_available": 0 if project_scoped else amount(usage_available_total), "balance_alerts": alerts, "pending_terminations_count": session.query(PendingTermination).filter(PendingTermination.status == "pending").count() if user.role == "admin" else 0}
 
 @router.get("/screen/products", dependencies=[Depends(require_role("admin", "enterprise", detail="业务员请在业务员门户查看本人数据"))])
 def screen_products(user: User = Depends(current_user), session: Session = Depends(db)):

@@ -167,8 +167,11 @@ async function removeEnterprise(item: Enterprise) {
         <el-table-column label="保费账户" width="110">
           <template #default="{ row }">{{ money(row.premium_balance_total) }}</template>
         </el-table-column>
-        <el-table-column label="服务费账户" width="110">
-          <template #default="{ row }">{{ money(row.usage_balance) }}</template>
+        <el-table-column label="服务费可用余额" width="130">
+          <template #default="{ row }">
+            <div>{{ money(row.usage_available ?? row.usage_balance) }}</div>
+            <small class="muted">充值 {{ money(row.usage_recharged ?? row.usage_balance) }} · 已用 {{ money(row.usage_consumed ?? 0) }}</small>
+          </template>
         </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
