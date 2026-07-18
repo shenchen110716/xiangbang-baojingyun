@@ -1,13 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { getDashboard, getScreenProducts } from '@/api/dashboard'
 import type { DashboardData, ScreenProduct } from '@/api/types'
 import { money } from '@/utils/format'
 import { VChart } from '@/utils/echarts'
 
+const router = useRouter()
 const loading = ref(true)
 const dashboard = ref<DashboardData | null>(null)
 const products = ref<ScreenProduct[]>([])
+
+// A low-balance alert on the operations screen should be one click from the
+// place that fixes it: the recharge dialog, pre-pointed at that enterprise and
+// account.
+function goRecharge(query: Record<string, string | number>) {
+  router.push({ name: 'recharge', query })
+}
 
 async function load() {
   loading.value = true
@@ -101,7 +110,7 @@ const totalPremium = computed(() => products.value.reduce((sum, p) => sum + p.pr
       <section class="panel">
         <h2>账户余额健康度</h2>
         <div v-if="dashboard?.premium_accounts.length" class="balance-list">
-          <div v-for="row in dashboard.premium_accounts" :key="row.account_id" class="balance-row">
+          <div v-for="row in dashboard.premium_accounts" :key="row.account_id" class="balance-row clickable" @click="goRecharge({ account_type: 'premium', insurer: row.insurers[0] ?? '' })">
             <span class="balance-label">{{ row.label || '未命名账户' }}<small>{{ row.insurers.join('、') }}</small></span>
             <span class="balance-amount">{{ money(row.balance) }}</span>
           </div>
@@ -111,7 +120,7 @@ const totalPremium = computed(() => products.value.reduce((sum, p) => sum + p.pr
       <section class="panel">
         <h2>低余额预警</h2>
         <div v-if="dashboard?.balance_alerts.length" class="balance-list">
-          <div v-for="alert in dashboard.balance_alerts" :key="`${alert.enterprise_id}-${alert.account}-${alert.account_id ?? ''}`" class="balance-row">
+          <div v-for="alert in dashboard.balance_alerts" :key="`${alert.enterprise_id}-${alert.account}-${alert.account_id ?? ''}`" class="balance-row clickable" @click="goRecharge({ enterprise_id: alert.enterprise_id, account_type: alert.account })">
             <span class="balance-label">{{ alert.enterprise_name }}<small>{{ alert.account === 'premium' ? (alert.label || '保费账户') : '服务费账户' }}</small></span>
             <span :class="['balance-amount', alert.level === 'critical' ? 'critical' : 'warning']">{{ alert.days_left }} 天</span>
           </div>
@@ -229,6 +238,13 @@ const totalPremium = computed(() => products.value.reduce((sum, p) => sum + p.pr
   align-items: center;
   padding: 8px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.balance-row.clickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.balance-row.clickable:hover {
+  background: rgba(91, 139, 243, 0.12);
 }
 .balance-label {
   display: flex;

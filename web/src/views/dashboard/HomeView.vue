@@ -93,7 +93,14 @@ const alertBarOption = computed(() => {
         style="cursor: pointer"
         @click="data && data.pending_terminations_count > 0 && router.push({ name: 'pendingTerminations' })"
       />
-      <StatTile label="服务费账户余额" :value="data ? money(data.usage_balance) : '—'" />
+      <StatTile
+        label="服务费账户余额"
+        :value="data ? money(data.usage_balance) : '—'"
+        hint="点击去充值"
+        hint-type="info"
+        style="cursor: pointer"
+        @click="router.push({ name: 'recharge', query: { account_type: 'usage' } })"
+      />
     </div>
 
     <PageCard title="保费账户余额" :hint="isAdmin ? '按收款账户汇总' : ''">
@@ -108,8 +115,8 @@ const alertBarOption = computed(() => {
           <template #default="{ row }">{{ money(row.balance) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="100">
-          <template #default>
-            <el-button link type="primary" size="small" @click="router.push({ name: 'recharge' })">去充值</el-button>
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="router.push({ name: 'recharge', query: { account_type: 'premium', insurer: row.insurers?.[0] } })">去充值</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -152,7 +159,7 @@ const alertBarOption = computed(() => {
         </el-table-column>
         <el-table-column label="操作" width="90">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="router.push({ name: 'billing', query: { enterprise_id: row.enterprise_id } })">
+            <el-button link type="primary" size="small" @click="router.push({ name: 'recharge', query: { enterprise_id: row.enterprise_id, account_type: row.account } })">
               去充值
             </el-button>
           </template>
