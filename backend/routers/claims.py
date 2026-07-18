@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.audit import audit
-from ..core.config import ROOT
+from ..core import storage
 from ..core.db import db
 from ..core.file_tokens import make_download_token, verify_download_token
 from ..core.rbac import require_role
@@ -129,7 +129,7 @@ async def upload_claim_document(item_id:int,doc_type:str=Form('other'),file:Uplo
     if suffix not in {'.jpg','.jpeg','.png','.heic','.pdf','.doc','.docx','.xls','.xlsx'}: raise HTTPException(400,'仅支持图片、PDF、Word、Excel材料')
     content=await file.read()
     if len(content)>20*1024*1024: raise HTTPException(400,'单个材料不能超过20MB')
-    folder=ROOT/'uploads'/'claims'/str(item_id);folder.mkdir(parents=True,exist_ok=True);stored=f'{secrets.token_hex(8)}{suffix}';(folder/stored).write_bytes(content);url=f'/uploads/claims/{item_id}/{stored}'
+    stored=f'{secrets.token_hex(8)}{suffix}';url=storage.save_bytes(f'claims/{item_id}/{stored}',content)
     doc=ClaimDocument(claim_id=item_id,name=file.filename or stored,url=url,doc_type=doc_type);session.add(doc);session.flush();session.add(ClaimTimeline(claim_id=item_id,node=item.status,action=f'上传材料：{doc.name}',note=doc_type,operator=user.name));session.commit();session.refresh(doc);audit(session,user,'upload','claim_document',str(doc.id));return _document_dict(doc)
 
 @router.get("/claims/{item_id}/documents/{document_id}/download")
@@ -140,11 +140,10 @@ def download_claim_document(item_id:int,document_id:int,token:str,expires:int,se
         raise HTTPException(403, "下载链接无效或已过期")
     document=session.get(ClaimDocument,document_id)
     if not document or document.claim_id!=item_id: raise HTTPException(404,'理赔材料不存在')
-    if document.url.startswith("http://") or document.url.startswith("https://"):
-        return RedirectResponse(document.url)
-    path=ROOT/document.url.lstrip('/')
-    if not path.is_file(): raise HTTPException(404,'文件不存在')
-    return FileResponse(path)
+    resolved=storage.resolve(document.url)
+    if not resolved: raise HTTPException(404,'文件不存在')
+    kind,ref=resolved
+    return RedirectResponse(ref) if kind=='redirect' else FileResponse(ref)
 
 @router.patch("/claims/{item_id}/documents/{document_id}", dependencies=[Depends(require_role("admin", detail="仅平台理赔人员可审核材料"))])
 def review_claim_document(item_id:int,document_id:int,data:ClaimDocumentReviewIn,user:User=Depends(current_user),session:Session=Depends(db)):

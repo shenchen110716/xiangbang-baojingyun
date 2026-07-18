@@ -26,3 +26,19 @@ services:
         value: "*"
       - key: INTEGRATION_MODE
         value: mock
+      # 上传文件持久化存储（理赔材料/岗位视频/保单/充值回单）。Render 容器磁盘是
+      # 临时的，必须改用私有对象存储（Cloudflare R2 或 S3），否则每次部署都会丢文件。
+      # 在 Render 面板把 STORAGE_BACKEND 设为 s3 并填好以下密钥后即生效；留空则回落
+      # 到本地磁盘（仅适合开发）。桶必须私有，下载经后端签名后用短时预签名 URL 重定向。
+      - key: STORAGE_BACKEND
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_REGION
+        value: auto

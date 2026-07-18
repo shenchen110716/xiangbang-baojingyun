@@ -1,4 +1,5 @@
 import secrets
+import tempfile
 from pathlib import Path
 from typing import Literal
 
@@ -7,8 +8,8 @@ from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core import storage
 from ..core.audit import audit
-from ..core.config import ROOT
 from ..core.db import db
 from ..core.file_tokens import make_download_token, verify_download_token
 from ..core.rbac import require_role
@@ -144,21 +145,19 @@ async def upload_position_video(item_id:int,file:UploadFile=File(...),file_ext:s
     if suffix not in VIDEO_SUFFIXES:
         suffix=VIDEO_SUFFIX_BY_CONTENT_TYPE.get((file.content_type or '').split(';',1)[0].lower(), requested_suffix)
     if suffix not in VIDEO_SUFFIXES: raise HTTPException(400,'无法识别视频格式，请选择 MP4、MOV 或 M4V 视频')
-    folder=ROOT/'uploads'/'positions'/str(item_id);folder.mkdir(parents=True,exist_ok=True);stored=f'{secrets.token_hex(8)}{suffix}';path=folder/stored
+    stored=f'{secrets.token_hex(8)}{suffix}'
     size=0
+    spool=tempfile.SpooledTemporaryFile(max_size=8*1024*1024)
     try:
-        with path.open('wb') as output:
-            while chunk:=await file.read(1024*1024):
-                size+=len(chunk)
-                if size>MAX_VIDEO_BYTES: raise HTTPException(400,'岗位视频不能超过 100MB')
-                output.write(chunk)
-    except Exception:
-        path.unlink(missing_ok=True)
-        raise
-    if size==0:
-        path.unlink(missing_ok=True)
-        raise HTTPException(400,'视频文件为空，请重新选择')
-    item=PositionVideo(position_id=item_id,name=file.filename or stored,url=f'/uploads/positions/{item_id}/{stored}',status='pending');session.add(item);pos.status='pending';pos.occupation_class='待定';pos.plan_id=None;session.commit();session.refresh(item);audit(session,user,'upload','position_video',str(item.id));return _video_dict(item)
+        while chunk:=await file.read(1024*1024):
+            size+=len(chunk)
+            if size>MAX_VIDEO_BYTES: raise HTTPException(400,'岗位视频不能超过 100MB')
+            spool.write(chunk)
+        if size==0: raise HTTPException(400,'视频文件为空，请重新选择')
+        url=storage.save_fileobj(f'positions/{item_id}/{stored}',spool)
+    finally:
+        spool.close()
+    item=PositionVideo(position_id=item_id,name=file.filename or stored,url=url,status='pending');session.add(item);pos.status='pending';pos.occupation_class='待定';pos.plan_id=None;session.commit();session.refresh(item);audit(session,user,'upload','position_video',str(item.id));return _video_dict(item)
 
 @router.get("/positions/{item_id}/videos/{video_id}/download")
 def download_position_video(item_id:int,video_id:int,token:str,expires:int,session:Session=Depends(db)):
@@ -170,11 +169,10 @@ def download_position_video(item_id:int,video_id:int,token:str,expires:int,sessi
         raise HTTPException(403, "下载链接无效或已过期")
     video=session.get(PositionVideo,video_id)
     if not video or video.position_id!=item_id: raise HTTPException(404,'岗位视频不存在')
-    if video.url.startswith("http://") or video.url.startswith("https://"):
-        return RedirectResponse(video.url)
-    path=ROOT/video.url.lstrip('/')
-    if not path.is_file(): raise HTTPException(404,'文件不存在')
-    return FileResponse(path)
+    resolved=storage.resolve(video.url)
+    if not resolved: raise HTTPException(404,'文件不存在')
+    kind,ref=resolved
+    return RedirectResponse(ref) if kind=='redirect' else FileResponse(ref)
 
 @router.patch("/position-videos/{item_id}/review", dependencies=[Depends(require_role("admin", detail="仅平台端可审核岗位视频"))])
 def review_position_video(item_id:int,data:PositionVideoReviewIn,user:User=Depends(current_user),session:Session=Depends(db)):
@@ -186,10 +184,7 @@ def review_position_video(item_id:int,data:PositionVideoReviewIn,user:User=Depen
 def delete_position_video(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
     item=session.get(PositionVideo,item_id)
     if not item: raise HTTPException(404,'岗位视频不存在')
-    if not (item.url.startswith('http://') or item.url.startswith('https://')):
-        folder=ROOT/'uploads'/'positions'/str(item.position_id)
-        path=folder/Path(item.url).name
-        if path.is_file(): path.unlink()
+    storage.delete(item.url)
     position=session.get(WorkPosition,item.position_id)
     session.delete(item);session.flush()
     remaining=session.scalar(select(PositionVideo.id).where(PositionVideo.position_id==item.position_id).limit(1))

@@ -6,13 +6,13 @@ from pathlib import Path
 
 import openpyxl
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.audit import audit
 from ..core.business_time import business_today
-from ..core.config import ROOT
+from ..core import storage
 from ..core.db import db
 from ..core.file_tokens import make_download_token, verify_download_token
 from ..core.rbac import require_role
@@ -261,9 +261,8 @@ async def upload_policy_document(item_id:int,file:UploadFile=File(...),user:User
     if suffix not in {'.pdf','.jpg','.jpeg','.png'}: raise HTTPException(400,'仅支持 PDF 或图片格式')
     content=await file.read()
     if len(content)>20*1024*1024: raise HTTPException(400,'文件不能超过 20MB')
-    folder=ROOT/'uploads'/'policies'/str(item_id);folder.mkdir(parents=True,exist_ok=True)
-    stored=f'{secrets.token_hex(8)}{suffix}';(folder/stored).write_bytes(content)
-    policy.document_url=f'/uploads/policies/{item_id}/{stored}';policy.document_name=file.filename or stored
+    stored=f'{secrets.token_hex(8)}{suffix}'
+    policy.document_url=storage.save_bytes(f'policies/{item_id}/{stored}',content);policy.document_name=file.filename or stored
     session.commit();audit(session,user,'upload','policy_document',str(item_id))
     return _policy_with_document(policy,session,user)
 
@@ -272,9 +271,10 @@ def download_policy_document(item_id:int,token:str,expires:int,session:Session=D
     if not verify_download_token(f"policy-document:{item_id}", expires, token): raise HTTPException(403,'下载链接无效或已过期')
     policy=session.get(Policy,item_id)
     if not policy or not policy.document_url: raise HTTPException(404,'保单文件不存在')
-    path=ROOT/policy.document_url.lstrip('/')
-    if not path.is_file(): raise HTTPException(404,'文件不存在')
-    return FileResponse(path,filename=policy.document_name or None)
+    resolved=storage.resolve(policy.document_url,filename=policy.document_name or None)
+    if not resolved: raise HTTPException(404,'文件不存在')
+    kind,ref=resolved
+    return RedirectResponse(ref) if kind=='redirect' else FileResponse(ref,filename=policy.document_name or None)
 
 @router.get("/policies/{item_id}/export")
 def export_policy(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
