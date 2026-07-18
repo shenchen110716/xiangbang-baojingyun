@@ -21,6 +21,7 @@ Page({
     positionIndex: 0,
     selectedPosition: null,
     saving: false,
+    ocrLoading: false,
     loading: true
   },
   // 7.15-3：先选实际用工单位，再选岗位（岗位名会跨单位重复）。按投保单位下的
@@ -70,6 +71,34 @@ Page({
       }).catch(() => this.setData({ loading: false }));
   },
   input(e) { this.setData({ [`form.${e.currentTarget.dataset.key}`]: e.detail.value }); },
+  // 7.18-4：拍身份证正面照 → 后端 OCR → 自动填充姓名/身份证号（识别结果需人工核对）。
+  scanIdCard() {
+    if (this.data.ocrLoading) return;
+    wx.chooseMedia({
+      count: 1, mediaType: ['image'], sourceType: ['camera', 'album'], sizeType: ['compressed'],
+      success: (res) => {
+        const filePath = res.tempFiles[0].tempFilePath;
+        this.setData({ ocrLoading: true });
+        wx.uploadFile({
+          url: `${app.globalData.apiBase}/ocr/id-card`,
+          filePath, name: 'file',
+          header: { Authorization: `Bearer ${app.globalData.token}` },
+          success: (up) => {
+            let data = {};
+            try { data = JSON.parse(up.data || '{}'); } catch (e) { data = {}; }
+            if (up.statusCode !== 200) {
+              wx.showToast({ title: data.detail || '识别失败', icon: 'none' });
+              return;
+            }
+            this.setData({ 'form.name': data.name || this.data.form.name, 'form.id_number': data.id_number || this.data.form.id_number });
+            wx.showToast({ title: data.mock ? '模拟识别，请核对' : '识别成功，请核对', icon: 'none', duration: 2200 });
+          },
+          fail: () => wx.showToast({ title: '上传失败，请重试', icon: 'none' }),
+          complete: () => this.setData({ ocrLoading: false })
+        });
+      }
+    });
+  },
   dateChange(e) { this.setData({ [`form.${e.currentTarget.dataset.key}`]: e.detail.value }); },
   timeChange(e) { this.setData({ [e.currentTarget.dataset.key]: e.detail.value }); },
   enterpriseChange(e) {
