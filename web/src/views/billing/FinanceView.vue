@@ -110,7 +110,7 @@ async function setInvoiceStatus(item: Invoice, status: string) {
 <template>
   <div v-loading="loading" class="finance-view">
     <div class="stat-grid">
-      <StatTile label="保费可用余额合计" :value="money(totalPremium)" :hint="`充值 ${money(totalPremiumRecharged)} · 已用 ${money(totalPremiumConsumed)}`" hint-type="info" />
+      <StatTile label="保费可用余额合计" :value="money(totalPremium)" :hint="`充值 ${money(totalPremiumRecharged)} · 销售保费 ${money(totalPremiumConsumed)}`" hint-type="info" />
       <StatTile label="使用费可用余额合计" :value="money(totalUsageAvailable)" :hint="`充值 ${money(totalUsage)} · 已用 ${money(totalUsageAccrued)}`" hint-type="info" />
       <StatTile label="本月累计平台使用费" :value="money(monthUsageAccrued)" />
       <StatTile label="历史累计平台使用费" :value="money(totalUsageAccrued)" />
@@ -124,7 +124,7 @@ async function setInvoiceStatus(item: Invoice, status: string) {
       <el-table :data="pagedAccounts" size="small">
         <el-table-column prop="enterprise_name" label="投保单位" min-width="150" />
         <el-table-column prop="account" label="账户" width="140" />
-        <el-table-column label="可用余额" width="150"><template #default="{ row }"><div>{{ money(row.available ?? row.balance) }}</div><small class="muted">充值 {{ money(row.recharged ?? row.balance) }} · 已用 {{ money(row.account === '平台使用费账户' ? row.total_accrued : (row.premium_consumed ?? 0)) }}</small></template></el-table-column>
+        <el-table-column label="可用余额" width="150"><template #default="{ row }"><div>{{ money(row.available ?? row.balance) }}</div><small class="muted">充值 {{ money(row.recharged ?? row.balance) }} · {{ row.account === '平台使用费账户' ? '已用' : '销售保费' }} {{ money(row.account === '平台使用费账户' ? row.total_accrued : (row.premium_consumed ?? 0)) }}</small></template></el-table-column>
         <el-table-column label="计费单价 / 今日" width="155">
           <template #default="{ row }"><template v-if="row.account === '平台使用费账户'"><div>{{ money(row.daily_rate) }} / 人 / 天</div><small class="muted">{{ row.active_people }} 人 · {{ money(row.estimated_daily) }}</small></template><span v-else>—</span></template>
         </el-table-column>

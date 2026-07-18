@@ -114,7 +114,7 @@ const alertBarOption = computed(() => {
         <el-table-column label="可用余额" width="160">
           <template #default="{ row }">
             <div>{{ money(row.available ?? row.balance) }}</div>
-            <small class="muted">充值 {{ money(row.recharged ?? row.balance) }} · 已用 {{ money(row.consumed ?? 0) }}</small>
+            <small class="muted">充值 {{ money(row.recharged ?? row.balance) }} · 销售保费 {{ money(row.consumed ?? 0) }}</small>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="100">
