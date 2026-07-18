@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as operatorsApi from '@/api/operators'
 import * as employerScopesApi from '@/api/employerScopes'
-import { listEnterprises } from '@/api/enterprises'
+import { listEnterprises, createEnterpriseAdmin } from '@/api/enterprises'
 import { listActualEmployers } from '@/api/positions'
 import type { ActualEmployer, EmployerScope, Enterprise, Operator } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
@@ -13,8 +14,12 @@ import TablePagination from '@/components/TablePagination.vue'
 import { usePagedList } from '@/composables/usePagedList'
 
 const auth = useAuthStore()
+const route = useRoute()
 const loading = ref(true)
 const list = ref<Operator[]>([])
+// 统一「单位账号管理」：admin 可按投保单位筛选；支持 ?enterprise_id 直达（从投保单位管理跳转）。
+const enterpriseFilter = ref<number | null>(route.query.enterprise_id ? Number(route.query.enterprise_id) : null)
+const filteredList = computed(() => enterpriseFilter.value ? list.value.filter((x) => x.enterprise_id === enterpriseFilter.value) : list.value)
 const enterprises = ref<Enterprise[]>([])
 const employers = ref<ActualEmployer[]>([])
 const scopes = ref<EmployerScope[]>([])
@@ -54,29 +59,36 @@ async function load() {
 }
 onMounted(load)
 
-const { page, pageSize, total: pagedTotal, paged } = usePagedList(list)
-const activeCount = computed(() => list.value.filter((x) => x.active).length)
-const inactiveCount = computed(() => list.value.filter((x) => !x.active).length)
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(filteredList)
+const activeCount = computed(() => filteredList.value.filter((x) => x.active).length)
+const inactiveCount = computed(() => filteredList.value.filter((x) => !x.active).length)
 
 const createVisible = ref(false)
-const createForm = reactive({ enterprise_id: null as number | null, name: '', username: '', password: '', phone: '' })
+const createForm = reactive({ enterprise_id: null as number | null, role: 'operator' as 'owner' | 'operator', name: '', username: '', password: '', phone: '' })
 const createError = ref('')
 const saving = ref(false)
+// admin 才能建"单位主管"；企业主管本人只能建操作员。
+const canCreateOwner = computed(() => auth.isAdmin())
 function openCreate() {
-  Object.assign(createForm, { enterprise_id: null, name: '', username: '', password: '', phone: '' })
+  Object.assign(createForm, { enterprise_id: enterpriseFilter.value, role: 'operator', name: '', username: '', password: '', phone: '' })
   createError.value = ''
   createVisible.value = true
 }
 async function submitCreate() {
   createError.value = ''
-  if (!createForm.name) { createError.value = '请输入操作员姓名'; return }
+  if (!createForm.name) { createError.value = '请输入姓名'; return }
   if (createForm.username.length < 3) { createError.value = '登录账号至少 3 位'; return }
   if (createForm.password.length < 6) { createError.value = '初始密码至少 6 位'; return }
-  if (auth.isAdmin() && !createForm.enterprise_id) { createError.value = '请先选择所属投保单位'; return }
+  const enterpriseId = auth.isEnterprise() ? auth.user?.enterprise_id ?? null : createForm.enterprise_id
+  if (!enterpriseId) { createError.value = '请先选择所属投保单位'; return }
   saving.value = true
   try {
-    await operatorsApi.createOperator({ ...createForm, enterprise_id: createForm.enterprise_id || undefined })
-    ElMessage.success('操作员已创建')
+    if (createForm.role === 'owner' && canCreateOwner.value) {
+      await createEnterpriseAdmin(enterpriseId, { username: createForm.username, password: createForm.password, name: createForm.name, phone: createForm.phone })
+    } else {
+      await operatorsApi.createOperator({ username: createForm.username, password: createForm.password, name: createForm.name, phone: createForm.phone, enterprise_id: auth.isAdmin() ? enterpriseId : undefined })
+    }
+    ElMessage.success('账号已创建')
     createVisible.value = false
     load()
   } catch (e) {
@@ -87,33 +99,49 @@ async function submitCreate() {
 }
 
 const editVisible = ref(false)
-const editForm = reactive({ id: 0, name: '', phone: '', enterprise_id: null as number | null })
+const editForm = reactive({ id: 0, username: '', name: '', phone: '', enterprise_id: null as number | null })
 const editError = ref('')
 const editSaving = ref(false)
 const editTarget = ref<Operator | null>(null)
 const canReassignEnterprise = computed(() => auth.isAdmin() && !editTarget.value?.is_owner)
+// 无有效数据的账号允许平台端改登录账号（用户名）。
+const canEditUsername = computed(() => auth.isAdmin() && !editTarget.value?.has_data)
 function openEdit(item: Operator) {
   editTarget.value = item
-  Object.assign(editForm, { id: item.id, name: item.name, phone: item.phone || '', enterprise_id: item.enterprise_id })
+  Object.assign(editForm, { id: item.id, username: item.username, name: item.name, phone: item.phone || '', enterprise_id: item.enterprise_id })
   editError.value = ''
   editVisible.value = true
 }
 async function submitEdit() {
   editError.value = ''
-  if (!editForm.name.trim()) { editError.value = '请输入操作员姓名'; return }
+  if (!editForm.name.trim()) { editError.value = '请输入姓名'; return }
   if (canReassignEnterprise.value && !editForm.enterprise_id) { editError.value = '请选择所属投保单位'; return }
   editSaving.value = true
   try {
-    const payload: { name: string; phone: string; enterprise_id?: number } = { name: editForm.name.trim(), phone: editForm.phone.trim() }
+    const payload: { username?: string; name: string; phone: string; enterprise_id?: number } = { name: editForm.name.trim(), phone: editForm.phone.trim() }
     if (canReassignEnterprise.value && editForm.enterprise_id) payload.enterprise_id = editForm.enterprise_id
+    if (canEditUsername.value && editForm.username.trim() && editForm.username.trim() !== editTarget.value?.username) payload.username = editForm.username.trim()
     await operatorsApi.updateOperator(editForm.id, payload)
-    ElMessage.success('操作员信息已更新')
+    ElMessage.success('账号信息已更新')
     editVisible.value = false
     load()
   } catch (e) {
     editError.value = (e as Error).message
   } finally {
     editSaving.value = false
+  }
+}
+
+async function removeOperator(item: Operator) {
+  try {
+    await ElMessageBox.confirm(`确定删除账号「${item.name}」（${item.username}）吗？删除后不可恢复。仅未产生业务数据的账号可删除。`, '删除账号', { type: 'warning' })
+  } catch { return }
+  try {
+    await operatorsApi.deleteOperator(item.id)
+    ElMessage.success('账号已删除')
+    load()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
   }
 }
 
@@ -199,9 +227,12 @@ async function revokeScope(scope: EmployerScope) {
 
     <el-alert v-if="!canManage" type="info" :closable="false" title="当前账号可查看同单位操作员" description="新增、启停和重置密码需由单位主管操作。" show-icon style="margin-bottom: 0" />
 
-    <PageCard title="操作员列表" :count="list.length" hint="每个操作员使用自己的账号和密码登录">
+    <PageCard title="单位账号列表" :count="filteredList.length" hint="单位主管与操作员统一在此管理；每个账号使用独立账号密码登录">
       <template #actions>
-        <el-button v-if="canManage" type="primary" @click="openCreate">＋ 新增操作员</el-button>
+        <el-select v-if="auth.isAdmin()" v-model="enterpriseFilter" clearable filterable placeholder="按投保单位筛选" style="width: 200px; margin-right: 8px">
+          <el-option v-for="e in enterprises" :key="e.id" :label="e.name" :value="e.id" />
+        </el-select>
+        <el-button v-if="canManage" type="primary" @click="openCreate">＋ 新增账号</el-button>
       </template>
       <el-table :data="paged" size="small">
         <el-table-column label="姓名" width="140">
@@ -240,34 +271,46 @@ async function revokeScope(scope: EmployerScope) {
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-button link type="primary" size="small" @click="resetPassword(row)">重置密码</el-button>
             <el-button v-if="!row.is_owner" link :type="row.active ? 'danger' : 'success'" size="small" @click="toggleActive(row)">{{ row.active ? '停用' : '启用' }}</el-button>
+            <el-button v-if="!row.has_data && row.id !== auth.user?.id" link type="danger" size="small" @click="removeOperator(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
       <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
     </PageCard>
 
-    <el-dialog v-model="createVisible" title="新增操作员" width="440px">
-      <p class="dialog-hint">创建后，操作员可使用独立账号登录同一单位用户端</p>
+    <el-dialog v-model="createVisible" title="新增单位账号" width="460px">
+      <p class="dialog-hint">创建后，该账号可使用独立账号密码登录对应投保单位</p>
       <el-form :model="createForm" label-width="110px">
-        <el-form-item v-if="auth.isAdmin()" label="所属投保单位">
-          <el-select v-model="createForm.enterprise_id" style="width: 100%">
+        <el-form-item v-if="auth.isAdmin()" label="所属投保单位" required>
+          <el-select v-model="createForm.enterprise_id" filterable style="width: 100%" placeholder="请选择投保单位">
             <el-option v-for="e in enterprises" :key="e.id" :label="e.name" :value="e.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="操作员姓名"><el-input v-model="createForm.name" placeholder="请输入姓名" /></el-form-item>
-        <el-form-item label="登录账号"><el-input v-model="createForm.username" placeholder="至少 3 位，不可与已有账号重复" /></el-form-item>
-        <el-form-item label="初始密码"><el-input v-model="createForm.password" type="password" placeholder="至少 6 位" show-password /></el-form-item>
+        <el-form-item v-if="canCreateOwner" label="账号角色" required>
+          <el-radio-group v-model="createForm.role">
+            <el-radio-button value="operator">项目经理(操作员)</el-radio-button>
+            <el-radio-button value="owner">单位主管</el-radio-button>
+          </el-radio-group>
+          <div class="muted" style="font-size: 12px; line-height: 1.5; margin-top: 4px">单位主管管理全单位；项目经理仅限被授权的实际用工单位。每个单位仅一个在册主管，若已有主管，新建的主管会自动作为操作员。</div>
+        </el-form-item>
+        <el-form-item label="姓名" required><el-input v-model="createForm.name" placeholder="请输入姓名" /></el-form-item>
+        <el-form-item label="登录账号" required><el-input v-model="createForm.username" placeholder="至少 3 位，不可与已有账号重复" /></el-form-item>
+        <el-form-item label="初始密码" required><el-input v-model="createForm.password" type="password" placeholder="至少 6 位" show-password /></el-form-item>
         <el-form-item label="手机号"><el-input v-model="createForm.phone" placeholder="选填" /></el-form-item>
         <p v-if="createError" class="error-text">{{ createError }}</p>
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitCreate">创建操作员</el-button>
+        <el-button type="primary" :loading="saving" @click="submitCreate">创建</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="editVisible" title="编辑操作员" width="440px">
+    <el-dialog v-model="editVisible" title="编辑账号" width="440px">
       <el-form :model="editForm" label-width="110px">
+        <el-form-item label="登录账号">
+          <el-input v-if="canEditUsername" v-model="editForm.username" placeholder="至少 3 位" />
+          <template v-else><span>{{ editTarget?.username }}</span><small class="muted" style="margin-left: 8px">已产生业务数据的账号不可改登录账号</small></template>
+        </el-form-item>
         <el-form-item v-if="canReassignEnterprise" label="所属投保单位">
           <el-select v-model="editForm.enterprise_id" style="width: 100%">
             <el-option v-for="e in enterprises" :key="e.id" :label="e.name" :value="e.id" />
