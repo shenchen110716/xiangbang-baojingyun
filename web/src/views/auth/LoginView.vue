@@ -127,13 +127,13 @@ async function submit() {
 <style scoped>
 .auth-screen {
   --ink: #0f1621;
-  --navy: #1c2e52;
-  --navy-2: #263a63;
-  --navy-3: #324b7d;
-  --amber: #e2960a;
-  --amber-ink: #7a4c02;
-  --paper: #eef0ec;
-  --paper-2: #e4e7e0;
+  --navy: #0f172a;
+  --navy-2: #1e293b;
+  --navy-3: #334155;
+  --amber: #1d4ed8;
+  --amber-ink: #ffffff;
+  --paper: #f1f5f9;
+  --paper-2: #e8edf3;
   --card: #ffffff;
   --steel: #5c6b7d;
   --steel-2: #8b96a3;
@@ -152,11 +152,11 @@ async function submit() {
 @media (prefers-color-scheme: dark) {
   .auth-screen {
     --ink: #e9ecf1;
-    --navy: #0e1830;
+    --navy: #0b1220;
     --navy-2: #16223e;
     --navy-3: #22335a;
-    --amber: #f0a628;
-    --amber-ink: #2a1a02;
+    --amber: #3b82f6;
+    --amber-ink: #ffffff;
     --paper: #0b0f17;
     --paper-2: #121722;
     --card: #141b29;

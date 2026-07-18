@@ -46,7 +46,7 @@ const premiumBarOption = computed(() => ({
     {
       type: 'bar',
       data: sortedByPremium.value.map((p) => p.premium_total),
-      itemStyle: { color: '#5b8bf3', borderRadius: [4, 4, 0, 0] },
+      itemStyle: { color: '#2563eb', borderRadius: [4, 4, 0, 0] },
       barMaxWidth: 32,
     },
   ],
@@ -60,7 +60,7 @@ const insurerDonutOption = computed(() => {
   return {
     tooltip: { trigger: 'item' },
     legend: { orient: 'vertical', right: 10, top: 'center', textStyle: { color: '#a9b6e0', fontSize: 11 } },
-    color: ['#5b8bf3', '#27b688', '#f39b50', '#ef6e76', '#8b7bf0', '#3fc7d6'],
+    color: ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2'],
     series: [
       {
         type: 'pie',
@@ -260,10 +260,10 @@ const totalPremium = computed(() => products.value.reduce((sum, p) => sum + p.pr
   font-variant-numeric: tabular-nums;
 }
 .balance-amount.critical {
-  color: #ef6e76;
+  color: #f87171;
 }
 .balance-amount.warning {
-  color: #f39b50;
+  color: #fbbf24;
 }
 .product-table {
   width: 100%;
