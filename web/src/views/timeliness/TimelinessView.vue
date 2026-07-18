@@ -10,6 +10,8 @@ import {
   type TimelinessFilters,
 } from '@/api/timeliness'
 import type { TimelinessDetail, TimelinessSummary } from '@/api/types'
+import * as factsApi from '@/api/employmentFacts'
+import type { ImportPreview } from '@/api/employmentFacts'
 import { useAuthStore } from '@/stores/auth'
 import PageCard from '@/components/PageCard.vue'
 
@@ -120,13 +122,69 @@ async function runRecalculate() {
     recalculating.value = false
   }
 }
+
+// ---- 导入真实用工事实（入离职时间）----
+const importVisible = ref(false)
+const importFile = ref<File | null>(null)
+const importPreview = ref<ImportPreview | null>(null)
+const importing = ref(false)
+const confirming = ref(false)
+function openImport() {
+  importFile.value = null
+  importPreview.value = null
+  importVisible.value = true
+}
+async function downloadTemplate() {
+  try {
+    const blob = await factsApi.downloadEmploymentTemplate()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = '真实用工反馈模板.xlsx'
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    ElMessage.error((error as Error).message)
+  }
+}
+function onImportFile(e: Event) {
+  importFile.value = (e.target as HTMLInputElement).files?.[0] ?? null
+  importPreview.value = null
+}
+async function doPreview() {
+  if (!importFile.value) { ElMessage.error('请先选择文件'); return }
+  importing.value = true
+  try {
+    importPreview.value = await factsApi.importEmploymentPreview(importFile.value)
+  } catch (error) {
+    ElMessage.error((error as Error).message)
+  } finally {
+    importing.value = false
+  }
+}
+async function doConfirm() {
+  if (!importPreview.value) return
+  if (!importPreview.value.valid_rows) { ElMessage.error('没有可导入的有效行'); return }
+  confirming.value = true
+  try {
+    const result = await factsApi.importEmploymentConfirm(importPreview.value.batch_id, importPreview.value.confirm_token)
+    ElMessage.success(`已导入 ${result.created_facts} 条用工事实，正在重算及时率`)
+    importVisible.value = false
+    await runRecalculate()
+  } catch (error) {
+    ElMessage.error((error as Error).message)
+  } finally {
+    confirming.value = false
+  }
+}
 </script>
 
 <template>
   <PageCard title="参停保及时率" subtitle="真实用工事实与保障期比对结果">
     <template #actions>
+      <el-button v-if="isOwner" type="primary" @click="openImport">导入入离职时间</el-button>
       <el-button v-if="isOwner" :loading="recalculating" @click="runRecalculate">重算</el-button>
-      <el-button type="primary" :loading="exporting" @click="runExport">导出明细</el-button>
+      <el-button :loading="exporting" @click="runExport">导出明细</el-button>
     </template>
 
     <el-row v-loading="loading" :gutter="12" class="cards">
@@ -214,6 +272,43 @@ async function runRecalculate() {
       <el-table-column prop="actual_employer_id" label="实际工作单位" min-width="120" />
     </el-table>
   </PageCard>
+
+  <el-dialog v-model="importVisible" title="导入真实用工事实（入离职时间）" width="720px">
+    <div class="import-body">
+      <div class="import-step">
+        <el-button link type="primary" @click="downloadTemplate">① 下载标准模板</el-button>
+        <span class="muted">模板含 实际用工单位 / 工号 / 姓名 / 身份证号 / 入职时间 / 离职时间 / 反馈上报时间 等列</span>
+      </div>
+      <div class="import-step">
+        <span>② 选择填好的文件：</span>
+        <input type="file" accept=".xlsx,.xls,.csv" @change="onImportFile" />
+        <el-button size="small" type="primary" :loading="importing" :disabled="!importFile" @click="doPreview">预览校验</el-button>
+      </div>
+      <template v-if="importPreview">
+        <el-alert :type="importPreview.invalid_rows ? 'warning' : 'success'" :closable="false" show-icon
+          :title="`共 ${importPreview.total_rows} 行，有效 ${importPreview.valid_rows} 行，无效 ${importPreview.invalid_rows} 行`" style="margin: 8px 0" />
+        <el-table :data="importPreview.rows" size="small" max-height="320">
+          <el-table-column prop="row_no" label="行" width="56" />
+          <el-table-column prop="person_name" label="姓名" width="90" />
+          <el-table-column prop="masked_id" label="身份证号" width="150" />
+          <el-table-column prop="actual_employer" label="实际用工单位" min-width="140" />
+          <el-table-column label="结果" min-width="180">
+            <template #default="{ row }">
+              <el-tag v-if="!row.errors.length" type="success" size="small">可导入</el-tag>
+              <el-tag v-else type="danger" size="small">{{ row.errors.join('；') }}</el-tag>
+              <div v-if="row.warnings.length" class="muted" style="font-size: 12px">{{ row.warnings.join('；') }}</div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+    </div>
+    <template #footer>
+      <el-button @click="importVisible = false">取消</el-button>
+      <el-button type="primary" :loading="confirming" :disabled="!importPreview || !importPreview.valid_rows" @click="doConfirm">
+        确认导入{{ importPreview ? ` ${importPreview.valid_rows} 行` : '' }}并重算
+      </el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
