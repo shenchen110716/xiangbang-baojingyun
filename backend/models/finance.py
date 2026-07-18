@@ -41,6 +41,8 @@ class Invoice(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     enterprise_id: Mapped[int] = mapped_column(ForeignKey("enterprises.id"))
     account: Mapped[str] = mapped_column(String(20), default="premium")
+    # 票类：增值税普通发票 / 增值税专用发票（保经云问题 7.18 第 6 条）。
+    invoice_type: Mapped[str] = mapped_column(String(40), default="增值税普通发票")
     amount: Mapped[float] = mapped_column(Float, default=0)
     title: Mapped[str] = mapped_column(String(160), default="")
     tax_no: Mapped[str] = mapped_column(String(40), default="")
