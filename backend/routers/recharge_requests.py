@@ -3,13 +3,13 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core import storage
 from ..core.audit import audit
 from ..core.business_time import business_now
-from ..core.config import ROOT
 from ..core.db import db
 from ..core.file_tokens import make_download_token, verify_download_token
 from ..core.rbac import require_role
@@ -66,14 +66,12 @@ async def create_recharge_request(
     if suffix not in {".pdf", ".jpg", ".jpeg", ".png"}: raise HTTPException(400, "仅支持 PDF 或图片格式")
     content = await file.read()
     if len(content) > 20 * 1024 * 1024: raise HTTPException(400, "文件不能超过 20MB")
-    folder = ROOT / "uploads" / "recharge-receipts" / str(enterprise_id)
-    folder.mkdir(parents=True, exist_ok=True)
     stored = f"{secrets.token_hex(8)}{suffix}"
-    (folder / stored).write_bytes(content)
+    receipt_url = storage.save_bytes(f"recharge-receipts/{enterprise_id}/{stored}", content)
     item = RechargeRequest(
         enterprise_id=enterprise_id, account_type=account_type,
         insurer=insurer.strip() if account_type == "premium" else None, account_id=account_id,
-        amount=amount, receipt_file_url=f"/uploads/recharge-receipts/{enterprise_id}/{stored}",
+        amount=amount, receipt_file_url=receipt_url,
         status="pending", created_by=user.id,
     )
     session.add(item); session.commit(); session.refresh(item)
@@ -126,4 +124,7 @@ def download_recharge_receipt(item_id: int, token: str, expires: int, session: S
     if not verify_download_token(f"recharge-receipt:{item_id}", expires, token): raise HTTPException(403, "下载链接无效或已过期")
     item = session.get(RechargeRequest, item_id)
     if not item or not item.receipt_file_url: raise HTTPException(404, "回单不存在")
-    return FileResponse(ROOT / item.receipt_file_url.lstrip("/"))
+    resolved = storage.resolve(item.receipt_file_url)
+    if not resolved: raise HTTPException(404, "文件不存在")
+    kind, ref = resolved
+    return RedirectResponse(ref) if kind == "redirect" else FileResponse(ref)
