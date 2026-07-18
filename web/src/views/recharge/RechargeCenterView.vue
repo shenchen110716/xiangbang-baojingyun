@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as rechargeApi from '@/api/recharge'
+import type { RechargePaymentAccount } from '@/api/recharge'
 import { listEnterprises } from '@/api/enterprises'
-import type { Enterprise, InsurerAccount, InsurerAccountLink, RechargeRequest } from '@/api/types'
+import type { Enterprise, RechargeRequest } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { money, formatDateTime } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
@@ -16,8 +17,6 @@ const auth = useAuthStore()
 const route = useRoute()
 const loading = ref(true)
 const requests = ref<RechargeRequest[]>([])
-const insurerAccountLinks = ref<InsurerAccountLink[]>([])
-const insurerAccounts = ref<InsurerAccount[]>([])
 const enterprises = ref<Enterprise[]>([])
 
 async function load() {
@@ -25,10 +24,8 @@ async function load() {
   try {
     const tasks: Promise<unknown>[] = [
       rechargeApi.listRechargeRequests().then((r) => (requests.value = r)),
-      rechargeApi.listInsurerAccountLinks().then((r) => (insurerAccountLinks.value = r)),
     ]
     if (auth.isAdmin()) {
-      tasks.push(rechargeApi.listInsurerAccounts().then((r) => (insurerAccounts.value = r)))
       tasks.push(listEnterprises().then((r) => (enterprises.value = r)))
     }
     await Promise.all(tasks)
@@ -60,11 +57,26 @@ const STATUS_TYPE: Record<string, string> = { pending: 'warning', confirmed: 'su
 // ---- submit ----
 const submitVisible = ref(false)
 const submitForm = reactive({ enterprise_id: null as number | null, account_type: 'premium' as 'premium' | 'usage', insurer: '', amount: 0, file: null as File | null })
-const matchedAccount = computed(() => {
-  if (submitForm.account_type !== 'premium' || !submitForm.insurer.trim()) return null
-  const link = insurerAccountLinks.value.find((l) => l.insurer === submitForm.insurer.trim())
-  return link ? insurerAccounts.value.find((a) => a.id === link.account_id) ?? null : null
-})
+
+// 收款账户（往哪里转账）由后端按账户类型解析——保费按保司、使用费按平台使用费
+// 账户，企业端也可读。选择变化时实时拉取，让用户下单前就看到打款目标账户。
+const paymentAccount = ref<RechargePaymentAccount | null>(null)
+const paymentLoading = ref(false)
+async function refreshPaymentAccount() {
+  if (submitForm.account_type === 'premium' && !submitForm.insurer.trim()) {
+    paymentAccount.value = null
+    return
+  }
+  paymentLoading.value = true
+  try {
+    paymentAccount.value = await rechargeApi.getRechargePaymentAccount(submitForm.account_type, submitForm.insurer.trim())
+  } catch {
+    paymentAccount.value = null
+  } finally {
+    paymentLoading.value = false
+  }
+}
+watch(() => [submitForm.account_type, submitForm.insurer], refreshPaymentAccount)
 function openSubmit(prefill?: { enterprise_id?: number; account_type?: 'premium' | 'usage'; insurer?: string }) {
   Object.assign(submitForm, {
     enterprise_id: prefill?.enterprise_id ?? (auth.isEnterprise() ? auth.user?.enterprise_id ?? null : null),
@@ -74,6 +86,7 @@ function openSubmit(prefill?: { enterprise_id?: number; account_type?: 'premium'
     file: null,
   })
   submitVisible.value = true
+  refreshPaymentAccount()
 }
 function handleFileChange(e: Event) {
   const input = e.target as HTMLInputElement
@@ -190,12 +203,16 @@ async function rejectRequest(row: RechargeRequest) {
         <el-form-item v-if="submitForm.account_type === 'premium'" label="保司" required>
           <el-input v-model="submitForm.insurer" placeholder="请填写保险公司名称" />
         </el-form-item>
-        <el-form-item v-if="matchedAccount" label="收款账户">
+        <el-form-item v-if="paymentAccount" label="收款账户">
           <div class="account-hint">
-            <p>{{ matchedAccount.bank_name }} · {{ matchedAccount.account_no }}</p>
-            <p>户名：{{ matchedAccount.account_holder }}</p>
-            <p v-if="matchedAccount.insurers.length > 1" class="muted">该账户同时用于：{{ matchedAccount.insurers.join('、') }}</p>
+            <p><b>{{ paymentAccount.account_holder }}</b></p>
+            <p>{{ paymentAccount.bank_name }} · {{ paymentAccount.account_no }}</p>
+            <p v-if="paymentAccount.insurers.length > 1" class="muted">该账户同时用于：{{ paymentAccount.insurers.join('、') }}</p>
+            <p class="muted">请按此收款账户转账后上传回单</p>
           </div>
+        </el-form-item>
+        <el-form-item v-else-if="!paymentLoading && (submitForm.account_type === 'usage' || submitForm.insurer.trim())" label="收款账户">
+          <span class="muted">平台尚未配置该账户的收款信息，请联系平台后再转账。</span>
         </el-form-item>
         <el-form-item label="充值金额" required><el-input-number v-model="submitForm.amount" :min="0.01" :step="100" style="width: 100%" /></el-form-item>
         <el-form-item label="转账回单" required><input type="file" accept=".pdf,.jpg,.jpeg,.png" @change="handleFileChange" /></el-form-item>

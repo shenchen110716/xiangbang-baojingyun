@@ -71,15 +71,23 @@ async function toggleAccountStatus(item: InsurerAccount) {
 
 const linkFormVisible = ref(false)
 const linkForm = reactive({ insurer: '', account_id: null as number | null })
+// 平台使用费收款账户复用同一张映射表（免迁移），用固定保留键绑定。
+const PLATFORM_USAGE_KEY = '平台使用费'
+const linkKind = ref<'premium' | 'usage'>('premium')
+function onLinkKindChange() {
+  linkForm.insurer = linkKind.value === 'usage' ? PLATFORM_USAGE_KEY : ''
+}
 function openLinkCreate(account: InsurerAccount) {
+  linkKind.value = 'premium'
   linkForm.insurer = ''
   linkForm.account_id = account.id
   linkFormVisible.value = true
 }
 async function submitLinkForm() {
-  if (!linkForm.insurer.trim() || !linkForm.account_id) { ElMessage.error('请填写保司名称'); return }
+  const insurer = linkKind.value === 'usage' ? PLATFORM_USAGE_KEY : linkForm.insurer.trim()
+  if (!insurer || !linkForm.account_id) { ElMessage.error('请填写保司名称'); return }
   try {
-    await rechargeApi.createInsurerAccountLink({ insurer: linkForm.insurer.trim(), account_id: linkForm.account_id })
+    await rechargeApi.createInsurerAccountLink({ insurer, account_id: linkForm.account_id })
     ElMessage.success('绑定成功')
     linkFormVisible.value = false
     loadInsurerAccounts()
@@ -332,7 +340,18 @@ async function submitTier() {
 
     <el-dialog v-model="linkFormVisible" title="绑定保司到该账户" width="420px">
       <el-form :model="linkForm" label-width="100px">
-        <el-form-item label="保司名称" required><el-input v-model="linkForm.insurer" placeholder="需与保险产品里的保险公司名称一致" /></el-form-item>
+        <el-form-item label="账户用途" required>
+          <el-radio-group v-model="linkKind" @change="onLinkKindChange">
+            <el-radio-button value="premium">保费（按保司）</el-radio-button>
+            <el-radio-button value="usage">平台使用费</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="linkKind === 'premium'" label="保司名称" required>
+          <el-input v-model="linkForm.insurer" placeholder="需与保险产品里的保险公司名称一致" />
+        </el-form-item>
+        <el-form-item v-else label="说明">
+          <span class="muted">绑定为平台使用费收款账户后，企业充值"使用费"时会看到该收款账户。</span>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="linkFormVisible = false">取消</el-button>
