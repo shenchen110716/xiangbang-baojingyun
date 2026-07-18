@@ -20,6 +20,12 @@ security = HTTPBearer(auto_error=False)
 # self-service endpoints the salesperson portal actually needs, rather than
 # being trusted to fail closed on every other router in the codebase.
 SALESPERSON_ALLOWED_PATHS = {"/api/agents/me", "/api/auth/me", "/api/auth/password"}
+# The whole salesperson portal lives under this prefix (v4.2 §14.4). It is a
+# prefix, not an exact set, because some routes carry a path param
+# (/api/agent-portal/statements/{id}); every route under it is already
+# salesperson-gated at the route level, so allowing the prefix past this global
+# guard grants no access the routes themselves wouldn't.
+SALESPERSON_ALLOWED_PREFIXES = ("/api/agent-portal/",)
 
 
 def current_user(request: Request, creds: HTTPAuthorizationCredentials = Depends(security), session: Session = Depends(db)) -> User:
@@ -30,5 +36,5 @@ def current_user(request: Request, creds: HTTPAuthorizationCredentials = Depends
     if not user or not user.active: raise HTTPException(status_code=401, detail="用户无效")
     if token_sv != user.session_version: raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
     if user.role not in {"admin","enterprise","salesperson"}: raise HTTPException(status_code=403, detail="该账号暂未开通管理端权限")
-    if user.role == "salesperson" and request.url.path not in SALESPERSON_ALLOWED_PATHS: raise HTTPException(status_code=403, detail="业务员账号仅可访问业务员工作台相关接口")
+    if user.role == "salesperson" and request.url.path not in SALESPERSON_ALLOWED_PATHS and not request.url.path.startswith(SALESPERSON_ALLOWED_PREFIXES): raise HTTPException(status_code=403, detail="业务员账号仅可访问业务员工作台相关接口")
     return user
