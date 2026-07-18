@@ -88,10 +88,15 @@ def premium_accounts_for_enterprise(session: Session, enterprise_id: int) -> lis
         account = session.get(InsurerAccount, row.account_id)
         if not account:
             continue
+        insurers = insurers_for_account(session, row.account_id)
+        # 平台使用费收款账户复用了同一张收款账户表（保留键映射），它属于使用费账户，
+        # 绝不能出现在“保费账户余额”里，否则保费列表/大屏会混入使用费账户。
+        if PLATFORM_USAGE_INSURER_KEY in insurers:
+            continue
         result.append({
             "account_id": row.account_id,
             "label": account.label,
-            "insurers": insurers_for_account(session, row.account_id),
+            "insurers": insurers,
             "balance": amount(row.balance),
         })
     return result
