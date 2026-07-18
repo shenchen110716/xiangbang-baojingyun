@@ -9,7 +9,7 @@ Page({
       const item = items.find((row) => row.id === this.data.id) || null;
       if (item) {
         const pendingEffective = item.status === 'active' && item.effective_at && new Date(item.effective_at) > new Date();
-        item.status_label = pendingEffective ? '待生效' : app.statusText(item.status);
+        item.status_label = (pendingEffective || item.status === 'pending') ? '待生效' : app.statusText(item.status);
         item.status_display = pendingEffective ? 'active-pending' : item.status;
         item.initial = String(item.name || '员').slice(0, 1);
         item.effective_at_display = app.formatCoverageDate(item.effective_at, item.effective_mode);
@@ -20,6 +20,7 @@ Page({
   },
   edit() { wx.navigateTo({ url: `/pages/employee-edit/employee-edit?id=${this.data.id}` }); },
   claim() { wx.navigateTo({ url: `/pages/claim-create/claim-create?personId=${this.data.id}` }); },
+  cert() { wx.navigateTo({ url: `/pages/cert/cert?id=${this.data.id}` }); },
   changeStatus() {
     const item = this.data.item;
     if (!item || item.status === 'pending') return;

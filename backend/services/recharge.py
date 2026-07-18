@@ -24,6 +24,24 @@ def usage_payment_account(session: Session) -> InsurerAccount | None:
     return resolve_account_for_insurer(session, PLATFORM_USAGE_INSURER_KEY)
 
 
+def premium_payment_options(session: Session) -> list[dict]:
+    """已配置收款账户的保费保司列表，供企业端充值时下拉选择（选保司即带出收款账户），
+    排除平台使用费保留键与已停用账户。"""
+    options: list[dict] = []
+    for link in session.scalars(select(InsurerAccountLink).where(InsurerAccountLink.insurer != PLATFORM_USAGE_INSURER_KEY)):
+        account = session.get(InsurerAccount, link.account_id)
+        if not account or account.status != "active":
+            continue
+        options.append({
+            "insurer": link.insurer,
+            "label": account.label,
+            "bank_name": account.bank_name,
+            "account_no": account.account_no,
+            "account_holder": account.account_holder,
+        })
+    return options
+
+
 def recharge_payment_account_view(session: Session, account_type: str, insurer: str = "") -> dict | None:
     """企业/管理员发起充值时要展示的收款账户（户名/开户行/账号），按账户类型解析：
     保费按所选保司，使用费按平台使用费保留键。未配置返回 None，前端提示联系平台。"""

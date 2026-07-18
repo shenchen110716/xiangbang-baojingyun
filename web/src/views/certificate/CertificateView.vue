@@ -15,7 +15,7 @@ const policy = ref<Policy | null>(null)
 const people = ref<InsuredPerson[]>([])
 const notFound = ref(false)
 
-const statusText: Record<string, string> = { active: '在保', pending: '待审核', stopped: '已停保' }
+const statusText: Record<string, string> = { active: '在保', pending: '待生效', stopped: '已停保' }
 
 function dateOnly(value: string | null | undefined) {
   if (!value) return ''

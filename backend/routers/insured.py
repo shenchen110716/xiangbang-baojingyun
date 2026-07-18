@@ -12,7 +12,17 @@ from sqlalchemy.orm import Session
 from ..core.audit import audit
 from ..core.business_time import as_business_time
 from ..core.db import db
-from ..core.id_number import is_valid_id_number
+from ..core.business_time import business_today
+from ..core.id_number import age_on, birth_date_from_id, is_valid_id_number
+
+MIN_INSURE_AGE = 16
+
+
+def _assert_min_age(id_number: str) -> None:
+    """不满 16 周岁不得参保（保经云问题 7.15 第 2 条：未满 16 周岁不能上班）。"""
+    birth = birth_date_from_id(id_number)
+    if birth is None or age_on(birth, business_today()) < MIN_INSURE_AGE:
+        raise HTTPException(400, f"被保险人未满 {MIN_INSURE_AGE} 周岁，不可参保")
 from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
 from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
@@ -98,6 +108,7 @@ def add_person(data: PersonIn, user: User = Depends(current_user), session: Sess
     if user.role=="enterprise" and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,"无权操作该单位")
     require_usage_funded(session, enterprise, user)
     if not is_valid_id_number(data.id_number): raise HTTPException(400,'身份证号格式不正确')
+    _assert_min_age(data.id_number)
     if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==data.enterprise_id,InsuredPerson.id_number==data.id_number).limit(1)): raise HTTPException(409,'该身份证号已在本单位参保，请勿重复添加')
     effective_at = _parse_business_time(data.effective_at, "生效")
     terminated_at = _parse_business_time(data.terminated_at, "停保")
@@ -128,6 +139,7 @@ def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),
     values=data.model_dump(exclude_unset=True)
     if 'id_number' in values and values['id_number']!=item.id_number:
         if not is_valid_id_number(values['id_number']): raise HTTPException(400,'身份证号格式不正确')
+        _assert_min_age(values['id_number'])
         if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==item.enterprise_id,InsuredPerson.id_number==values['id_number'],InsuredPerson.id!=item.id).limit(1)): raise HTTPException(409,'该身份证号已在本单位参保，请勿重复添加')
     if 'position_id' in values:
         position=session.get(WorkPosition,values['position_id'])

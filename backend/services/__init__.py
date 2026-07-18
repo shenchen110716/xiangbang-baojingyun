@@ -10,7 +10,7 @@ from .notify import notify_enterprise
 from .recharge import (
     resolve_account_for_insurer, insurers_for_account, insurer_account_dict,
     get_or_create_premium_account, premium_accounts_for_enterprise,
-    recharge_payment_account_view, usage_payment_account, PLATFORM_USAGE_INSURER_KEY,
+    recharge_payment_account_view, usage_payment_account, premium_payment_options, PLATFORM_USAGE_INSURER_KEY,
 )
 from .policy_members import (
     activate_person_policy, correct_person_policy_dates, earliest_effective_at,
@@ -57,7 +57,7 @@ __all__ = [
     "notify_enterprise",
     "resolve_account_for_insurer", "insurers_for_account", "insurer_account_dict",
     "get_or_create_premium_account", "premium_accounts_for_enterprise",
-    "recharge_payment_account_view", "usage_payment_account", "PLATFORM_USAGE_INSURER_KEY",
+    "recharge_payment_account_view", "usage_payment_account", "premium_payment_options", "PLATFORM_USAGE_INSURER_KEY",
     "activate_person_policy", "correct_person_policy_dates", "terminate_person_policy",
     "earliest_effective_at", "earliest_termination_at", "effective_person_status", "validate_person_policy_dates",
     "allowed_employer_ids", "assert_employer_access", "grant_employer_scope",

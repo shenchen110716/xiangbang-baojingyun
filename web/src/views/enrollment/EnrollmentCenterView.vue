@@ -188,7 +188,7 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
           <el-button @click="downloadTemplate">下载模板</el-button>
         </el-form-item>
         <p class="hint-text wide">
-          模板包含「投保单位」「实际工作单位」「岗位名称」三列（可留空，留空则使用上方选择的默认单位与岗位；填写后按名称匹配，可在一次导入中包含多个不同单位/岗位的名单，仅平台端可通过「投保单位」列导入其他单位数据），以及「生效日期」「停保日期」两列（格式 yyyy-MM-dd，可留空）：批量参保时填写生效日期会直接激活参保（不再停留在待审核）；批量停保时填写停保日期会用该日期而不是当前时间登记停保。
+          模板包含「投保单位」「实际工作单位」「岗位名称」三列（可留空，留空则使用上方选择的默认单位与岗位；填写后按名称匹配，可在一次导入中包含多个不同单位/岗位的名单，仅平台端可通过「投保单位」列导入其他单位数据），以及「生效日期」「停保日期」两列（格式 yyyy-MM-dd，可留空）：批量参保时填写生效日期会直接激活参保（不再停留在待生效）；批量停保时填写停保日期会用该日期而不是当前时间登记停保。
         </p>
         <p v-if="importError" class="error-text wide">{{ importError }}</p>
       </el-form>
@@ -207,7 +207,7 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
             <el-option label="实际单位" value="actual_employer_name" />
           </el-select>
           <el-select v-model="peopleStatusFilter" placeholder="全部状态" clearable style="width: 130px">
-            <el-option label="待审核" value="pending" />
+            <el-option label="待生效" value="pending" />
             <el-option label="待生效" value="active-pending" />
             <el-option label="在保" value="active" />
             <el-option label="已停保" value="stopped" />

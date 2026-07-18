@@ -4,6 +4,7 @@ from typing import Optional
 from sqlalchemy import DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from ..core.business_time import business_default
 from ..core.db import Base
 
 
@@ -19,7 +20,7 @@ class InsuredPerson(Base):
     position_id: Mapped[Optional[int]] = mapped_column(ForeignKey("work_positions.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="pending")
     policy_id: Mapped[Optional[int]] = mapped_column(ForeignKey("policies.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=business_default)
 
 
 class Policy(Base):
@@ -36,7 +37,7 @@ class Policy(Base):
     # policy_no（内部编号）是两回事——见反馈条目 4「平台端要有保单导入功能」。
     document_url: Mapped[str] = mapped_column(Text, default="")
     document_name: Mapped[str] = mapped_column(String(200), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=business_default)
 
 
 class PolicyMember(Base):
@@ -52,8 +53,8 @@ class PolicyMember(Base):
     policy_id: Mapped[int] = mapped_column(ForeignKey("policies.id"))
     person_id: Mapped[int] = mapped_column(ForeignKey("insured_people.id"), index=True)
     rate_snapshot_json: Mapped[str] = mapped_column(Text, default="")
-    effective_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    effective_at: Mapped[datetime] = mapped_column(DateTime, default=business_default)
     terminated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     endorsement_no: Mapped[str] = mapped_column(String(80), default="")
     status: Mapped[str] = mapped_column(String(20), default="active")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=business_default)

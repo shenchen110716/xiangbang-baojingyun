@@ -29,7 +29,8 @@ export function insuredStatusLabel(person: { status: string; effective_at?: stri
   }
   const map: Record<string, { text: string; type: string }> = {
     active: { text: '在保', type: 'success' },
-    pending: { text: '待审核', type: 'warning' },
+    // 参保员工的 pending 对外统一显示“待生效”（保经云问题 7.15 第 4、7 条）。
+    pending: { text: '待生效', type: 'warning' },
     stopped: { text: '已停保', type: 'danger' },
   }
   return map[person.status] || { text: person.status, type: 'info' }
