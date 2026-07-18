@@ -80,16 +80,18 @@ const alertBarOption = computed(() => {
 <template>
   <div v-loading="loading" class="home-view">
     <div class="stat-grid">
-      <StatTile v-if="isAdmin" label="参保单位" :value="data?.enterprises ?? '—'" :hint="data ? `待审核 ${data.pending_enterprises}` : ''" hint-type="warning" />
-      <StatTile label="在保人数" :value="data?.active_people ?? '—'" :hint="data ? `待处理 ${data.pending_people}` : ''" hint-type="info" />
-      <StatTile label="生效保单" :value="data?.active_policies ?? '—'" />
-      <StatTile label="待处理理赔" :value="data?.claims_open ?? '—'" hint-type="danger" :hint="data && data.claims_open > 0 ? '需跟进' : ''" />
+      <StatTile v-if="isAdmin" label="参保单位" :value="data?.enterprises ?? '—'" :hint="data ? `待审核 ${data.pending_enterprises}` : ''" hint-type="warning" icon="OfficeBuilding" accent="primary" />
+      <StatTile label="在保人数" :value="data?.active_people ?? '—'" :hint="data ? `待处理 ${data.pending_people}` : ''" hint-type="info" icon="UserFilled" accent="primary" />
+      <StatTile label="生效保单" :value="data?.active_policies ?? '—'" icon="Document" accent="success" />
+      <StatTile label="待处理理赔" :value="data?.claims_open ?? '—'" hint-type="danger" :hint="data && data.claims_open > 0 ? '需跟进' : ''" icon="Warning" accent="danger" />
       <StatTile
         v-if="isAdmin"
         label="待处理停保"
         :value="data?.pending_terminations_count ?? '—'"
         :hint="data && data.pending_terminations_count > 0 ? '点击查看' : ''"
         hint-type="warning"
+        icon="Bell"
+        accent="warning"
         style="cursor: pointer"
         @click="data && data.pending_terminations_count > 0 && router.push({ name: 'pendingTerminations' })"
       />
@@ -98,6 +100,8 @@ const alertBarOption = computed(() => {
         :value="data ? money(data.usage_available) : '—'"
         :hint="data ? `充值 ${money(data.usage_recharged)} · 已用 ${money(data.usage_consumed)}` : '点击去充值'"
         hint-type="info"
+        icon="Wallet"
+        accent="success"
         style="cursor: pointer"
         @click="router.push({ name: 'recharge', query: { account_type: 'usage' } })"
       />
