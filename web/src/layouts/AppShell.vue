@@ -145,10 +145,13 @@ async function openPasswordChange() {
     </aside>
     <main class="main">
       <header class="topbar">
-        <el-breadcrumb separator="/">
-          <el-breadcrumb-item :to="{ name: 'home' }">首页</el-breadcrumb-item>
-          <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
-        </el-breadcrumb>
+        <div class="topbar-title">
+          <h1>{{ currentTitle }}</h1>
+          <el-breadcrumb separator="/">
+            <el-breadcrumb-item :to="{ name: 'home' }">首页</el-breadcrumb-item>
+            <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
+          </el-breadcrumb>
+        </div>
         <div class="top-actions">
           <el-button v-if="!auth.isProjectManager()" link :icon="'Search'" @click="searchVisible = true" />
           <el-badge v-if="!auth.isProjectManager()" :value="messageCount" :hidden="messageCount === 0">
@@ -336,13 +339,35 @@ async function openPasswordChange() {
   min-width: 0;
 }
 .topbar {
-  height: 64px;
-  background: #fff;
+  height: 68px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: saturate(1.4) blur(8px);
   border-bottom: 1px solid var(--el-border-color-lighter);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 28px;
+  position: sticky;
+  top: 0;
+  z-index: 9;
+}
+.topbar-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.topbar-title h1 {
+  margin: 0;
+  font-size: var(--app-fs-h1);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--el-text-color-primary);
+  line-height: 1.2;
+}
+.topbar-title :deep(.el-breadcrumb) {
+  font-size: 11.5px;
+  line-height: 1.2;
 }
 .top-actions {
   display: flex;

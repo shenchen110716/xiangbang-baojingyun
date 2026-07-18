@@ -11,9 +11,10 @@ defineProps<{
 <template>
   <div class="page-card">
     <div class="card-caption">
-      <div>
+      <div class="caption-left">
+        <span class="title-bar" />
         <b>{{ title }}</b>
-        <small v-if="count !== undefined"> 共 {{ count }} 条记录</small>
+        <span v-if="count !== undefined" class="count-pill">{{ count }}</span>
       </div>
       <span v-if="hint" class="hint">{{ hint }}</span>
       <div class="actions"><slot name="actions" /></div>
@@ -26,25 +27,54 @@ defineProps<{
 .page-card {
   background: #fff;
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 9px;
+  border-radius: var(--app-radius-card);
+  box-shadow: var(--app-shadow-card);
   overflow: hidden;
 }
 .card-caption {
-  padding: 18px 20px;
+  padding: 15px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.caption-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.title-bar {
+  width: 3px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--el-color-primary);
+  flex: none;
 }
 .card-caption b {
-  font-size: 14px;
+  font-size: var(--app-fs-h2);
+  font-weight: 650;
+  color: var(--el-text-color-primary);
+  letter-spacing: -0.01em;
 }
-.card-caption small {
-  color: var(--el-text-color-placeholder);
-  font-size: 11px;
-  margin-left: 6px;
+.count-pill {
+  font-size: var(--app-fs-micro);
+  font-weight: 600;
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  padding: 1px 8px;
+  border-radius: 999px;
+  line-height: 1.6;
 }
 .hint {
   color: var(--el-text-color-placeholder);
-  font-size: 11px;
+  font-size: var(--app-fs-caption);
+  margin-left: auto;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

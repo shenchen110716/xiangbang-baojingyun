@@ -11,15 +11,18 @@
   --el-color-primary-light-9: #eaf0fd;
   --el-color-primary-dark-2: #1e40af;
 
-  /* 语义色 */
+  /* 语义色 + 浅底（用于标签、提醒、状态点） */
   --el-color-success: #059669;
+  --el-color-success-light-9: #e7f6f0;
   --el-color-warning: #d97706;
+  --el-color-warning-light-9: #fdf3e7;
   --el-color-danger: #dc2626;
+  --el-color-danger-light-9: #fdecec;
   --el-color-error: #dc2626;
   --el-color-info: #64748b;
 
-  /* 中性色 */
-  --el-text-color-primary: #1e293b;
+  /* 中性色（冷调石板灰） */
+  --el-text-color-primary: #0f172a;
   --el-text-color-regular: #334155;
   --el-text-color-secondary: #64748b;
   --el-text-color-placeholder: #94a3b8;
@@ -30,12 +33,30 @@
   --el-fill-color: #eef2f7;
   --el-fill-color-light: #f4f7fb;
   --el-fill-color-lighter: #f8fafc;
-  --el-bg-color-page: #f1f5f9;
+  --el-bg-color-page: #f2f5f9;
 
-  /* 圆角与阴影（全局统一） */
+  /* 圆角 */
   --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
   --app-radius-card: 12px;
-  --app-shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.05);
+
+  /* 排版尺度 */
+  --app-fs-hero: 28px;
+  --app-fs-h1: 18px;
+  --app-fs-h2: 14px;
+  --app-fs-body: 13px;
+  --app-fs-caption: 12px;
+  --app-fs-micro: 11.5px;
+
+  /* 间距节奏 */
+  --app-gap-lg: 20px;
+  --app-gap-md: 16px;
+  --app-gap-sm: 12px;
+
+  /* 两级柔和阴影 */
+  --app-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --app-shadow-card: 0 1px 3px rgba(15, 23, 42, 0.05), 0 6px 20px rgba(15, 23, 42, 0.045);
+  --app-shadow-hover: 0 2px 6px rgba(15, 23, 42, 0.07), 0 14px 32px rgba(29, 78, 216, 0.08);
 
   /* 品牌渐变（外壳 logo、首图） */
   --app-brand-gradient: linear-gradient(135deg, #1e40af 0%, #2563eb 55%, #3b82f6 100%);
@@ -48,39 +69,79 @@
 body {
   margin: 0;
   font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
-  font-size: 13px;
+  font-size: var(--app-fs-body);
+  line-height: 1.55;
   color: var(--el-text-color-primary);
   background: var(--el-bg-color-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
 /* 金额、数字列等宽对齐，表格读数更整齐 */
 .el-table,
 .el-statistic__number,
+.el-input__inner,
 .amount,
-.mono-num {
+.mono-num,
+.tabular {
   font-variant-numeric: tabular-nums;
 }
 
-/* 卡片统一质感 */
+/* ---------- 卡片 ---------- */
 .el-card {
   border-radius: var(--app-radius-card) !important;
   border-color: var(--el-border-color-lighter) !important;
   box-shadow: var(--app-shadow-card) !important;
 }
 
-/* 表格：更清爽的表头与描边 */
-.el-table th.el-table__cell {
-  background: var(--el-fill-color-lighter) !important;
+/* ---------- 表格：清爽表头、柔和行分隔与悬停 ---------- */
+.el-table {
+  --el-table-border-color: var(--el-border-color-lighter);
+  --el-table-header-bg-color: var(--el-fill-color-lighter);
+  --el-table-row-hover-bg-color: var(--el-color-primary-light-9);
   color: var(--el-text-color-regular);
+}
+.el-table th.el-table__cell {
+  color: var(--el-text-color-secondary);
   font-weight: 600;
+  font-size: var(--app-fs-caption);
+  letter-spacing: 0.01em;
+}
+.el-table td.el-table__cell {
+  padding: 10px 0;
 }
 
-/* 主按钮更沉稳的悬停/按下 */
+/* ---------- 按钮：更沉稳、圆角一致、字重适中 ---------- */
+.el-button {
+  font-weight: 500;
+  border-radius: var(--el-border-radius-base);
+}
 .el-button--primary {
   --el-button-hover-bg-color: #2563eb;
   --el-button-active-bg-color: var(--el-color-primary-dark-2);
+  box-shadow: 0 1px 2px rgba(29, 78, 216, 0.25);
+}
+
+/* ---------- 标签：药丸形、语义浅底 ---------- */
+.el-tag {
+  border-radius: 6px;
+  font-weight: 500;
+  border: none;
+}
+
+/* ---------- 输入：聚焦蓝色描边环 ---------- */
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset, 0 0 0 3px var(--el-color-primary-light-9) !important;
+}
+
+/* ---------- 面包屑与分页轻调 ---------- */
+.el-breadcrumb__inner {
+  color: var(--el-text-color-secondary);
+}
+.el-pagination.is-background .el-pager li.is-active {
+  font-weight: 600;
 }
 
 .page-placeholder {
