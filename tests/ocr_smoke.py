@@ -55,6 +55,18 @@ def run():
     os.environ["INTEGRATION_MODE"] = "mock"
     print("real routing -> _call_real OK")
 
+    # 回单金额识别：真实模式打桩解析金额（URL 已配，需 real 模式）
+    def fake_amount(url, image):
+        return 8888.88
+    ocr._call_real_amount = fake_amount
+    os.environ["INTEGRATION_MODE"] = "real"
+    amt = ocr.recognize_receipt_amount(b"img")
+    assert amt["mock"] is False and amt["amount"] == 8888.88
+    os.environ["INTEGRATION_MODE"] = "mock"
+    mock_amt = ocr.recognize_receipt_amount(b"img")
+    assert mock_amt["mock"] is True and mock_amt["amount"] > 0
+    print("receipt amount (real+mock) OK")
+
     print("ocr_smoke: ALL GREEN")
 
 

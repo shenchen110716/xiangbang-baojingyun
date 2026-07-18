@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as rechargeApi from '@/api/recharge'
+import { recognizeReceiptAmount } from '@/api/ocr'
 import type { RechargePaymentAccount } from '@/api/recharge'
 import { listEnterprises } from '@/api/enterprises'
 import type { Enterprise, RechargeRequest } from '@/api/types'
@@ -90,9 +91,28 @@ function openSubmit(prefill?: { enterprise_id?: number; account_type?: 'premium'
   submitVisible.value = true
   refreshPaymentAccount()
 }
-function handleFileChange(e: Event) {
+const ocrHint = ref('')
+const ocrLoading = ref(false)
+async function handleFileChange(e: Event) {
   const input = e.target as HTMLInputElement
-  submitForm.file = input.files?.[0] ?? null
+  const file = input.files?.[0] ?? null
+  submitForm.file = file
+  ocrHint.value = ''
+  // 图片回单尝试 OCR 自动带出金额（识别为便利功能，失败/未启用则静默，不影响手工填写）
+  if (file && file.type.startsWith('image/')) {
+    ocrLoading.value = true
+    try {
+      const res = await recognizeReceiptAmount(file)
+      if (res.amount > 0) {
+        submitForm.amount = res.amount
+        ocrHint.value = res.mock ? `已识别金额 ${money(res.amount)}（模拟，请核对）` : `已识别金额 ${money(res.amount)}，请核对`
+      }
+    } catch {
+      /* OCR 未启用或识别失败：静默，用户手工填写 */
+    } finally {
+      ocrLoading.value = false
+    }
+  }
 }
 async function submitRecharge() {
   if (!submitForm.enterprise_id) { ElMessage.error('请选择投保单位'); return }
@@ -219,7 +239,14 @@ async function rejectRequest(row: RechargeRequest) {
           <span class="muted">平台尚未配置该账户的收款信息，请联系平台后再转账。</span>
         </el-form-item>
         <el-form-item label="充值金额" required><el-input-number v-model="submitForm.amount" :min="0.01" :step="100" style="width: 100%" /></el-form-item>
-        <el-form-item label="转账回单" required><input type="file" accept=".pdf,.jpg,.jpeg,.png" @change="handleFileChange" /></el-form-item>
+        <el-form-item label="转账回单" required>
+          <div style="width: 100%">
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png" @change="handleFileChange" />
+            <div v-if="ocrLoading" class="muted" style="font-size: 12px; margin-top: 4px">正在识别金额…</div>
+            <div v-else-if="ocrHint" style="font-size: 12px; margin-top: 4px; color: var(--el-color-success)">{{ ocrHint }}</div>
+            <div v-else class="muted" style="font-size: 12px; margin-top: 4px">上传图片回单可自动识别金额（需在系统设置开启 OCR）</div>
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="submitVisible = false">取消</el-button>
