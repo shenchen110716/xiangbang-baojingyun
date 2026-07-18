@@ -11,6 +11,7 @@ from ..models import Enterprise, EnterprisePremiumAccount, InsurerAccount, Pendi
 from ..services import (
     affected_people_for_account,
     notify_enterprise,
+    premium_account_view,
     scan_premium_shortfalls,
     serialize,
     terminate_person_policy,
@@ -81,7 +82,10 @@ def confirm_pending_termination(
         )
         .with_for_update()
     )
-    if premium_account is None or premium_account.balance > 0:
+    # 以可用余额（充值总额 − 已消耗保费）判断是否已回正，与扫描和三端展示口径一致。
+    enterprise = session.get(Enterprise, item.enterprise_id)
+    account_view = next((v for v in premium_account_view(session, enterprise) if v["account_id"] == item.account_id), None) if enterprise else None
+    if premium_account is None or (account_view is not None and account_view["available"] > 0):
         item.status = "dismissed"
         item.dismissed_at = business_now()
         session.commit()

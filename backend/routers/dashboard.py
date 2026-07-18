@@ -7,7 +7,7 @@ from ..core.db import db
 from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import Claim, Enterprise, InsurancePlan, InsuredPerson, PendingTermination, Policy, PolicyMember, User, WorkPosition
-from ..services import allowed_employer_ids, amount, effective_person_status, policy_dict, premium_accounts_for_enterprise, pricing_snapshot, scan_premium_shortfalls, strip_internal_pricing, usage_account_view, usage_person_days
+from ..services import allowed_employer_ids, amount, effective_person_status, policy_dict, premium_account_view, premium_accounts_for_enterprise, pricing_snapshot, scan_premium_shortfalls, strip_internal_pricing, usage_account_view, usage_person_days
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
@@ -42,7 +42,7 @@ def dashboard(user: User = Depends(current_user), session: Session = Depends(db)
         daily_usage=uview['active_people']*uview['daily_rate']
         usage_recharged_total+=uview['recharged']; usage_consumed_total+=uview['consumed']; usage_available_total+=uview['available']
         active_policies=list(session.scalars(select(Policy).where(Policy.enterprise_id==ent.id,Policy.status=='active')))
-        for row in premium_accounts_for_enterprise(session, ent.id):
+        for row in premium_account_view(session, ent):
             insurer_set = set(row["insurers"])
             daily_premium = 0.0
             for p in active_policies:
@@ -50,12 +50,13 @@ def dashboard(user: User = Depends(current_user), session: Session = Depends(db)
                 if not plan or plan.insurer not in insurer_set: continue
                 billing = policy_dict(p, session)
                 daily_premium += float(billing['premium'] or 0) / (1 if billing['billing_mode'] == 'daily' else 30)
-            days_left = 999999 if daily_premium <= 0 else row["balance"] / daily_premium
+            days_left = 999999 if daily_premium <= 0 else row["available"] / daily_premium
             if row["account_id"] not in premium_agg:
-                premium_agg[row["account_id"]] = {"account_id": row["account_id"], "label": row["label"], "insurers": row["insurers"], "balance": 0.0}
-            premium_agg[row["account_id"]]["balance"] += row["balance"]
+                premium_agg[row["account_id"]] = {"account_id": row["account_id"], "label": row["label"], "insurers": row["insurers"], "balance": 0.0, "recharged": 0.0, "consumed": 0.0, "available": 0.0}
+            agg = premium_agg[row["account_id"]]
+            agg["balance"] += row["available"]; agg["recharged"] += row["recharged"]; agg["consumed"] += row["consumed"]; agg["available"] += row["available"]
             if days_left <= int(ent.alert_days or 3):
-                alerts.append({'enterprise_id':ent.id,'enterprise_name':ent.name,'account':'premium','account_id':row["account_id"],'label':row["label"],'balance':row["balance"],'daily_burn':daily_premium,'days_left':round(days_left,1),'alert_days':ent.alert_days or 3,'level':'critical' if days_left<=1 else 'warning'})
+                alerts.append({'enterprise_id':ent.id,'enterprise_name':ent.name,'account':'premium','account_id':row["account_id"],'label':row["label"],'balance':row["available"],'daily_burn':daily_premium,'days_left':round(days_left,1),'alert_days':ent.alert_days or 3,'level':'critical' if days_left<=1 else 'warning'})
         usage_days_left=999999 if daily_usage<=0 else uview['available']/daily_usage
         if usage_days_left <= int(ent.alert_days or 3): alerts.append({'enterprise_id':ent.id,'enterprise_name':ent.name,'account':'usage','balance':uview['available'],'daily_burn':daily_usage,'days_left':round(usage_days_left,1),'alert_days':ent.alert_days or 3,'level':'critical' if usage_days_left<=1 else 'warning'})
 

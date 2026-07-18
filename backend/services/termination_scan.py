@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..core.business_time import business_now
 from ..models import (
+    Enterprise,
     EnterprisePremiumAccount,
     InsurancePlan,
     InsuredPerson,
@@ -82,11 +83,27 @@ def scan_premium_shortfalls(session: Session, enterprise_id: int | None = None) 
     record whose account has since been recharged back to a positive
     balance. Returns only the records newly created by THIS call, so the
     caller can fire notifications for exactly those without re-notifying
-    on every subsequent scan."""
-    stmt = select(EnterprisePremiumAccount).where(EnterprisePremiumAccount.balance <= 0)
+    on every subsequent scan.
+
+    Shortfall is judged on the AVAILABLE balance (充值总额 − 已消耗保费), the same
+    figure the portals show, not the raw recharge total — so an account whose
+    accrued premium has overtaken its recharges is caught even if it was funded
+    once. available is computed (not a stored column), so this can't be a SQL
+    filter; premium_account_view does the per-account accrual."""
+    from .policies import premium_account_view
+
+    enterprises_stmt = select(Enterprise)
     if enterprise_id is not None:
-        stmt = stmt.where(EnterprisePremiumAccount.enterprise_id == enterprise_id)
-    shortfall_rows = session.scalars(stmt).all()
+        enterprises_stmt = enterprises_stmt.where(Enterprise.id == enterprise_id)
+    shortfall_rows = []
+    for enterprise in session.scalars(enterprises_stmt).all():
+        for view in premium_account_view(session, enterprise):
+            if view["available"] <= 0:
+                row = session.scalar(select(EnterprisePremiumAccount).where(
+                    EnterprisePremiumAccount.enterprise_id == enterprise.id,
+                    EnterprisePremiumAccount.account_id == view["account_id"]))
+                if row is not None:
+                    shortfall_rows.append(row)
     shortfall_keys = {(row.enterprise_id, row.account_id) for row in shortfall_rows}
 
     # auto-dismiss: any pending record whose account is no longer in shortfall

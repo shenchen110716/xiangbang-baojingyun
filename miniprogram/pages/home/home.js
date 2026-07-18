@@ -19,7 +19,11 @@ Page({
     this.setData({ loading: true, greeting, today });
     return Promise.all([app.request('/dashboard', { silent: true }), app.request('/messages', { silent: true }), app.loadProfile()])
       .then(([dashboard, messages, user]) => {
-        dashboard.premium_balance_total = (dashboard.premium_accounts || []).reduce((sum, item) => sum + (item.balance || 0), 0);
+        const premiumAccounts = dashboard.premium_accounts || [];
+        // balance 现在等于可用余额（充值 − 已消耗），与三端口径一致。
+        dashboard.premium_balance_total = premiumAccounts.reduce((sum, item) => sum + (item.available != null ? item.available : (item.balance || 0)), 0);
+        dashboard.premium_recharged_total = premiumAccounts.reduce((sum, item) => sum + (item.recharged != null ? item.recharged : (item.balance || 0)), 0);
+        dashboard.premium_consumed_total = premiumAccounts.reduce((sum, item) => sum + (item.consumed || 0), 0);
         this.setData({ dashboard, messages: messages.slice(0, 3), user, enterprise: app.globalData.enterprise || {}, loading: false });
       })
       .catch((error) => { this.setData({ loading: false }); wx.showToast({ title: error.message, icon: 'none' }); });

@@ -229,8 +229,13 @@ def run():
 
             matching_rows = [row for row in dashboard_data["premium_accounts"] if row["account_id"] == account.id]
             assert len(matching_rows) == 1  # two enterprises on the same account_id must be ONE aggregated entry, not two
-            expected_total_balance = balance_after + 45.0
-            assert matching_rows[0]["balance"] == expected_total_balance
+            # 口径改造：充值总额保留在 recharged；展示用 balance 现在等于可用余额
+            # （充值总额 − 已消耗保费），与三端展示和待停保扫描一致。
+            expected_total_recharged = balance_after + 45.0
+            row0 = matching_rows[0]
+            assert row0["recharged"] == expected_total_recharged
+            assert abs(row0["available"] - (row0["recharged"] - row0["consumed"])) < 0.02
+            assert row0["balance"] == row0["available"]
 
             alert = next(a for a in dashboard_data["balance_alerts"] if a["enterprise_id"] == enterprise_id and a["account"] == "premium" and a["account_id"] == account.id)
             # 200/day (测试保司) + 150/day (第二保司), both billing_mode="daily" ->
