@@ -25,6 +25,8 @@ export interface Enterprise {
   agent_name?: string
   premium_balance: number
   premium_balance_total?: number
+  premium_recharged?: number
+  premium_consumed?: number
   usage_balance: number
   usage_recharged?: number
   usage_consumed?: number
@@ -358,6 +360,7 @@ export interface BillingRow {
   balance: number
   recharged?: number
   available?: number
+  premium_consumed?: number
   status: string
   daily_rate: number
   estimated_daily: number
@@ -432,6 +435,9 @@ export interface PremiumAccountRow {
   label: string
   insurers: string[]
   balance: number
+  recharged?: number
+  consumed?: number
+  available?: number
 }
 
 export interface InsurerAccount {

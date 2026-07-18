@@ -8,7 +8,7 @@
   <view class="grid-2 section">
     <view class="stat"><text class="stat-label">参保员工</text><text class="stat-value">{{dashboard.active_people||0}}<text class="stat-unit">人</text></text></view>
     <view class="stat"><text class="stat-label">待审核</text><text class="stat-value">{{dashboard.pending_people||0}}<text class="stat-unit">人</text></text></view>
-    <view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">保费余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.premium_balance_total||0}}</text></view>
+    <view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">保费可用余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.premium_balance_total||0}}</text><text class="stat-sub">充值 ¥{{dashboard.premium_recharged_total||0}} · 已用 ¥{{dashboard.premium_consumed_total||0}}</text></view>
     <view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">服务费可用余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.usage_available||0}}</text><text class="stat-sub">充值 ¥{{dashboard.usage_recharged||0}} · 已用 ¥{{dashboard.usage_consumed||0}}</text></view>
     <view class="stat"><text class="stat-label">理赔处理中</text><text class="stat-value">{{dashboard.claims_open||0}}<text class="stat-unit">件</text></text></view>
   </view>
