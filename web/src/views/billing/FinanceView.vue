@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as financeApi from '@/api/finance'
 import { INVOICE_STATUS_TEXT } from '@/api/finance'
@@ -77,11 +77,24 @@ async function openLedger(row: BillingRow) {
 
 // ---- invoices ----
 const invoiceVisible = ref(false)
-const invoiceForm = reactive({ enterprise_id: null as number | null, account: 'premium' as 'premium' | 'usage', amount: 0, title: '', tax_no: '', email: '' })
-function openInvoiceCreate() {
-  Object.assign(invoiceForm, { enterprise_id: auth.isEnterprise() ? auth.user?.enterprise_id ?? null : null, account: 'premium', amount: 0, title: '', tax_no: '', email: '' })
-  invoiceVisible.value = true
+const invoiceForm = reactive({ enterprise_id: null as number | null, account: 'premium' as 'premium' | 'usage', invoice_type: '增值税普通发票', amount: 0, title: '', tax_no: '', email: '' })
+const invoiceSummary = ref<financeApi.InvoiceMonthlySummary | null>(null)
+const invoiceAlreadyDone = computed(() => invoiceSummary.value ? invoiceSummary.value[invoiceForm.account].invoiced : false)
+// 按自然月自动带出当月应开票金额（保费 / 系统服务费），并提示本月是否已开票。
+async function refreshInvoiceAmount() {
+  if (!invoiceForm.enterprise_id) { invoiceSummary.value = null; return }
+  try {
+    invoiceSummary.value = await financeApi.getInvoiceMonthlySummary(invoiceForm.enterprise_id)
+    invoiceForm.amount = invoiceSummary.value[invoiceForm.account].amount
+  } catch { invoiceSummary.value = null }
 }
+function openInvoiceCreate() {
+  Object.assign(invoiceForm, { enterprise_id: auth.isEnterprise() ? auth.user?.enterprise_id ?? null : null, account: 'premium', invoice_type: '增值税普通发票', amount: 0, title: '', tax_no: '', email: '' })
+  invoiceSummary.value = null
+  invoiceVisible.value = true
+  refreshInvoiceAmount()
+}
+watch(() => [invoiceForm.enterprise_id, invoiceForm.account], refreshInvoiceAmount)
 async function submitInvoice() {
   if (!invoiceForm.enterprise_id || invoiceForm.amount <= 0 || !invoiceForm.title) { ElMessage.error('请选择投保单位、填写金额和发票抬头'); return }
   try {
@@ -219,10 +232,22 @@ async function setInvoiceStatus(item: Invoice, status: string) {
         <el-form-item label="费用账户">
           <el-select v-model="invoiceForm.account" style="width: 100%">
             <el-option label="保费账户" value="premium" />
-            <el-option label="平台使用费账户" value="usage" />
+            <el-option label="系统服务费账户" value="usage" />
           </el-select>
         </el-form-item>
-        <el-form-item label="开票金额" required><el-input-number v-model="invoiceForm.amount" :min="0.01" :step="100" /></el-form-item>
+        <el-form-item label="票类" required>
+          <el-select v-model="invoiceForm.invoice_type" style="width: 100%">
+            <el-option label="增值税普通发票" value="增值税普通发票" />
+            <el-option label="增值税专用发票" value="增值税专用发票" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="开票金额" required>
+          <el-input-number v-model="invoiceForm.amount" :min="0.01" :step="100" style="width: 100%" />
+          <div v-if="invoiceSummary" class="muted" style="font-size: 12px; line-height: 1.6; margin-top: 4px">
+            已自动带出 {{ invoiceSummary.month }} 当月{{ invoiceForm.account === 'premium' ? '保费' : '系统服务费' }}：{{ money(invoiceSummary[invoiceForm.account].amount) }}
+            <span v-if="invoiceAlreadyDone" style="color: var(--el-color-warning)"> · 本月该账户已申请过发票</span>
+          </div>
+        </el-form-item>
         <el-form-item label="发票抬头" required><el-input v-model="invoiceForm.title" /></el-form-item>
         <el-form-item label="纳税人识别号"><el-input v-model="invoiceForm.tax_no" /></el-form-item>
         <el-form-item label="接收邮箱"><el-input v-model="invoiceForm.email" /></el-form-item>

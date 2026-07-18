@@ -37,6 +37,8 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     if "agent_id" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN agent_id INTEGER")
     if "usage_fee_daily" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN usage_fee_daily FLOAT DEFAULT 0.1")
     if "alert_days" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN alert_days INTEGER DEFAULT 3")
+    invoice_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(invoices)")}
+    if invoice_columns and "invoice_type" not in invoice_columns: s.connection().exec_driver_sql("ALTER TABLE invoices ADD COLUMN invoice_type VARCHAR(40) DEFAULT '增值税普通发票'")
     commission_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(agent_commissions)")}
     if "mode" not in commission_columns: s.connection().exec_driver_sql("ALTER TABLE agent_commissions ADD COLUMN mode VARCHAR(20) DEFAULT 'rebate'")
     if "markup_amount" not in commission_columns: s.connection().exec_driver_sql("ALTER TABLE agent_commissions ADD COLUMN markup_amount FLOAT DEFAULT 0")
