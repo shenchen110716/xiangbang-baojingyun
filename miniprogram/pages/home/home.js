@@ -3,7 +3,7 @@ const app = getApp();
 Page({
   data: {
     loading: true,
-    dashboard: { enterprises: 0, people: 0, pending_people: 0, premium_balance_total: 0, usage_balance: 0, claims_open: 0, balance_alerts: [] },
+    dashboard: { enterprises: 0, people: 0, pending_people: 0, premium_balance_total: 0, usage_balance: 0, usage_available: 0, usage_recharged: 0, usage_consumed: 0, claims_open: 0, balance_alerts: [] },
     messages: [],
     user: {},
     enterprise: {},

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..core.business_time import as_business_time, business_now, business_today
 from ..models import Policy, PolicyMember
+from .serialization import amount
 
 
 def period_amount(unit_price: float, billing_mode: str, start: date, end: date) -> float:
@@ -91,4 +92,26 @@ def usage_person_days(
         "active_people": active_people,
         "start_date": requested_start.isoformat() if requested_start else None,
         "end_date": end.isoformat(),
+    }
+
+
+def usage_account_view(session: Session, enterprise) -> dict:
+    """服务费（平台使用费）账户口径，三端展示与参停保门禁统一以此为准：
+
+    - 充值总额 recharged = enterprise.usage_balance —— 该字段只在充值/入账时累加、
+      从不扣减，因此等于历次充值总额；
+    - 总使用费 consumed = 全时段计费人天 × 当前日费率；
+    - 可用余额 available = 充值总额 − 总使用费。
+
+    日费率按当前值折算历史人天（系统不保存费率变更历史，属可接受的近似）。"""
+    rate = float(enterprise.usage_fee_daily or 0.1)
+    lifetime = usage_person_days(session, enterprise.id, requested_end=business_today())
+    recharged = amount(enterprise.usage_balance)
+    consumed = amount(lifetime["person_days"] * rate)
+    return {
+        "recharged": recharged,
+        "consumed": consumed,
+        "available": amount(recharged - consumed),
+        "active_people": lifetime["active_people"],
+        "daily_rate": rate,
     }
