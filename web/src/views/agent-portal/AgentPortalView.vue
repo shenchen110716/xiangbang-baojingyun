@@ -22,6 +22,9 @@ import { money } from '@/utils/format'
 import StatTile from '@/components/StatTile.vue'
 import PageCard from '@/components/PageCard.vue'
 import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
+import HelpDrawer from '@/components/HelpDrawer.vue'
+
+const helpVisible = ref(false)
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -105,6 +108,7 @@ function logout() {
       <div class="portal-brand">响帮帮保经云 · 业务员工作台</div>
       <div class="portal-actions">
         <span class="portal-user">{{ auth.user?.name }}</span>
+        <el-button size="small" :icon="'QuestionFilled'" @click="helpVisible = true">帮助</el-button>
         <el-button size="small" @click="passwordDialogVisible = true">修改密码</el-button>
         <el-button size="small" @click="logout">退出登录</el-button>
       </div>
@@ -197,6 +201,7 @@ function logout() {
     </main>
 
     <PasswordChangeDialog v-model="passwordDialogVisible" />
+    <HelpDrawer v-model="helpVisible" role="salesperson" />
   </div>
 </template>
 

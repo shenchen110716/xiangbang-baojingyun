@@ -7,6 +7,7 @@ import { routes } from '@/router/routes'
 import * as miscApi from '@/api/misc'
 import { listLinkedAccounts, type LinkedAccount } from '@/api/auth'
 import GlobalSearch from '@/components/GlobalSearch.vue'
+import HelpDrawer from '@/components/HelpDrawer.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -14,6 +15,7 @@ const auth = useAuthStore()
 
 const messageCount = ref(0)
 const searchVisible = ref(false)
+const helpVisible = ref(false)
 const linkedAccounts = ref<LinkedAccount[]>([])
 const switcherVisible = ref(false)
 const switcherSearch = ref('')
@@ -152,6 +154,7 @@ async function openPasswordChange() {
           <el-badge v-if="!auth.isProjectManager()" :value="messageCount" :hidden="messageCount === 0">
             <el-button link :icon="'Bell'" @click="router.push({ name: 'message' })" />
           </el-badge>
+          <el-button link :icon="'QuestionFilled'" title="系统帮助" @click="helpVisible = true" />
           <el-dropdown>
             <span class="top-user">
               <span class="avatar small">{{ auth.user?.name?.slice(0, 1) || '?' }}</span>
@@ -171,6 +174,7 @@ async function openPasswordChange() {
       </div>
     </main>
     <GlobalSearch v-model="searchVisible" />
+    <HelpDrawer v-model="helpVisible" />
 
     <el-dialog v-model="switcherVisible" title="切换登录账户" width="420px">
       <el-input v-model="switcherSearch" placeholder="搜索公司名" clearable style="margin-bottom: 14px" />
