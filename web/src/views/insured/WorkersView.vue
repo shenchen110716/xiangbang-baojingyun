@@ -50,8 +50,10 @@ const filtered = computed(() => {
 const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
 
 const totalCount = computed(() => list.value.length)
-const activeCount = computed(() => list.value.filter((x) => x.status === 'active').length)
-const pendingCount = computed(() => list.value.filter((x) => x.status === 'pending').length)
+// 在保 = 已生效的 active；待生效 = 待审核(pending) + 已通过但未来才生效(active-pending)。
+// 修复：原来把 active-pending 计入在保、待生效恒为 0（保经云问题 7.18 第 7 条）。
+const activeCount = computed(() => list.value.filter((x) => x.status === 'active' && !isPendingEffective(x)).length)
+const pendingCount = computed(() => list.value.filter((x) => x.status === 'pending' || isPendingEffective(x)).length)
 const stoppedCount = computed(() => list.value.filter((x) => x.status === 'stopped').length)
 
 // ---- detail / edit dialogs ----
@@ -201,10 +203,10 @@ function exportCsv() {
         <el-table-column label="被保险人" min-width="120">
           <template #default="{ row }">
             <div>{{ row.name }}</div>
-            <small class="muted">{{ row.id_number }}</small>
+            <small class="muted">{{ row.phone || '—' }}</small>
           </template>
         </el-table-column>
-        <el-table-column prop="phone" label="手机号" width="120" />
+        <el-table-column prop="id_number" label="身份证号" width="180" />
         <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
         <el-table-column prop="actual_employer_name" label="实际工作单位" min-width="130" />
         <el-table-column label="岗位/类别" min-width="120">

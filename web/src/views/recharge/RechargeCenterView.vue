@@ -153,7 +153,7 @@ async function rejectRequest(row: RechargeRequest) {
       <el-table :data="paged" size="small">
         <el-table-column v-if="auth.isAdmin()" prop="enterprise_name" label="投保单位" min-width="140" />
         <el-table-column label="账户类型" width="100">
-          <template #default="{ row }">{{ row.account_type === 'premium' ? '保费' : '使用费' }}</template>
+          <template #default="{ row }">{{ row.account_type === 'premium' ? '保费' : '系统服务费' }}</template>
         </el-table-column>
         <el-table-column prop="insurer" label="保司" min-width="120">
           <template #default="{ row }">{{ row.insurer || '—' }}</template>
@@ -199,7 +199,7 @@ async function rejectRequest(row: RechargeRequest) {
         <el-form-item label="账户类型" required>
           <el-radio-group v-model="submitForm.account_type">
             <el-radio-button value="premium">保费</el-radio-button>
-            <el-radio-button value="usage">使用费</el-radio-button>
+            <el-radio-button value="usage">系统服务费</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <el-form-item v-if="submitForm.account_type === 'premium'" label="保司" required>
