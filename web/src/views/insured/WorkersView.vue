@@ -83,7 +83,7 @@ async function toggleStatusFromDetail() {
 
 async function changeStatus(item: InsuredPerson, target: 'active' | 'pending') {
   try {
-    await ElMessageBox.confirm(`确定将「${item.name}」${target === 'active' ? '参保' : '转为待审核'}吗？`, '操作确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确定将「${item.name}」${target === 'active' ? '参保' : '转为待生效'}吗？`, '操作确认', { type: 'warning' })
   } catch { return }
   try {
     await setInsuredStatus(item.id, target)
@@ -163,7 +163,7 @@ function exportCsv() {
     <div class="stat-grid">
       <StatTile label="员工总数" :value="totalCount" />
       <StatTile label="在保" :value="activeCount" hint-type="success" />
-      <StatTile label="待审核" :value="pendingCount" hint-type="warning" />
+      <StatTile label="待生效" :value="pendingCount" hint-type="warning" />
       <StatTile label="已停保" :value="stoppedCount" hint-type="danger" />
     </div>
 
@@ -181,8 +181,8 @@ function exportCsv() {
             <el-option label="实际单位" value="actual_employer_name" />
           </el-select>
           <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 130px">
-            <el-option label="待审核" value="pending" />
-            <el-option label="待生效" value="active-pending" />
+            <el-option label="待生效" value="pending" />
+            <el-option label="待生效(倒计时)" value="active-pending" />
             <el-option label="在保" value="active" />
             <el-option label="已停保" value="stopped" />
           </el-select>
@@ -191,7 +191,7 @@ function exportCsv() {
           <el-select v-model="bulkAction" placeholder="批量操作" style="width: 150px">
             <el-option label="批量参保" value="active" />
             <el-option label="批量停保" value="stopped" />
-            <el-option label="批量转待审核" value="pending" />
+            <el-option label="批量转待生效" value="pending" />
           </el-select>
           <el-button @click="runBulkAction">执行勾选操作</el-button>
         </div>

@@ -7,7 +7,8 @@
     <label class="field"><view class="field-label required">身份证号</view><input class="input" value="{{form.id_number}}" placeholder="请输入身份证号" data-key="id_number" bindinput="input" /></label>
     <label class="field"><view class="field-label">手机号</view><input class="input" type="number" maxlength="11" value="{{form.phone}}" placeholder="用于保单和理赔通知" data-key="phone" bindinput="input" /></label>
     <label class="field"><view class="field-label required">投保单位</view><picker range="{{enterprises}}" range-key="name" value="{{enterpriseIndex}}" bindchange="enterpriseChange"><view class="picker">{{enterprises[enterpriseIndex].name||'请选择'}}</view></picker></label>
-    <label class="field"><view class="field-label required">已审核岗位</view><picker range="{{positions}}" range-key="name" value="{{positionIndex}}" bindchange="positionChange"><view class="picker">{{positions[positionIndex].name||'暂无可用岗位'}}</view></picker></label>
+    <label class="field"><view class="field-label required">实际用工单位</view><picker range="{{employers}}" range-key="name" value="{{employerIndex}}" bindchange="employerChange"><view class="picker">{{employers[employerIndex].name||'请先选择投保单位'}}</view></picker></label>
+    <label class="field"><view class="field-label required">已审核岗位</view><picker range="{{positions}}" range-key="name" value="{{positionIndex}}" bindchange="positionChange"><view class="picker">{{positions[positionIndex].name||'该用工单位暂无可用岗位'}}</view></picker></label>
     <view wx:if="{{selectedPosition}}" class="card-plain" style="background:#f4f7ff">
       <view class="row between"><text class="strong">{{selectedPosition.actual_employer_name}}</text><text class="tag tag-success">{{selectedPosition.occupation_class}}</text></view>
       <view class="list-meta">岗位：{{selectedPosition.name}}｜审核状态：已通过</view>

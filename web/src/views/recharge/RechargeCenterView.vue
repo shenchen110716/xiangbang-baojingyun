@@ -18,12 +18,14 @@ const route = useRoute()
 const loading = ref(true)
 const requests = ref<RechargeRequest[]>([])
 const enterprises = ref<Enterprise[]>([])
+const paymentOptions = ref<rechargeApi.PremiumPaymentOption[]>([])
 
 async function load() {
   loading.value = true
   try {
     const tasks: Promise<unknown>[] = [
       rechargeApi.listRechargeRequests().then((r) => (requests.value = r)),
+      rechargeApi.getRechargePaymentOptions().then((r) => (paymentOptions.value = r)).catch(() => (paymentOptions.value = [])),
     ]
     if (auth.isAdmin()) {
       tasks.push(listEnterprises().then((r) => (enterprises.value = r)))
@@ -201,7 +203,9 @@ async function rejectRequest(row: RechargeRequest) {
           </el-radio-group>
         </el-form-item>
         <el-form-item v-if="submitForm.account_type === 'premium'" label="保司" required>
-          <el-input v-model="submitForm.insurer" placeholder="请填写保险公司名称" />
+          <el-select v-model="submitForm.insurer" filterable allow-create default-first-option placeholder="请选择保司（已配置收款账户，也可直接输入）" style="width: 100%">
+            <el-option v-for="opt in paymentOptions" :key="opt.insurer" :label="opt.insurer" :value="opt.insurer" />
+          </el-select>
         </el-form-item>
         <el-form-item v-if="paymentAccount" label="收款账户">
           <div class="account-hint">

@@ -13,6 +13,7 @@
     "pages/position-edit/position-edit",
     "pages/employee-edit/employee-edit",
     "pages/employee-detail/employee-detail",
+    "pages/cert/cert",
     "pages/import/import",
     "pages/batches/batches",
     "pages/products/products",

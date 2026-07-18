@@ -20,6 +20,13 @@ export function getRechargePaymentAccount(account_type: 'premium' | 'usage', ins
     .then((r) => r.data)
 }
 
+export interface PremiumPaymentOption extends RechargePaymentAccount { insurer: string }
+
+// 已配置收款账户的保费保司列表，供充值时下拉选择。
+export function getRechargePaymentOptions() {
+  return client.get<PremiumPaymentOption[]>('/recharge/payment-accounts').then((r) => r.data)
+}
+
 export function createInsurerAccount(data: { label: string; bank_name: string; account_no: string; account_holder: string }) {
   return client.post<InsurerAccount>('/insurer-accounts', data).then((r) => r.data)
 }
