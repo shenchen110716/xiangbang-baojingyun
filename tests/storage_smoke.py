@@ -64,10 +64,10 @@ class _FakeS3:
 
 def test_s3_backend():
     fake = _FakeS3()
-    # 切到 s3 后端并注入假客户端
+    # 切到 s3 后端并注入假客户端；桶名/endpoint 经 env 回落（无 DB 时 settings.get 回落 env）
     storage.STORAGE_BACKEND = "s3"
-    storage.S3_BUCKET = "test-bucket"
-    storage.S3_ENDPOINT_URL = "https://acct.r2.cloudflarestorage.com"
+    os.environ["S3_BUCKET"] = "test-bucket"
+    os.environ["S3_ENDPOINT_URL"] = "https://acct.r2.cloudflarestorage.com"
     storage._client = fake
 
     url = storage.save_bytes("claims/2/xy99.jpg", b"img-bytes")
@@ -91,6 +91,8 @@ def test_s3_backend():
     # 复位，避免影响其他测试
     storage.STORAGE_BACKEND = "local"
     storage._client = None
+    os.environ.pop("S3_BUCKET", None)
+    os.environ.pop("S3_ENDPOINT_URL", None)
     print("s3 backend (mock) OK")
 
 

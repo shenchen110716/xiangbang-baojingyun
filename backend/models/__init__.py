@@ -19,6 +19,7 @@ from .timeliness import (
     ParticipationOperation, EmploymentTimelinessResult, TimelinessOutbox,
 )
 from .misc import AuditLog, EnrollmentEmail
+from .settings import SystemSetting
 
 __all__ = [
     "Base",
@@ -59,4 +60,5 @@ __all__ = [
     "AgentCommissionPaymentAllocation",
     "AuditLog",
     "EnrollmentEmail",
+    "SystemSetting",
 ]

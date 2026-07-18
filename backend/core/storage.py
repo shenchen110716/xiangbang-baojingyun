@@ -20,20 +20,28 @@ from typing import BinaryIO, Optional, Tuple
 
 from .config import ROOT
 
-STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "local").lower()
-S3_BUCKET = os.getenv("S3_BUCKET", "")
-S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", "")
-S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID", "")
-S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY", "")
-S3_REGION = os.getenv("S3_REGION", "auto")
 S3_PRESIGN_TTL = int(os.getenv("S3_PRESIGN_TTL", "120"))
 
 _UPLOADS = ROOT / "uploads"
 _client = None
+# 测试可直接改这个覆盖后端；生产由平台端「系统设置」/环境变量决定。
+STORAGE_BACKEND = None
+
+
+def _cfg(key: str, default: str = "") -> str:
+    """配置读取：平台端系统设置（DB，密钥自动解密）→ 环境变量 → 默认值。
+    延迟导入 services.settings，避免 core→services 的导入期循环。"""
+    if key == "STORAGE_BACKEND" and STORAGE_BACKEND is not None:
+        return STORAGE_BACKEND  # 测试覆盖
+    try:
+        from ..services import settings as settings_service
+        return settings_service.get(key, default)
+    except Exception:
+        return os.getenv(key, default)
 
 
 def use_s3() -> bool:
-    return STORAGE_BACKEND == "s3" and bool(S3_BUCKET) and bool(S3_ENDPOINT_URL)
+    return _cfg("STORAGE_BACKEND", "local").lower() == "s3" and bool(_cfg("S3_BUCKET")) and bool(_cfg("S3_ENDPOINT_URL"))
 
 
 def _s3():
@@ -44,19 +52,23 @@ def _s3():
 
         _client = boto3.client(
             "s3",
-            endpoint_url=S3_ENDPOINT_URL,
-            aws_access_key_id=S3_ACCESS_KEY_ID,
-            aws_secret_access_key=S3_SECRET_ACCESS_KEY,
-            region_name=S3_REGION,
+            endpoint_url=_cfg("S3_ENDPOINT_URL"),
+            aws_access_key_id=_cfg("S3_ACCESS_KEY_ID"),
+            aws_secret_access_key=_cfg("S3_SECRET_ACCESS_KEY"),
+            region_name=_cfg("S3_REGION", "auto"),
             config=Config(signature_version="s3v4"),
         )
     return _client
 
 
+def _bucket() -> str:
+    return _cfg("S3_BUCKET")
+
+
 def save_bytes(key: str, content: bytes) -> str:
     """保存字节内容。key 形如 'claims/2/ab12cd.jpg'，返回持久化到数据库的 url 标记。"""
     if use_s3():
-        _s3().put_object(Bucket=S3_BUCKET, Key=key, Body=content)
+        _s3().put_object(Bucket=_bucket(), Key=key, Body=content)
         return f"s3://{key}"
     path = _UPLOADS / key
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -68,7 +80,7 @@ def save_fileobj(key: str, fileobj: BinaryIO) -> str:
     """保存可读文件对象（用于大文件如岗位视频，避免整体载入内存）。fileobj 需可从头读取。"""
     fileobj.seek(0)
     if use_s3():
-        _s3().upload_fileobj(fileobj, S3_BUCKET, key)
+        _s3().upload_fileobj(fileobj, _bucket(), key)
         return f"s3://{key}"
     path = _UPLOADS / key
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -84,7 +96,7 @@ def delete(url: str) -> None:
         return
     if url.startswith("s3://"):
         try:
-            _s3().delete_object(Bucket=S3_BUCKET, Key=url[len("s3://"):])
+            _s3().delete_object(Bucket=_bucket(), Key=url[len("s3://"):])
         except Exception:
             pass
         return
@@ -103,7 +115,7 @@ def resolve(url: str, filename: Optional[str] = None) -> Optional[Tuple[str, obj
         return ("redirect", url)
     if url.startswith("s3://"):
         key = url[len("s3://"):]
-        params = {"Bucket": S3_BUCKET, "Key": key}
+        params = {"Bucket": _bucket(), "Key": key}
         if filename:
             params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
         href = _s3().generate_presigned_url("get_object", Params=params, ExpiresIn=S3_PRESIGN_TTL)
