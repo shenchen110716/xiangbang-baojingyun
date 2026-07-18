@@ -2,7 +2,7 @@
 
 - task_id: `salesperson-portal-access`
 - owner: `Claude Code`
-- status: `review`（修复完成并通过全量回归 + 实弹端到端，待用户授权合并/部署）
+- status: `merged-deployed`（用户 2026-07-18 授权合并并部署；合并提交 `38936eb`，push `e3a02ab..38936eb` 触发 Render）
 - branch: `fix/salesperson-portal-access`
 - base_commit: `e3a02ab`
 - migration_owner: `no（无迁移）`
