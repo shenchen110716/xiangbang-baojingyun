@@ -2,7 +2,7 @@
 
 - task_id: `enterprise-owner-backfill`
 - owner: `Claude Code`
-- status: `review`（迁移已写并通过 SQLite 验证；用户于 2026-07-18 **显式授权豁免 PG 门槛**后放行合并）
+- status: `merged-deployed`（用户 2026-07-18 授权豁免 PG 门槛并部署；合并提交 `61cde77`，push `7bc1001..61cde77` 触发 Render）
 - branch: `fix/enterprise-owner-backfill`
 - worktree: `/private/tmp/xbb-owner-backfill`
 - base_commit: `7bc1001`（含已合并的 `enterprise-admin-owner-flag` 代码修复）
