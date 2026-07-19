@@ -3,7 +3,9 @@ import csv
 import io
 from datetime import datetime, timezone
 
-from ..core.business_time import business_today
+from ..core.business_time import business_now, business_today
+from ..core.rbac import require_role
+from ..schemas import EnrollmentReceiptIn
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -96,6 +98,44 @@ def enrollment_email(enterprise_id:int,plan_id:int,kind:Literal['enrollment','te
     result=email_provider().send_email(plan.insurer_email,subject,body,[{'filename':filename,'content_base64':encoded,'content_type':'text/csv'}]);record=EnrollmentEmail(enterprise_id=enterprise_id,plan_id=plan_id,kind=kind,recipient=plan.insurer_email,filename=filename,people_count=len(rows),request_id=result.request_id,status='sent' if result.ok else 'failed');session.add(record);session.commit()
     audit(session,user,'send_email',kind,str(enterprise_id),f'{result.request_id};count={len(rows)};to={plan.insurer_email}');return {'ok':result.ok,'email':plan.insurer_email,'request_id':result.request_id,'message':result.message,'people_count':len(rows),'filename':filename,'kind':kind}
 
+
+@router.post('/enrollment/email-aggregate', dependencies=[Depends(require_role("admin", detail="仅平台端可汇总发送保司名单"))])
+def enrollment_email_aggregate(plan_id:int,kind:Literal['enrollment','termination']='enrollment',date_value:str=Query(default="",alias="date"),user:User=Depends(current_user),session:Session=Depends(db)):
+    """按保司产品汇总【全部投保单位】的新参/停保名单，一封邮件发送给保司邮箱，
+    记录 enterprise_id 为空表示汇总（保经云 7.19：按天汇总各单位一次发送）。"""
+    plan=session.get(InsurancePlan,plan_id)
+    if not plan: raise HTTPException(404,'产品不存在')
+    if not plan.insurer_email: raise HTTPException(400,'该保险公司方案尚未配置接收邮箱')
+    target_date=date_value or business_today().strftime('%Y-%m-%d')
+    stmt=select(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(WorkPosition.plan_id==plan_id)
+    if kind=='termination': stmt=stmt.where(InsuredPerson.status=='stopped')
+    else: stmt=stmt.where(InsuredPerson.created_at.like(f'{target_date}%'),InsuredPerson.status.in_(['active','pending']))
+    stmt=stmt.order_by(InsuredPerson.enterprise_id.asc(),InsuredPerson.id.asc())
+    rows=[]
+    for person in session.scalars(stmt):
+        ent=session.get(Enterprise,person.enterprise_id);position=session.get(WorkPosition,person.position_id) if person.position_id else None
+        relation=session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id==person.enterprise_id,AgentCommission.plan_id==plan_id,AgentCommission.status=='active').order_by(AgentCommission.id.desc()))
+        pricing=pricing_snapshot(plan,relation,plan_price_for_class(session,plan,person.occupation_class))
+        rows.append([ent.name if ent else '',position.actual_employer if position else '',position.name if position else person.occupation,person.name,person.id_number,person.occupation_class,pricing['insurance_base_price'],pricing['policy_floor_price'],pricing['profit_amount'],pricing['minimum_sale_price'],pricing['sale_price'],pricing['total_commission_amount'],pricing['agent_commission_amount'],person.status,target_date])
+    output=io.StringIO();csv.writer(output).writerows([['投保单位','实际工作单位','岗位','姓名','身份证号','职业类别','保险原价','保司结算底价','平台利润','销售最低价','实际销售价','总返佣金额','业务员佣金','状态','日期'],*rows]);filename=f'{kind}-汇总-{target_date}.csv';encoded=base64.b64encode(output.getvalue().encode('utf-8-sig')).decode()
+    unit_count=len({r[0] for r in rows})
+    subject=f'{plan.insurer} {plan.name} {"新参" if kind=="enrollment" else "停保"}名单（汇总）{target_date}';body=f'业务类型：{"新参" if kind=="enrollment" else "停保"}\n覆盖投保单位：{unit_count} 家\n合计人数：{len(rows)}\n请查收附件名单。'
+    result=email_provider().send_email(plan.insurer_email,subject,body,[{'filename':filename,'content_base64':encoded,'content_type':'text/csv'}])
+    record=EnrollmentEmail(enterprise_id=None,plan_id=plan_id,kind=kind,recipient=plan.insurer_email,filename=filename,people_count=len(rows),request_id=result.request_id,status='sent' if result.ok else 'failed');session.add(record);session.commit()
+    audit(session,user,'send_email_aggregate',kind,str(plan_id),f'{result.request_id};count={len(rows)};units={unit_count};to={plan.insurer_email}')
+    return {'ok':result.ok,'email':plan.insurer_email,'request_id':result.request_id,'message':result.message,'people_count':len(rows),'unit_count':unit_count,'filename':filename,'kind':kind}
+
+
+@router.patch('/enrollment/emails/{item_id}/receipt', dependencies=[Depends(require_role("admin", detail="仅平台端可标记回执"))])
+def mark_enrollment_receipt(item_id:int,data:EnrollmentReceiptIn,user:User=Depends(current_user),session:Session=Depends(db)):
+    """人工标记保司回执（已确认/待回执 + 备注），用于发送记录追踪。"""
+    item=session.get(EnrollmentEmail,item_id)
+    if not item: raise HTTPException(404,'发送记录不存在')
+    item.receipt_status=data.status;item.receipt_note=data.note or ''
+    item.receipt_at=business_now() if data.status=='confirmed' else None;item.receipt_by=user.id
+    session.commit();audit(session,user,'mark_receipt','enrollment_email',str(item_id),data.status)
+    return serialize(item)
+
 @router.get('/enrollment/emails')
 def enrollment_emails(user:User=Depends(current_user),session:Session=Depends(db)):
     if user.role=='enterprise' and allowed_employer_ids(session,user) is not None:
@@ -104,5 +144,6 @@ def enrollment_emails(user:User=Depends(current_user),session:Session=Depends(db
     if user.role=='enterprise': stmt=stmt.where(EnrollmentEmail.enterprise_id==user.enterprise_id)
     result=[]
     for item in session.scalars(stmt):
-        ent=session.get(Enterprise,item.enterprise_id);plan=session.get(InsurancePlan,item.plan_id);result.append({**serialize(item),'enterprise_name':ent.name if ent else '','plan_name':plan.name if plan else '','insurer':plan.insurer if plan else ''})
+        ent=session.get(Enterprise,item.enterprise_id) if item.enterprise_id else None;plan=session.get(InsurancePlan,item.plan_id)
+        result.append({**serialize(item),'enterprise_name':ent.name if ent else ('全部投保单位（汇总）' if item.enterprise_id is None else ''),'plan_name':plan.name if plan else '','insurer':plan.insurer if plan else ''})
     return result

@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as enrollmentApi from '@/api/enrollment'
+import { updatePlan } from '@/api/plans'
 import { listEnterprises } from '@/api/enterprises'
 import { listPositions } from '@/api/positions'
 import { importInsuredFile, importTemplateUrl, listInsured } from '@/api/insured'
@@ -128,34 +129,53 @@ async function exportList(kind: 'enrollment' | 'termination', planId: number) {
   }
 }
 
-const emailDialogVisible = ref(false)
-const emailTarget = ref<{ planId: number; kind: 'enrollment' | 'termination' } | null>(null)
-const emailEnterpriseId = ref<number | null>(null)
-function openEmailDialog(planId: number, kind: 'enrollment' | 'termination') {
-  if (auth.isEnterprise()) {
-    sendEmail(planId, kind, auth.user!.enterprise_id!)
-    return
+// 管理员按保司汇总【全部投保单位】一封发送；企业端只发本单位。
+async function sendEmailFor(planId: number, kind: 'enrollment' | 'termination') {
+  const label = kind === 'enrollment' ? '新参' : '停保'
+  try {
+    if (auth.isEnterprise()) {
+      await ElMessageBox.confirm(`确认向保司邮箱发送本单位${label}名单附件？`, '发送确认', { type: 'warning' })
+      const r = await enrollmentApi.emailEnrollment(auth.user!.enterprise_id!, planId, kind, enrollDate.value)
+      ElMessage.success(`${label}名单已发送：${r.people_count} 人`)
+    } else {
+      await ElMessageBox.confirm(`确认按保司汇总【全部投保单位】的${label}名单，一次性发送一封邮件给保司？`, '汇总发送确认', { type: 'warning' })
+      const r = await enrollmentApi.emailEnrollmentAggregate(planId, kind, enrollDate.value)
+      ElMessage.success(`${label}汇总名单已发送：${r.people_count} 人，覆盖 ${r.unit_count} 家单位`)
+    }
+    load()
+  } catch (e) {
+    if (e instanceof Error) ElMessage.error(e.message)
   }
-  emailTarget.value = { planId, kind }
-  emailEnterpriseId.value = null
-  emailDialogVisible.value = true
 }
-async function confirmEmailDialog() {
-  if (!emailTarget.value || !emailEnterpriseId.value) { ElMessage.error('请选择投保单位'); return }
-  await sendEmail(emailTarget.value.planId, emailTarget.value.kind, emailEnterpriseId.value)
-  emailDialogVisible.value = false
+
+// 内联编辑保司邮箱
+const editingEmailPlanId = ref<number | null>(null)
+const emailDraft = ref('')
+function startEditEmail(row: { plan_id: number; insurer_email?: string }) {
+  editingEmailPlanId.value = row.plan_id
+  emailDraft.value = row.insurer_email || ''
 }
-async function sendEmail(planId: number, kind: 'enrollment' | 'termination', enterpriseId: number) {
+async function saveEmail(planId: number) {
   try {
-    await ElMessageBox.confirm(`确认向保司邮箱发送${kind === 'enrollment' ? '新参' : '停保'}名单附件？`, '发送确认', { type: 'warning' })
-  } catch { return }
-  try {
-    const result = await enrollmentApi.emailEnrollment(enterpriseId, planId, kind, enrollDate.value)
-    ElMessage.success(`邮件已记录：${result.people_count} 人，${result.filename}`)
+    await updatePlan(planId, { insurer_email: emailDraft.value.trim() })
+    ElMessage.success('保司邮箱已更新')
+    editingEmailPlanId.value = null
     load()
   } catch (e) {
     ElMessage.error((e as Error).message)
   }
+}
+
+// 人工标记保司回执
+async function markReceipt(row: { id: number }) {
+  try {
+    const { value } = await ElMessageBox.prompt('确认后将标记该记录为「已确认回执」，可填写备注', '标记回执', {
+      inputPlaceholder: '如：保司已确认收到名单', confirmButtonText: '标记已确认', cancelButtonText: '取消',
+    })
+    await enrollmentApi.markEnrollmentReceipt(row.id, 'confirmed', value || '')
+    ElMessage.success('已标记回执')
+    load()
+  } catch { /* 取消 */ }
 }
 </script>
 
@@ -252,8 +272,18 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
             <small class="muted">{{ row.product }}</small>
           </template>
         </el-table-column>
-        <el-table-column label="保司邮箱" min-width="150">
-          <template #default="{ row }">{{ row.insurer_email || '未设置' }}</template>
+        <el-table-column label="保司邮箱" min-width="220">
+          <template #default="{ row }">
+            <div v-if="editingEmailPlanId === row.plan_id" class="email-edit">
+              <el-input v-model="emailDraft" size="small" placeholder="保司接收邮箱" @keyup.enter="saveEmail(row.plan_id)" />
+              <el-button link type="primary" size="small" @click="saveEmail(row.plan_id)">保存</el-button>
+              <el-button link size="small" @click="editingEmailPlanId = null">取消</el-button>
+            </div>
+            <div v-else class="email-view">
+              <span :class="{ muted: !row.insurer_email }">{{ row.insurer_email || '未设置' }}</span>
+              <el-button v-if="!auth.isEnterprise()" link type="primary" size="small" @click="startEditEmail(row)">修改</el-button>
+            </div>
+          </template>
         </el-table-column>
         <el-table-column prop="insured_count" label="在保人数" width="90" />
         <el-table-column prop="new_count" label="当日新参" width="90" />
@@ -264,13 +294,13 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
             <el-button link type="primary" size="small" @click="exportList('termination', row.plan_id)">停保名单</el-button>
           </template>
         </el-table-column>
-        <el-table-column label="邮件发送" min-width="160">
+        <el-table-column :label="auth.isEnterprise() ? '邮件发送' : '汇总发送'" min-width="170">
           <template #default="{ row }">
             <template v-if="row.insurer_email">
-              <el-button link type="primary" size="small" @click="openEmailDialog(row.plan_id, 'enrollment')">邮件新参</el-button>
-              <el-button link type="primary" size="small" @click="openEmailDialog(row.plan_id, 'termination')">邮件停保</el-button>
+              <el-button link type="primary" size="small" @click="sendEmailFor(row.plan_id, 'enrollment')">邮件新参</el-button>
+              <el-button link type="primary" size="small" @click="sendEmailFor(row.plan_id, 'termination')">邮件停保</el-button>
             </template>
-            <router-link v-else :to="{ name: 'insurers' }" class="link">设置保司邮箱</router-link>
+            <span v-else class="muted">请先设置保司邮箱</span>
           </template>
         </el-table-column>
       </el-table>
@@ -296,23 +326,25 @@ async function sendEmail(planId: number, kind: 'enrollment' | 'termination', ent
         </el-table-column>
         <el-table-column label="状态 / 请求编号" min-width="150">
           <template #default="{ row }">
-            <div>{{ row.status }}</div>
+            <div>{{ row.status === 'sent' ? '已发送' : row.status === 'failed' ? '发送失败' : row.status }}</div>
             <small class="muted">{{ row.request_id }}</small>
+          </template>
+        </el-table-column>
+        <el-table-column label="对方回执" min-width="180">
+          <template #default="{ row }">
+            <div v-if="row.receipt_status === 'confirmed'">
+              <el-tag type="success" size="small">已确认</el-tag>
+              <div class="muted" style="font-size: 11.5px; margin-top: 2px">{{ formatDateTime(row.receipt_at) }}<span v-if="row.receipt_note"> · {{ row.receipt_note }}</span></div>
+            </div>
+            <div v-else>
+              <el-tag type="info" size="small" effect="plain">待回执</el-tag>
+              <el-button v-if="!auth.isEnterprise()" link type="primary" size="small" @click="markReceipt(row)">标记回执</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
       <TablePagination v-model:page="emailsPage" v-model:page-size="emailsPageSize" :total="emailsPagedTotal" />
     </PageCard>
-
-    <el-dialog v-model="emailDialogVisible" title="选择投保单位" width="360px">
-      <el-select v-model="emailEnterpriseId" placeholder="请选择投保单位" style="width: 100%">
-        <el-option v-for="e in enterprises" :key="e.id" :label="e.name" :value="e.id" />
-      </el-select>
-      <template #footer>
-        <el-button @click="emailDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmEmailDialog">确认发送</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 

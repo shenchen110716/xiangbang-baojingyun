@@ -22,7 +22,8 @@ class AuditLog(Base):
 class EnrollmentEmail(Base):
     __tablename__ = "enrollment_emails"
     id: Mapped[int] = mapped_column(primary_key=True)
-    enterprise_id: Mapped[int] = mapped_column(ForeignKey("enterprises.id"))
+    # 汇总发送（一封覆盖全部投保单位）时 enterprise_id 为空。
+    enterprise_id: Mapped[int | None] = mapped_column(ForeignKey("enterprises.id"), nullable=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("insurance_plans.id"))
     kind: Mapped[str] = mapped_column(String(20))
     recipient: Mapped[str] = mapped_column(String(160))
@@ -31,3 +32,8 @@ class EnrollmentEmail(Base):
     request_id: Mapped[str] = mapped_column(String(100), default="")
     status: Mapped[str] = mapped_column(String(30), default="sent")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    # 对方回执（人工标记）：pending=待回执 / confirmed=已确认，附备注与时间。
+    receipt_status: Mapped[str] = mapped_column(String(20), default="pending")
+    receipt_note: Mapped[str] = mapped_column(Text, default="")
+    receipt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    receipt_by: Mapped[int | None] = mapped_column(Integer, nullable=True)

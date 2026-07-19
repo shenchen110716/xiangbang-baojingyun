@@ -537,6 +537,9 @@ export interface EnrollmentEmailLog {
   request_id: string
   status: string
   created_at: string
+  receipt_status: string
+  receipt_note: string
+  receipt_at: string | null
 }
 
 export interface ReportRow {
