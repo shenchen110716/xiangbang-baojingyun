@@ -13,6 +13,7 @@ from .claim import (
 )
 from .finance import PaymentIn, PaymentCallbackIn, InvoiceIn, InvoiceUpdate, InsurerAccountIn, InsurerAccountUpdate, InsurerAccountLinkIn
 from .notification import NotificationIn
+from .enrollment import EnrollmentReceiptIn
 from .employer_scope import EmployerScopeIn, EmployerScopeOut, PrimaryManagerIn
 from .employment import (
     BatchOut, FactCorrectIn, FactListOut, FactOut, ImportConfirmIn, ImportConfirmOut,
@@ -31,6 +32,7 @@ __all__ = [
     "ClaimIn", "ClaimUpdate", "ClaimStatusIn", "ClaimDocumentIn", "ClaimDocumentReviewIn",
     "PaymentIn", "PaymentCallbackIn", "InvoiceIn", "InvoiceUpdate", "InsurerAccountIn", "InsurerAccountUpdate", "InsurerAccountLinkIn",
     "NotificationIn",
+    "EnrollmentReceiptIn",
     "EmployerScopeIn", "EmployerScopeOut", "PrimaryManagerIn",
 ]
 

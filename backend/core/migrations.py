@@ -40,6 +40,10 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     # 平台端系统设置 key-value 表（存储/短信/OCR 配置）。
     from ..models import SystemSetting
     SystemSetting.__table__.create(bind=s.connection(), checkfirst=True)
+    enrollment_email_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(enrollment_emails)")}
+    if enrollment_email_columns:
+        for column, definition in [("receipt_status", "VARCHAR(20) DEFAULT 'pending'"), ("receipt_note", "TEXT DEFAULT ''"), ("receipt_at", "DATETIME"), ("receipt_by", "INTEGER")]:
+            if column not in enrollment_email_columns: s.connection().exec_driver_sql(f"ALTER TABLE enrollment_emails ADD COLUMN {column} {definition}")
     invoice_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(invoices)")}
     if invoice_columns and "invoice_type" not in invoice_columns: s.connection().exec_driver_sql("ALTER TABLE invoices ADD COLUMN invoice_type VARCHAR(40) DEFAULT '增值税普通发票'")
     commission_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(agent_commissions)")}
