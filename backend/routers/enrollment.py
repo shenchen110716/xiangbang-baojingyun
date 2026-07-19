@@ -2,6 +2,8 @@ import base64
 import csv
 import io
 from datetime import datetime, timezone
+
+from ..core.business_time import business_today
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -34,7 +36,7 @@ def _scope_people_statement(stmt, user: User, session: Session):
 
 @router.get("/enrollment/export")
 def enrollment_export(kind:Literal["enrollment","termination"],date_value:str=Query(default="",alias="date"),plan_id:Optional[int]=None,user:User=Depends(current_user),session:Session=Depends(db)):
-    target_date=date_value or datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    target_date=date_value or business_today().strftime('%Y-%m-%d')
     stmt=select(InsuredPerson).order_by(InsuredPerson.id.asc())
     stmt=_scope_people_statement(stmt,user,session)
     if plan_id:
@@ -54,7 +56,7 @@ def enrollment_export(kind:Literal["enrollment","termination"],date_value:str=Qu
 
 @router.get("/enrollment/summary")
 def enrollment_summary(date_value:str=Query(default="",alias="date"),user:User=Depends(current_user),session:Session=Depends(db)):
-    target=date_value or datetime.now(timezone.utc).strftime('%Y-%m-%d');result=[]
+    target=date_value or business_today().strftime('%Y-%m-%d');result=[]
     for plan in session.scalars(select(InsurancePlan).order_by(InsurancePlan.id.desc())):
         stmt=select(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(WorkPosition.plan_id==plan.id)
         stmt=_scope_people_statement(stmt,user,session)
@@ -81,7 +83,7 @@ def enrollment_email(enterprise_id:int,plan_id:int,kind:Literal['enrollment','te
     ent=session.get(Enterprise,enterprise_id);plan=session.get(InsurancePlan,plan_id)
     if not ent or not plan: raise HTTPException(404,'投保单位或产品不存在')
     if not plan.insurer_email: raise HTTPException(400,'该保险公司方案尚未配置接收邮箱')
-    target_date=date_value or datetime.now(timezone.utc).strftime('%Y-%m-%d');stmt=select(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(InsuredPerson.enterprise_id==enterprise_id,WorkPosition.plan_id==plan_id)
+    target_date=date_value or business_today().strftime('%Y-%m-%d');stmt=select(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(InsuredPerson.enterprise_id==enterprise_id,WorkPosition.plan_id==plan_id)
     stmt=_scope_people_statement(stmt,user,session)
     if kind=='termination': stmt=stmt.where(InsuredPerson.status=='stopped')
     else: stmt=stmt.where(InsuredPerson.created_at.like(f'{target_date}%'),InsuredPerson.status.in_(['active','pending']))
