@@ -286,19 +286,27 @@ async function markReceipt(row: { id: number }) {
           </template>
         </el-table-column>
         <el-table-column prop="insured_count" label="在保人数" width="90" />
-        <el-table-column prop="new_count" label="当日新参" width="90" />
-        <el-table-column prop="stop_count" label="当日停保" width="90" />
+        <el-table-column label="当日新参" width="90">
+          <template #default="{ row }">
+            <span :class="row.new_count > 0 ? 'count-hot' : 'count-zero'">{{ row.new_count }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="当日停保" width="90">
+          <template #default="{ row }">
+            <span :class="row.stop_count > 0 ? 'count-stop' : 'count-zero'">{{ row.stop_count }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="导出" width="180">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="exportList('enrollment', row.plan_id)">新参名单</el-button>
-            <el-button link type="primary" size="small" @click="exportList('termination', row.plan_id)">停保名单</el-button>
+            <el-button link type="primary" size="small" :disabled="row.new_count === 0" @click="exportList('enrollment', row.plan_id)">新参名单</el-button>
+            <el-button link type="primary" size="small" :disabled="row.stop_count === 0" @click="exportList('termination', row.plan_id)">停保名单</el-button>
           </template>
         </el-table-column>
         <el-table-column :label="auth.isEnterprise() ? '邮件发送' : '汇总发送'" min-width="170">
           <template #default="{ row }">
             <template v-if="row.insurer_email">
-              <el-button link type="primary" size="small" @click="sendEmailFor(row.plan_id, 'enrollment')">邮件新参</el-button>
-              <el-button link type="primary" size="small" @click="sendEmailFor(row.plan_id, 'termination')">邮件停保</el-button>
+              <el-button link type="primary" size="small" :disabled="row.new_count === 0" @click="sendEmailFor(row.plan_id, 'enrollment')">邮件新参</el-button>
+              <el-button link type="primary" size="small" :disabled="row.stop_count === 0" @click="sendEmailFor(row.plan_id, 'termination')">邮件停保</el-button>
             </template>
             <span v-else class="muted">请先设置保司邮箱</span>
           </template>
@@ -352,6 +360,23 @@ async function markReceipt(row: { id: number }) {
 .enrollment-view {
   display: grid;
   gap: 18px;
+}
+/* 当日有新参/停保时醒目，为 0 时发灰 */
+.count-hot {
+  color: var(--el-color-primary);
+  font-weight: 700;
+}
+.count-stop {
+  color: var(--el-color-warning);
+  font-weight: 700;
+}
+.count-zero {
+  color: var(--el-text-color-placeholder);
+}
+.email-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .import-form {
   padding: 0 20px 20px;
