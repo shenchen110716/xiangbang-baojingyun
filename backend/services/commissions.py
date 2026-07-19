@@ -63,7 +63,7 @@ def agent_commission_rows(session:Session, agent_id:int) -> list[dict]:
         if not plan or not enterprise: continue
         insured_count=session.query(InsuredPerson).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).filter(InsuredPerson.enterprise_id==rel.enterprise_id,WorkPosition.plan_id==rel.plan_id,InsuredPerson.status!='stopped').count()
         unit=pricing_snapshot(plan,rel);accrual=commission_accrual(session,rel)
-        rows.append({**serialize(rel),'mode':unit['commission_mode'],'agent_name':agent.name if agent else '','enterprise_name':enterprise.name,'plan_name':plan.name,'insurer':plan.insurer,'insured_count':insured_count,'agent_commission_unit':unit['agent_commission_amount'],'agent_commission_amount':unit['agent_commission_amount'],'agent_commission_total':accrual['accrued_agent_commission'],**accrual})
+        rows.append({**serialize(rel),'mode':unit['commission_mode'],'agent_name':agent.name if agent else '','enterprise_name':enterprise.name,'plan_name':plan.name,'insurer':plan.insurer,'insured_count':insured_count,'minimum_sale_price':unit['minimum_sale_price'],'sale_price':unit['sale_price'],'agent_commission_unit':unit['agent_commission_amount'],'agent_commission_amount':unit['agent_commission_amount'],'agent_commission_total':accrual['accrued_agent_commission'],**accrual})
     return rows
 
 def agent_commission_summary(session:Session, agent_id:int) -> dict:

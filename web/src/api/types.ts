@@ -690,6 +690,8 @@ export interface AgentCommissionRow {
   mode: string
   status: string
   insured_count: number
+  min_sale_price: number
+  sale_price: number
   amount: number
   unit_amount: number
   accrual_as_of: string

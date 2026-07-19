@@ -156,6 +156,12 @@ function logout() {
               <el-table-column prop="plan_name" label="产品方案" min-width="140" />
               <el-table-column prop="insurer" label="保司" min-width="100" />
               <el-table-column prop="insured_count" label="在保人数" width="100" />
+              <el-table-column label="平台最低价" width="120">
+                <template #default="{ row }">{{ money(row.min_sale_price) }}</template>
+              </el-table-column>
+              <el-table-column label="销售价（我的价格）" width="150">
+                <template #default="{ row }">{{ money(row.sale_price) }}</template>
+              </el-table-column>
               <el-table-column label="累计佣金" width="120">
                 <template #default="{ row }">{{ money(row.amount) }}</template>
               </el-table-column>

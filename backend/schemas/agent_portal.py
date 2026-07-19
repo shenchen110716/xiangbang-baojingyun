@@ -37,6 +37,8 @@ class AgentCommissionRowOut(BaseModel):
     mode: str
     status: str
     insured_count: int
+    min_sale_price: float = 0
+    sale_price: float = 0
     amount: float
     unit_amount: float
     accrual_as_of: str
