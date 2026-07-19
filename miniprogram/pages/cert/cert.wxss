@@ -1,0 +1,5 @@
+.cert-title{font-size:40rpx;font-weight:700;text-align:center;margin-bottom:28rpx;letter-spacing:2rpx}
+.cert-field{display:flex;justify-content:space-between;align-items:flex-start;padding:16rpx 0;border-bottom:1px solid #f0f2f6;gap:24rpx}
+.cert-field:last-child{border-bottom:0}
+.cert-k{color:#8892a8;font-size:26rpx;flex:none}
+.cert-v{color:#17213a;font-size:27rpx;text-align:right;flex:1;word-break:break-all}

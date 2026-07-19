@@ -1,1 +1,27 @@
-<web-view wx:if="{{url}}" src="{{url}}"></web-view>
+<view class="page safe-bottom">
+  <view wx:if="{{loading}}" class="loading">正在加载…</view>
+  <view wx:elif="{{notFound}}" class="empty"><view class="empty-icon">📄</view>未找到对应记录</view>
+  <block wx:else>
+    <view class="card">
+      <view class="cert-title">在保证明</view>
+      <view class="cert-field"><text class="cert-k">险种名称</text><text class="cert-v">{{person.plan_name||'—'}}</text></view>
+      <view class="cert-field"><text class="cert-k">被保险单位</text><text class="cert-v">{{person.enterprise_name||'—'}}</text></view>
+      <view class="cert-field"><text class="cert-k">保单生效期间</text><text class="cert-v">{{coveragePeriod}}</text></view>
+      <view class="cert-field"><text class="cert-k">保单号</text><text class="cert-v">{{person.policy_no||'—'}}</text></view>
+    </view>
+    <view class="card">
+      <view class="section-title" style="margin-bottom:18rpx">人员明细</view>
+      <view class="cert-field"><text class="cert-k">姓名</text><text class="cert-v">{{person.name}}</text></view>
+      <view class="cert-field"><text class="cert-k">证件类型</text><text class="cert-v">居民身份证</text></view>
+      <view class="cert-field"><text class="cert-k">证件号码</text><text class="cert-v">{{person.id_number}}</text></view>
+      <view class="cert-field"><text class="cert-k">职业/工种</text><text class="cert-v">{{person.position_name||person.occupation||'—'}}</text></view>
+      <view class="cert-field"><text class="cert-k">职业类别</text><text class="cert-v">{{person.occupation_class||'—'}}</text></view>
+      <view class="cert-field"><text class="cert-k">工作单位</text><text class="cert-v">{{person.actual_employer_name||'—'}}</text></view>
+      <view class="cert-field"><text class="cert-k">状态</text><text class="cert-v">{{statusLabel}}</text></view>
+    </view>
+    <view class="card notice">
+      <view class="list-meta">说明：本证明由系统根据当前参保数据自动生成，仅作为参保情况的电子查询凭证，不代表保险公司或本平台的正式盖章文件；如需具备法律效力的正式保单/批单，请以保险公司出具的原件为准。</view>
+    </view>
+    <view class="small" style="text-align:center;margin-top:24rpx">点击右上角「···」可转发；截屏即可保存本证明</view>
+  </block>
+</view>
