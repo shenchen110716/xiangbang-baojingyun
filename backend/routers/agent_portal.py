@@ -81,13 +81,14 @@ def commissions_export(enterprise_id: int | None = Query(None),
     sheet = book.active
     sheet.title = "我的佣金"
     header = ["投保单位", "保险产品", "保司", "计佣方式", "状态", "在保人数",
-              "单笔佣金", "累计佣金", "计提截至"]
+              "平台最低价", "销售价（我的价格）", "单笔佣金", "累计佣金", "计提截至"]
     sheet.append(header)
     for cell in sheet[1]:
         cell.font = openpyxl.styles.Font(bold=True)
     for row in rows:
         sheet.append([row["enterprise_name"], row["plan_name"], row["insurer"],
                       row["mode"], row["status"], row["insured_count"],
+                      row["min_sale_price"], row["sale_price"],
                       row["unit_amount"], row["amount"], row["accrual_as_of"]])
     output = io.BytesIO()
     book.save(output)

@@ -42,6 +42,9 @@ def _safe_row(row: dict) -> dict:
         "mode": row.get("mode", ""),
         "status": row.get("status", ""),
         "insured_count": row.get("insured_count", 0),
+        # 平台最低价（业务员报价下限）与销售价（业务员自己的定价），供报价参考。
+        "min_sale_price": round(float(row.get("minimum_sale_price") or 0), 2),
+        "sale_price": round(float(row.get("sale_price") or 0), 2),
         # 单笔与累计业务员佣金：这是业务员自己的收入，允许可见。
         "amount": round(float(row.get("agent_commission_total") or 0), 2),
         "unit_amount": round(float(row.get("agent_commission_unit") or 0), 2),
