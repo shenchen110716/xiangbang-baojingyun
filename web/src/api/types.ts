@@ -536,6 +536,7 @@ export interface EnrollmentEmailLog {
   people_count: number
   request_id: string
   status: string
+  data_date: string
   created_at: string
   receipt_status: string
   receipt_note: string

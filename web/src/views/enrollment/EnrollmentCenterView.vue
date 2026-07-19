@@ -317,6 +317,7 @@ async function markReceipt(row: { id: number }) {
     <PageCard title="邮件发送记录" :count="emails.length" hint="含名单附件和请求编号">
       <el-table :data="pagedEmails" size="small">
         <el-table-column label="发送时间" width="150"><template #default="{ row }">{{ formatDateTime(row.created_at) }}</template></el-table-column>
+        <el-table-column label="参停保日期" width="120"><template #default="{ row }">{{ row.data_date || '—' }}</template></el-table-column>
         <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
         <el-table-column label="保险公司 / 产品" min-width="150">
           <template #default="{ row }">

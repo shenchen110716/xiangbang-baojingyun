@@ -31,6 +31,8 @@ class EnrollmentEmail(Base):
     people_count: Mapped[int] = mapped_column(Integer, default=0)
     request_id: Mapped[str] = mapped_column(String(100), default="")
     status: Mapped[str] = mapped_column(String(30), default="sent")
+    # 本封邮件发送的参停保数据所属日期（YYYY-MM-DD），区别于实际发送时间 created_at。
+    data_date: Mapped[str] = mapped_column(String(20), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     # 对方回执（人工标记）：pending=待回执 / confirmed=已确认，附备注与时间。
     receipt_status: Mapped[str] = mapped_column(String(20), default="pending")
