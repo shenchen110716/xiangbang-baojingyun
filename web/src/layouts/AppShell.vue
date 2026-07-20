@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
@@ -20,6 +20,11 @@ const linkedAccounts = ref<LinkedAccount[]>([])
 const switcherVisible = ref(false)
 const switcherSearch = ref('')
 const switching = ref(false)
+const contentRef = ref<HTMLElement | null>(null)
+
+watch(() => route.fullPath, () => {
+  contentRef.value?.scrollTo(0, 0)
+})
 
 async function loadLinkedAccounts() {
   if (!auth.isEnterprise() || !auth.user?.is_owner) { linkedAccounts.value = []; return }
@@ -172,7 +177,7 @@ async function openPasswordChange() {
           </el-dropdown>
         </div>
       </header>
-      <div class="content">
+      <div class="content" ref="contentRef">
         <router-view />
       </div>
     </main>
@@ -195,7 +200,8 @@ async function openPasswordChange() {
 <style scoped>
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--el-bg-color-page);
 }
 .sidebar {
@@ -382,6 +388,8 @@ async function openPasswordChange() {
   cursor: pointer;
 }
 .content {
+  flex: 1;
+  overflow-y: auto;
   padding: 28px;
   max-width: 1500px;
   width: 100%;
