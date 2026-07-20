@@ -18,6 +18,7 @@ function stopPolling() {
 }
 
 async function start() {
+  stopPolling()
   if (!props.enterpriseId || props.amount <= 0) {
     ElMessage.error('请先选择投保单位并输入充值金额')
     return
