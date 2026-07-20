@@ -9,9 +9,10 @@ from ..core.db import db
 from ..core.rbac import assert_enterprise_scope, require_role
 from ..core.security import current_user
 from ..models import Enterprise, PaymentRecord, User
-from ..providers import wechat_pay_provider
+from ..providers import provider_mode, wechat_pay_provider
 from ..schemas import PaymentCallbackIn, PaymentIn
 from ..services import post_ledger_entry
+from ..services import settings as settings_service
 
 router = APIRouter(prefix="/api", tags=["payments"])
 
@@ -41,9 +42,9 @@ def create_payment(data:PaymentIn,user:User=Depends(current_user),session:Sessio
     session.add(row);session.commit()
     return {**result.data,"order_no":order,"status":row.status,"channel":row.channel,"request_id":result.request_id}
 
-@router.post("/payments/callback")
+@router.post("/payments/callback", dependencies=[Depends(require_role("admin", detail="仅总后台可手动触发支付回调"))])
 def payment_callback(data:PaymentCallbackIn,session:Session=Depends(db)):
-    row=session.scalar(select(PaymentRecord).where(PaymentRecord.order_no==data.order_no))
+    row=session.scalar(select(PaymentRecord).where(PaymentRecord.order_no==data.order_no).with_for_update())
     if not row: raise HTTPException(404,"支付订单不存在")
     if row.status=="paid": return {"ok":True,"order_no":row.order_no,"status":row.status,"idempotent":True}
     if data.status=="paid":
@@ -56,9 +57,11 @@ def payment_callback(data:PaymentCallbackIn,session:Session=Depends(db)):
 
 @router.post("/payments/wechat-notify")
 async def wechat_notify(request:Request,session:Session=Depends(db)):
+    if provider_mode()=="mock" and settings_service.configured("WECHAT_PAY_MCH_ID"):
+        raise HTTPException(503,"系统配置异常：已配置微信商户号但仍处于 mock 模式，请联系平台管理员")
     payload=wechat_pay_provider().verify_notify(dict(request.headers), await request.body())
     if not payload: raise HTTPException(400,"签名校验失败")
-    row=session.scalar(select(PaymentRecord).where(PaymentRecord.order_no==payload.get("out_trade_no","")))
+    row=session.scalar(select(PaymentRecord).where(PaymentRecord.order_no==payload.get("out_trade_no","")).with_for_update())
     if not row: raise HTTPException(404,"支付订单不存在")
     if row.status=="paid": return {"ok":True,"order_no":row.order_no,"status":row.status,"idempotent":True}
     if payload.get("status")=="paid":

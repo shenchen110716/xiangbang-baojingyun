@@ -180,8 +180,14 @@ def run():
 
             # --- payment callback idempotency -> exactly one ledger entry ---
             pay = call_json("POST", "/api/payments", admin, {"enterprise_id": ent_a["id"], "account": "usage", "amount": 40})[1]
-            r1 = call_json("POST", "/api/payments/callback", body={"order_no": pay["order_no"], "status": "paid"})[1]
-            r2 = call_json("POST", "/api/payments/callback", body={"order_no": pay["order_no"], "status": "paid"})[1]
+            # /payments/callback is now admin-only (it credits a balance with no
+            # signature verification, so it must not be reachable anonymously).
+            status, _ = call_json("POST", "/api/payments/callback", body={"order_no": pay["order_no"], "status": "paid"})
+            assert status == 401, f"anonymous /payments/callback must be rejected, got {status}"
+            status, _ = call_json("POST", "/api/payments/callback", token_a, {"order_no": pay["order_no"], "status": "paid"})
+            assert status == 403, f"non-admin /payments/callback must be rejected, got {status}"
+            r1 = call_json("POST", "/api/payments/callback", admin, {"order_no": pay["order_no"], "status": "paid"})[1]
+            r2 = call_json("POST", "/api/payments/callback", admin, {"order_no": pay["order_no"], "status": "paid"})[1]
             assert r1["idempotent"] is False and r2["idempotent"] is True, "second callback must be recognized as a duplicate"
             ledger = call_json("GET", f"/api/enterprises/{ent_a['id']}/ledger", admin)[1]
             payment_entries = [e for e in ledger["entries"] if e["business_type"] == "payment" and e["business_id"] == pay["order_no"]]

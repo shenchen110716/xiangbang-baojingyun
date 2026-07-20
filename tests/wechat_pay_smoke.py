@@ -173,6 +173,41 @@ def run():
             assert usage_account_view_after["default_method"] == "bank"
             settings_service.set_many({"USAGE_FEE_DEFAULT_METHOD": "wechat"}, admin.id)  # 恢复默认，不影响后续断言
 
+            # Step J: /payments/callback 仅管理员可触发（既有匿名可入账缺陷已修复：
+            # 该端点此前无鉴权也不校验签名，却能直接给使用费账户入账）。
+            from backend.core.rbac import require_role as _require_role
+            from backend.routers import payments as payments_router
+
+            callback_route = next(r for r in payments_router.router.routes if r.path == "/api/payments/callback")
+            assert callback_route.dependencies, "/payments/callback 必须加角色门禁"
+
+            callback_gate = _require_role("admin", detail="仅总后台可手动触发支付回调")
+            try:
+                callback_gate(enterprise_user)
+                raise AssertionError("企业账号不应能触发 /payments/callback")
+            except HTTPException as error:
+                assert error.status_code == 403
+            callback_gate(admin)  # 不抛异常即通过
+
+            # Step K: payment_callback / wechat_notify 必须对订单行加锁
+            # （SELECT ... FOR UPDATE），防止并发重复通知导致双倍入账。
+            import inspect
+
+            router_source = inspect.getsource(payments_router.payment_callback) + inspect.getsource(payments_router.wechat_notify)
+            assert router_source.count("with_for_update()") == 2, "两处入账回调都必须对订单行加锁"
+
+            # Step L: mock 模式下若已配置真实微信商户号，wechat-notify 必须整体拒绝，
+            # 防止"忘记切 INTEGRATION_MODE=real"时被仓库里硬编码的 mock 密钥伪造回调。
+            settings_service.set_many({"WECHAT_PAY_MCH_ID": "1900000001"}, admin.id)
+            misconfigured_body = json.dumps({"out_trade_no": native_order_no, "status": "paid", "transaction_id": "wx-txn-misconfig"}).encode()
+            misconfigured_signature = hmac.new(WeChatPayProvider.MOCK_NOTIFY_SECRET.encode(), misconfigured_body, hashlib.sha256).hexdigest()
+            try:
+                asyncio.run(wechat_notify(_FakeRequest({"X-Mock-Signature": misconfigured_signature}, misconfigured_body), session))
+                raise AssertionError("已配置商户号却仍是 mock 模式时应拒绝处理回调")
+            except HTTPException as error:
+                assert error.status_code == 503
+            settings_service.set_many({"WECHAT_PAY_MCH_ID": ""}, admin.id)
+
         print("wechat pay smoke: ok")
 
 
