@@ -44,6 +44,8 @@ def create_payment(data:PaymentIn,user:User=Depends(current_user),session:Sessio
 
 @router.post("/payments/callback", dependencies=[Depends(require_role("admin", detail="仅总后台可手动触发支付回调"))])
 def payment_callback(data:PaymentCallbackIn,session:Session=Depends(db)):
+    # with_for_update() 锁定订单行：防止并发重复通知在下面的幂等判断之间双倍入账。
+    # SQLite（本地/测试）静默忽略该子句；PostgreSQL（生产）真正加行锁。
     row=session.scalar(select(PaymentRecord).where(PaymentRecord.order_no==data.order_no).with_for_update())
     if not row: raise HTTPException(404,"支付订单不存在")
     if row.status=="paid": return {"ok":True,"order_no":row.order_no,"status":row.status,"idempotent":True}
@@ -61,6 +63,7 @@ async def wechat_notify(request:Request,session:Session=Depends(db)):
         raise HTTPException(503,"系统配置异常：已配置微信商户号但仍处于 mock 模式，请联系平台管理员")
     payload=wechat_pay_provider().verify_notify(dict(request.headers), await request.body())
     if not payload: raise HTTPException(400,"签名校验失败")
+    # with_for_update() 同上：锁定订单行，防止微信网关并发重试导致双倍入账。
     row=session.scalar(select(PaymentRecord).where(PaymentRecord.order_no==payload.get("out_trade_no","")).with_for_update())
     if not row: raise HTTPException(404,"支付订单不存在")
     if row.status=="paid": return {"ok":True,"order_no":row.order_no,"status":row.status,"idempotent":True}

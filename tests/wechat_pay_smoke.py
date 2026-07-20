@@ -193,8 +193,16 @@ def run():
             # （SELECT ... FOR UPDATE），防止并发重复通知导致双倍入账。
             import inspect
 
-            router_source = inspect.getsource(payments_router.payment_callback) + inspect.getsource(payments_router.wechat_notify)
-            assert router_source.count("with_for_update()") == 2, "两处入账回调都必须对订单行加锁"
+            def _assert_lock_precedes_idempotency_check(fn):
+                lines = [line for line in inspect.getsource(fn).splitlines() if not line.strip().startswith("#")]
+                lock_lines = [i for i, line in enumerate(lines) if "with_for_update()" in line]
+                check_lines = [i for i, line in enumerate(lines) if 'row.status=="paid"' in line]
+                assert len(lock_lines) == 1, f"{fn.__name__}: 必须且只能锁定订单行一次"
+                assert len(check_lines) == 1, f"{fn.__name__}: 未找到幂等判断"
+                assert lock_lines[0] < check_lines[0], f"{fn.__name__}: 加锁必须发生在幂等判断之前，否则锁不起作用"
+
+            _assert_lock_precedes_idempotency_check(payments_router.payment_callback)
+            _assert_lock_precedes_idempotency_check(payments_router.wechat_notify)
 
             # Step L: mock 模式下若已配置真实微信商户号，wechat-notify 必须整体拒绝，
             # 防止"忘记切 INTEGRATION_MODE=real"时被仓库里硬编码的 mock 密钥伪造回调。
