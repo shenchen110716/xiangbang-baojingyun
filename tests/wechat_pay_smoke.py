@@ -48,6 +48,29 @@ def run():
             assert reloaded_user.wx_openid == "probe-openid"
             session.delete(probe); session.commit()
 
+            # Step B: openid binding — first bind succeeds, a second account
+            # trying to bind the SAME openid must be rejected (prevents one
+            # openid paying on behalf of two enterprises).
+            from backend.routers.wechat import bind_openid
+            from backend.schemas import WeChatBindOpenidIn
+
+            bound = bind_openid(WeChatBindOpenidIn(code="wx-code-123"), enterprise_user, session)
+            assert bound["wx_openid"] == "mock-openid-wx-code-123"
+            session.refresh(enterprise_user)
+            assert enterprise_user.wx_openid == "mock-openid-wx-code-123"
+
+            other_enterprise = Enterprise(name="其他单位", kind="企业", contact="", phone="", status="active")
+            session.add(other_enterprise); session.commit(); session.refresh(other_enterprise)
+            other_user = User(username="other-enterprise", password_hash=enterprise_user.password_hash, name="其他单位",
+                               role="enterprise", enterprise_id=other_enterprise.id, is_owner=True)
+            session.add(other_user); session.commit()
+            from fastapi import HTTPException
+            try:
+                bind_openid(WeChatBindOpenidIn(code="wx-code-123"), other_user, session)
+                raise AssertionError("同一个 openid 不应能绑定到第二个账号")
+            except HTTPException as error:
+                assert error.status_code == 409
+
         print("wechat pay smoke: ok")
 
 

@@ -38,6 +38,7 @@ from .routers.audit_logs import router as audit_logs_router
 from .routers.integrations import router as integrations_router
 from .routers.agents import router as agents_router
 from .routers.payments import router as payments_router
+from .routers.wechat import router as wechat_router
 from .routers.invoices import router as invoices_router
 from .routers.operators import router as operators_router
 from .routers.dashboard import router as dashboard_router
@@ -66,6 +67,7 @@ app.include_router(audit_logs_router)
 app.include_router(integrations_router)
 app.include_router(agents_router)
 app.include_router(payments_router)
+app.include_router(wechat_router)
 app.include_router(invoices_router)
 app.include_router(operators_router)
 app.include_router(dashboard_router)
