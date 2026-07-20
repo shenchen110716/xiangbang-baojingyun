@@ -156,6 +156,9 @@ def run():
             except HTTPException as error:
                 assert error.status_code == 403
 
+            admin_view_of_order = get_payment(native_order_no, admin, session)
+            assert admin_view_of_order["status"] == "paid"
+
             admin_list = list_payments(None, "", "", session)
             assert any(row["order_no"] == native_order_no for row in admin_list)
 
