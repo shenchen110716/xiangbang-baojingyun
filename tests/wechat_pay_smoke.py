@@ -162,6 +162,17 @@ def run():
             admin_list = list_payments(None, "", "", session)
             assert any(row["order_no"] == native_order_no for row in admin_list)
 
+            # Step I: 使用费默认收款方式对外可读，管理员可改
+            from backend.routers.recharge_requests import recharge_payment_account
+            from backend.services import settings as settings_service
+
+            usage_account_view = recharge_payment_account("usage", "", session)
+            assert usage_account_view["default_method"] == "wechat"
+            settings_service.set_many({"USAGE_FEE_DEFAULT_METHOD": "bank"}, admin.id)
+            usage_account_view_after = recharge_payment_account("usage", "", session)
+            assert usage_account_view_after["default_method"] == "bank"
+            settings_service.set_many({"USAGE_FEE_DEFAULT_METHOD": "wechat"}, admin.id)  # 恢复默认，不影响后续断言
+
         print("wechat pay smoke: ok")
 
 

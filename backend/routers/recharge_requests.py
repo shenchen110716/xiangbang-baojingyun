@@ -24,7 +24,12 @@ router = APIRouter(prefix="/api", tags=["recharge-requests"])
 def recharge_payment_account(account_type: str = Query(...), insurer: str = Query(""), session: Session = Depends(db)):
     """发起充值时展示"往哪个账户转账"：保费按保司、使用费按平台使用费收款账户解析。
     企业端也可访问（现有收款账户管理接口仅限管理员），未配置返回 null。"""
-    return recharge_payment_account_view(session, account_type, insurer)
+    result = recharge_payment_account_view(session, account_type, insurer)
+    if account_type != "usage":
+        return result
+    from ..services import settings as settings_service
+    default_method = settings_service.get("USAGE_FEE_DEFAULT_METHOD", "wechat")
+    return {**(result or {}), "default_method": default_method}
 
 
 @router.get("/recharge/payment-accounts", dependencies=[Depends(require_role("admin", "enterprise", detail="无权查看收款账户"))])
