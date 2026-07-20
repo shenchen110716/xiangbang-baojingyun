@@ -11,6 +11,7 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
         s.connection().exec_driver_sql("ALTER TABLE users ADD COLUMN enterprise_id INTEGER")
     for column, definition in [("phone", "VARCHAR(30) DEFAULT ''"), ("status", "VARCHAR(30) DEFAULT 'active'"), ("is_owner", "BOOLEAN DEFAULT 0"), ("enterprise_role", "VARCHAR(30)")]:
         if column not in columns: s.connection().exec_driver_sql(f"ALTER TABLE users ADD COLUMN {column} {definition}")
+    if "wx_openid" not in columns: s.connection().exec_driver_sql("ALTER TABLE users ADD COLUMN wx_openid VARCHAR(64)")
     s.connection().exec_driver_sql(
         "UPDATE users SET enterprise_role=CASE WHEN is_owner THEN 'owner' ELSE 'project_manager' END "
         "WHERE role='enterprise' AND enterprise_role IS NULL"
@@ -74,6 +75,9 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     if "document_name" not in policy_columns: s.connection().exec_driver_sql("ALTER TABLE policies ADD COLUMN document_name VARCHAR(200) DEFAULT ''")
     ledger_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(ledger_entries)")}
     if "account_id" not in ledger_columns: s.connection().exec_driver_sql("ALTER TABLE ledger_entries ADD COLUMN account_id INTEGER")
+    payment_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(payment_records)")}
+    for column, definition in [("channel", "VARCHAR(20) DEFAULT 'native'"), ("openid", "VARCHAR(64)"), ("provider_trade_no", "VARCHAR(80)"), ("paid_at", "DATETIME")]:
+        if column not in payment_columns: s.connection().exec_driver_sql(f"ALTER TABLE payment_records ADD COLUMN {column} {definition}")
 
 
 def migrate_premium_balances(s: Session) -> None:

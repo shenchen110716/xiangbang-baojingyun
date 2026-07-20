@@ -26,6 +26,7 @@ class User(Base):
     status: Mapped[str] = mapped_column(String(30), default="active")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_owner: Mapped[bool] = mapped_column(Boolean, default=False)
+    wx_openid: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
     # SYSTEM-DESIGN-V4.md section 6.2: "密码修改、角色变更、账号停用后递增
     # session_version，旧 Token 立即失效". Embedded in the JWT at login
     # (core/security.py) and compared on every request; bumping this

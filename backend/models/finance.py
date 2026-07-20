@@ -33,6 +33,10 @@ class PaymentRecord(Base):
     amount: Mapped[float] = mapped_column(Float, default=0)
     status: Mapped[str] = mapped_column(String(30), default="pending")
     provider: Mapped[str] = mapped_column(String(60), default="payment")
+    channel: Mapped[str] = mapped_column(String(20), default="native")
+    openid: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    provider_trade_no: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
