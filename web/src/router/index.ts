@@ -5,6 +5,9 @@ import { TOKEN_KEY } from '@/api/client'
 const router = createRouter({
   history: createWebHistory(),
   routes,
+  scrollBehavior() {
+    return { top: 0 }
+  },
 })
 
 router.beforeEach((to) => {
