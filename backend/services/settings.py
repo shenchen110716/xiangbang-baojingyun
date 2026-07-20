@@ -37,6 +37,17 @@ SETTINGS_REGISTRY = [
     {"key": "OCR_PROVIDER_URL", "group": "身份证OCR", "label": "OCR 接口地址", "secret": False, "kind": "text"},
     {"key": "OCR_APP_ID", "group": "身份证OCR", "label": "OCR AppID", "secret": False, "kind": "text"},
     {"key": "OCR_APP_KEY", "group": "身份证OCR", "label": "OCR AppKey", "secret": True, "kind": "password"},
+    # 微信支付（平台服务费收款商户号）
+    {"key": "WECHAT_PAY_MCH_ID", "group": "微信支付", "label": "商户号", "secret": False, "kind": "text"},
+    {"key": "WECHAT_PAY_APP_ID", "group": "微信支付", "label": "AppID", "secret": False, "kind": "text", "hint": "公众号或小程序 AppID"},
+    {"key": "WECHAT_PAY_NOTIFY_URL", "group": "微信支付", "label": "支付结果通知地址", "secret": False, "kind": "text", "hint": "形如 https://your-domain/api/payments/wechat-notify"},
+    {"key": "WECHAT_PAY_CERT_SERIAL_NO", "group": "微信支付", "label": "商户证书序列号", "secret": False, "kind": "text"},
+    {"key": "WECHAT_PAY_API_V3_KEY", "group": "微信支付", "label": "APIv3 密钥", "secret": True, "kind": "password"},
+    {"key": "WECHAT_PAY_PRIVATE_KEY", "group": "微信支付", "label": "商户 API 私钥（PEM）", "secret": True, "kind": "password"},
+    {"key": "WECHAT_PAY_PLATFORM_CERT", "group": "微信支付", "label": "微信支付平台证书（PEM）", "secret": True, "kind": "password"},
+    {"key": "WECHAT_MINIPROGRAM_APP_SECRET", "group": "微信支付", "label": "小程序 AppSecret", "secret": True, "kind": "password", "hint": "用于 wx.login() 换取 openid"},
+    # 使用费收款
+    {"key": "USAGE_FEE_DEFAULT_METHOD", "group": "使用费收款", "label": "默认收款方式", "secret": False, "kind": "select", "options": ["wechat", "bank"], "hint": "使用费缴纳页默认选中的收款方式"},
 ]
 
 _BY_KEY = {item["key"]: item for item in SETTINGS_REGISTRY}
@@ -50,9 +61,12 @@ def is_secret(key: str) -> bool:
 def _load() -> None:
     global _cache
     data: dict[str, str] = {}
-    with SessionLocal() as s:
-        for row in s.query(SystemSetting).all():
-            data[row.key] = row.value
+    try:
+        with SessionLocal() as s:
+            for row in s.query(SystemSetting).all():
+                data[row.key] = row.value
+    except Exception:
+        pass  # Table may not exist in test environments
     _cache = data
 
 

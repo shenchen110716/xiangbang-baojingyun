@@ -12,6 +12,7 @@ from .claim import (
     ClaimIn, ClaimUpdate, ClaimStatusIn, ClaimDocumentIn, ClaimDocumentReviewIn,
 )
 from .finance import PaymentIn, PaymentCallbackIn, InvoiceIn, InvoiceUpdate, InsurerAccountIn, InsurerAccountUpdate, InsurerAccountLinkIn
+from .wechat import WeChatBindOpenidIn
 from .notification import NotificationIn
 from .enrollment import EnrollmentReceiptIn
 from .employer_scope import EmployerScopeIn, EmployerScopeOut, PrimaryManagerIn
@@ -31,6 +32,7 @@ __all__ = [
     "PersonIn", "PersonUpdate", "BulkPersonRow", "BulkPersonIn",
     "ClaimIn", "ClaimUpdate", "ClaimStatusIn", "ClaimDocumentIn", "ClaimDocumentReviewIn",
     "PaymentIn", "PaymentCallbackIn", "InvoiceIn", "InvoiceUpdate", "InsurerAccountIn", "InsurerAccountUpdate", "InsurerAccountLinkIn",
+    "WeChatBindOpenidIn",
     "NotificationIn",
     "EnrollmentReceiptIn",
     "EmployerScopeIn", "EmployerScopeOut", "PrimaryManagerIn",
