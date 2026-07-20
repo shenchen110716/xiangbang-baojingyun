@@ -39,7 +39,7 @@ def create_payment(data:PaymentIn,user:User=Depends(current_user),session:Sessio
     if not result.ok: raise HTTPException(502, result.message or "微信支付下单失败")
     row=PaymentRecord(order_no=order,enterprise_id=data.enterprise_id,account=data.account,amount=data.amount,status="pending",provider=result.provider,channel=data.channel,openid=user.wx_openid if data.channel=="jsapi" else None)
     session.add(row);session.commit()
-    return {"order_no":order,"status":row.status,"channel":row.channel,**result.data,"request_id":result.request_id}
+    return {**result.data,"order_no":order,"status":row.status,"channel":row.channel,"request_id":result.request_id}
 
 @router.post("/payments/callback")
 def payment_callback(data:PaymentCallbackIn,session:Session=Depends(db)):

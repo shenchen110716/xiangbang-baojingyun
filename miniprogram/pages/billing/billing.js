@@ -22,7 +22,7 @@ Page({
       wx.login({
         success: (loginRes) => {
           if (!loginRes.code) { reject(new Error('微信登录失败，请重试')); return; }
-          app.request('/wechat/bind-openid', { method: 'POST', data: { code: loginRes.code } })
+          app.request('/wechat/bind-openid', { method: 'POST', data: { code: loginRes.code }, silent: true })
             .then((r) => {
               app.globalData.user = { ...(app.globalData.user || {}), wx_openid: r.wx_openid };
               wx.setStorageSync('user', app.globalData.user);
@@ -37,7 +37,7 @@ Page({
   payWithWeChat(enterpriseId, amount) {
     wx.showLoading({ title: '正在下单…' });
     this.ensureOpenid()
-      .then(() => app.request('/payments', { method: 'POST', data: { enterprise_id: Number(enterpriseId), account: 'usage', amount, channel: 'jsapi' } }))
+      .then(() => app.request('/payments', { method: 'POST', data: { enterprise_id: Number(enterpriseId), account: 'usage', amount, channel: 'jsapi' }, silent: true }))
       .then((order) => {
         wx.hideLoading();
         wx.requestPayment({
