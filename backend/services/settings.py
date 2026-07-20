@@ -61,12 +61,9 @@ def is_secret(key: str) -> bool:
 def _load() -> None:
     global _cache
     data: dict[str, str] = {}
-    try:
-        with SessionLocal() as s:
-            for row in s.query(SystemSetting).all():
-                data[row.key] = row.value
-    except Exception:
-        pass  # Table may not exist in test environments
+    with SessionLocal() as s:
+        for row in s.query(SystemSetting).all():
+            data[row.key] = row.value
     _cache = data
 
 

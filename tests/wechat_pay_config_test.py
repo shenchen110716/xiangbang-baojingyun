@@ -1,13 +1,21 @@
 """微信支付配置纯逻辑单测：PaymentIn.channel 默认值/校验、SETTINGS_REGISTRY
-新增分组的 key/secret 声明是否正确——不涉及数据库。"""
+新增分组的 key/secret 声明是否正确——需要隔离临时 SQLite 数据库。"""
 import os
 import sys
+import tempfile
+from pathlib import Path
 
-os.environ.setdefault("ID_ENCRYPTION_KEY", "x" * 44)
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 在导入任何 backend 模块前，设置隔离的临时数据库
+_tmp = tempfile.mkdtemp()
+os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/wechat_config_test.db"
+os.environ["ID_ENCRYPTION_KEY"] = "x" * 44
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pydantic import ValidationError
 
+from backend.core.db import Base, engine
+from backend.models import SystemSetting  # noqa: F401
 from backend.schemas import PaymentIn, WeChatBindOpenidIn
 from backend.services import settings as S
 
@@ -46,6 +54,9 @@ def test_settings_registry_declares_wechat_pay_group_with_correct_secrecy():
 
 
 if __name__ == "__main__":
+    # 初始化隔离数据库表
+    Base.metadata.create_all(bind=engine)
+
     for name, fn in sorted(globals().items()):
         if name.startswith("test_"):
             fn()
