@@ -11,6 +11,7 @@ export interface RechargePaymentAccount {
   account_no: string
   account_holder: string
   insurers: string[]
+  default_method?: 'wechat' | 'bank'
 }
 
 // 发起充值时展示的收款账户；企业端也可访问。未配置返回 null。
