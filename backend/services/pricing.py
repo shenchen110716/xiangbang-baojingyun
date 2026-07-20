@@ -46,8 +46,8 @@ def pricing_snapshot(plan:InsurancePlan,relation:Optional[AgentCommission]=None,
         'platform_margin_amount':amount(max(0,profit-agent_commission) if mode=='rebate' else profit),
     }
 
-def plan_dict(plan:InsurancePlan) -> dict:
-    return {**serialize(plan),**pricing_snapshot(plan)}
+def plan_dict(plan:InsurancePlan,relation:Optional[AgentCommission]=None) -> dict:
+    return {**serialize(plan),**pricing_snapshot(plan,relation)}
 
 # Internal cost/margin figures: insurer settlement price, commission, and
 # platform profit. Enterprise-role callers (miniprogram end users, company

@@ -22,6 +22,11 @@ def plans(user: User = Depends(current_user), session: Session = Depends(db)):
         allowed = select(AgentCommission.plan_id).where(AgentCommission.enterprise_id == user.enterprise_id)
         position_plans=select(WorkPosition.plan_id).where(WorkPosition.enterprise_id==user.enterprise_id,WorkPosition.plan_id.is_not(None))
         stmt = stmt.where(or_(InsurancePlan.id.in_(allowed),InsurancePlan.id.in_(position_plans)))
+        items = session.scalars(stmt).all()
+        relations = {}
+        for r in session.scalars(select(AgentCommission).where(AgentCommission.enterprise_id == user.enterprise_id, AgentCommission.status == "active").order_by(AgentCommission.id.asc())):
+            relations[r.plan_id] = r
+        return [strip_internal_pricing(plan_dict(x, relations.get(x.id)), user) for x in items]
     return [strip_internal_pricing(plan_dict(x), user) for x in session.scalars(stmt)]
 
 @router.post("/plans")
