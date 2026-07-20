@@ -135,8 +135,8 @@ class RealWeChatPayProvider(WeChatPayProvider):
 
     def _post(self, url_path: str, payload: dict) -> ProviderResult:
         body = json.dumps(payload, ensure_ascii=False)
-        headers = self._sign("POST", url_path, body)
         try:
+            headers = self._sign("POST", url_path, body)
             req = urllib.request.Request(f"{self.API_BASE}{url_path}", data=body.encode(), headers=headers, method="POST")
             with urllib.request.urlopen(req, timeout=15) as res:
                 data = json.loads(res.read() or "{}")
