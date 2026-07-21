@@ -4,7 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import * as financeApi from '@/api/finance'
 import { INVOICE_STATUS_TEXT } from '@/api/finance'
 import { getBilling } from '@/api/reports'
-import { listEnterprises, getEnterpriseLedger, rechargeEnterprise } from '@/api/enterprises'
+import { listEnterprises, getEnterpriseLedger } from '@/api/enterprises'
 import type { BillingRow, Enterprise, Invoice, LedgerResponse } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { money, formatDateTime } from '@/utils/format'
@@ -42,28 +42,6 @@ const totalUsageAccrued = computed(() => accounts.value.filter((x) => x.account 
 const pendingInvoices = computed(() => invoices.value.filter((x) => x.status === 'pending').length)
 const { page: accountsPage, pageSize: accountsPageSize, total: accountsPagedTotal, paged: pagedAccounts } = usePagedList(accounts)
 const { page: invoicesPage, pageSize: invoicesPageSize, total: invoicesPagedTotal, paged: pagedInvoices } = usePagedList(invoices)
-
-// ---- recharge ----
-const rechargeVisible = ref(false)
-const rechargeForm = reactive({ enterpriseId: null as number | null, enterpriseName: '', account: 'premium' as 'premium' | 'usage', amount: 0 })
-function openRecharge(row: BillingRow) {
-  rechargeForm.enterpriseId = row.id
-  rechargeForm.enterpriseName = row.enterprise_name
-  rechargeForm.account = row.account_type === 'premium' ? 'premium' : 'usage'
-  rechargeForm.amount = 0
-  rechargeVisible.value = true
-}
-async function submitRecharge() {
-  if (!rechargeForm.enterpriseId || rechargeForm.amount < 0.01) { ElMessage.error('请输入充值金额'); return }
-  try {
-    await rechargeEnterprise(rechargeForm.enterpriseId, rechargeForm.account, rechargeForm.amount)
-    ElMessage.success('充值成功')
-    rechargeVisible.value = false
-    load()
-  } catch (e) {
-    ElMessage.error((e as Error).message)
-  }
-}
 
 // ---- ledger ----
 const ledgerVisible = ref(false)
@@ -146,7 +124,6 @@ async function setInvoiceStatus(item: Invoice, status: string) {
         <el-table-column label="历史累计" width="110"><template #default="{ row }">{{ row.account === '平台使用费账户' ? money(row.total_accrued) : '—' }}</template></el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="auth.isAdmin() && row.account_type !== 'premium'" link type="primary" size="small" @click="openRecharge(row)">充值</el-button>
             <el-button link type="primary" size="small" @click="openLedger(row)">账本明细</el-button>
           </template>
         </el-table-column>
@@ -184,18 +161,6 @@ async function setInvoiceStatus(item: Invoice, status: string) {
       </el-table>
       <TablePagination v-model:page="invoicesPage" v-model:page-size="invoicesPageSize" :total="invoicesPagedTotal" />
     </PageCard>
-
-    <el-dialog v-model="rechargeVisible" title="账户充值" width="420px">
-      <el-form label-width="90px">
-        <el-form-item label="投保单位"><span>{{ rechargeForm.enterpriseName }}</span></el-form-item>
-        <el-form-item label="充值账户"><span>{{ rechargeForm.account === 'premium' ? '保费账户' : '服务费账户' }}</span></el-form-item>
-        <el-form-item label="充值金额"><el-input-number v-model="rechargeForm.amount" :min="0.01" :step="100" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="rechargeVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitRecharge">确认充值</el-button>
-      </template>
-    </el-dialog>
 
     <el-dialog v-model="ledgerVisible" title="账本明细" width="640px">
       <template v-if="ledgerTarget">
