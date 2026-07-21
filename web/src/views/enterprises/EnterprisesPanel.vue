@@ -73,27 +73,6 @@ async function submitForm() {
   }
 }
 
-// ---- recharge ----
-const rechargeVisible = ref(false)
-const rechargeTarget = ref<Enterprise | null>(null)
-const rechargeForm = reactive({ account: 'usage' as 'premium' | 'usage', amount: 0 })
-function openRecharge(item: Enterprise) {
-  rechargeTarget.value = item
-  Object.assign(rechargeForm, { account: 'usage', amount: 0 })
-  rechargeVisible.value = true
-}
-async function submitRecharge() {
-  if (!rechargeTarget.value || rechargeForm.amount < 0.01) { ElMessage.error('请输入充值金额'); return }
-  try {
-    await enterprisesApi.rechargeEnterprise(rechargeTarget.value.id, rechargeForm.account, rechargeForm.amount)
-    ElMessage.success('充值成功')
-    rechargeVisible.value = false
-    load()
-  } catch (e) {
-    ElMessage.error((e as Error).message)
-  }
-}
-
 // ---- accounts: 单位账号（主管/操作员）统一到「单位账号管理」页管理 ----
 function goManageAccounts(item: Enterprise) {
   router.push({ name: 'operators', query: { enterprise_id: item.id } })
@@ -170,7 +149,6 @@ async function removeEnterprise(item: Enterprise) {
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="primary" size="small" @click="openRecharge(row)">充值</el-button>
             <el-button link type="primary" size="small" @click="goManageAccounts(row)">管理账号</el-button>
             <el-button link type="primary" size="small" @click="openProducts(row)">参保产品</el-button>
             <el-button link type="danger" size="small" @click="removeEnterprise(row)">删除</el-button>
@@ -209,28 +187,6 @@ async function removeEnterprise(item: Enterprise) {
         <el-button type="primary" @click="submitForm">保存</el-button>
       </template>
     </el-dialog>
-
-    <el-dialog v-model="rechargeVisible" title="账户充值" width="420px">
-      <el-form v-if="rechargeTarget" :model="rechargeForm" label-width="90px">
-        <el-form-item label="投保单位"><span>{{ rechargeTarget.name }}</span></el-form-item>
-        <el-form-item label="充值账户">
-          <el-select v-model="rechargeForm.account" style="width: 100%">
-            <el-option label="服务费账户" value="usage" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="充值金额">
-          <el-input-number v-model="rechargeForm.amount" :min="0.01" :step="100" />
-        </el-form-item>
-        <el-form-item>
-          <small class="muted">保费账户充值请前往「账户充值」页面提交充值申请</small>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="rechargeVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitRecharge">确认充值</el-button>
-      </template>
-    </el-dialog>
-
 
     <DetailModal v-model="productsVisible" title="参保产品">
       <el-table :data="productsList" size="small">
