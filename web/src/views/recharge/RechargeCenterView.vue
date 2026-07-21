@@ -101,7 +101,9 @@ async function refreshPaymentAccount() {
   try {
     paymentAccount.value = await rechargeApi.getRechargePaymentAccount(submitForm.account_type, submitForm.insurer.trim())
     if (submitForm.account_type === 'usage') {
-      submitForm.method = paymentAccount.value?.default_method ?? 'wechat'
+      // 平台管理员代企业发起充值时不提供微信支付选项，只走银行转账人工审核；
+      // 企业自己登录发起时仍按后台配置的默认收款方式（微信支付/银行转账）来选。
+      submitForm.method = auth.isAdmin() ? 'bank' : (paymentAccount.value?.default_method ?? 'wechat')
     }
   } catch {
     paymentAccount.value = null
@@ -288,7 +290,7 @@ async function rejectRequest(row: RechargeRequest) {
             <el-radio-button value="usage">系统服务费</el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item v-if="submitForm.account_type === 'usage'" label="收款方式" required>
+        <el-form-item v-if="submitForm.account_type === 'usage' && !auth.isAdmin()" label="收款方式" required>
           <el-radio-group v-model="submitForm.method">
             <el-radio-button value="wechat">微信支付</el-radio-button>
             <el-radio-button value="bank">银行转账</el-radio-button>
