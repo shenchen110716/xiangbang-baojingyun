@@ -32,11 +32,10 @@ SETTINGS_REGISTRY = [
     {"key": "SMS_PROVIDER_URL", "group": "短信", "label": "短信网关地址", "secret": False, "kind": "text"},
     {"key": "SMS_SIGN_NAME", "group": "短信", "label": "短信签名", "secret": False, "kind": "text"},
     {"key": "SMS_API_KEY", "group": "短信", "label": "短信 API 密钥", "secret": True, "kind": "password"},
-    # 身份证 OCR
+    # 身份证 OCR（百度智能云文字识别）
     {"key": "OCR_ENABLED", "group": "身份证OCR", "label": "启用 OCR", "secret": False, "kind": "bool"},
-    {"key": "OCR_PROVIDER_URL", "group": "身份证OCR", "label": "OCR 接口地址", "secret": False, "kind": "text"},
-    {"key": "OCR_APP_ID", "group": "身份证OCR", "label": "OCR AppID", "secret": False, "kind": "text"},
-    {"key": "OCR_APP_KEY", "group": "身份证OCR", "label": "OCR AppKey", "secret": True, "kind": "password"},
+    {"key": "BAIDU_OCR_API_KEY", "group": "身份证OCR", "label": "百度智能云 API Key", "secret": False, "kind": "text"},
+    {"key": "BAIDU_OCR_SECRET_KEY", "group": "身份证OCR", "label": "百度智能云 Secret Key", "secret": True, "kind": "password"},
     # 微信支付（平台服务费收款商户号）
     {"key": "WECHAT_PAY_MCH_ID", "group": "微信支付", "label": "商户号", "secret": False, "kind": "text"},
     {"key": "WECHAT_PAY_APP_ID", "group": "微信支付", "label": "AppID", "secret": False, "kind": "text", "hint": "公众号或小程序 AppID"},
