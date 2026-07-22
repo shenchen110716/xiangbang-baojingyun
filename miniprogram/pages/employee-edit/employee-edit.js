@@ -22,7 +22,11 @@ Page({
     selectedPosition: null,
     saving: false,
     ocrLoading: false,
-    loading: true
+    loading: true,
+    // 连续添加：第一次新增成功后归属信息（投保单位/实际用工单位/岗位）锁定，
+    // 不返回列表页，可以连续手工填写或连续拍照 OCR 添加，直到点"完成"。
+    locked: false,
+    addedCount: 0
   },
   // 7.15-3：先选实际用工单位，再选岗位（岗位名会跨单位重复）。按投保单位下的
   // 已审核岗位聚合出实际用工单位列表，再按所选单位过滤岗位。
@@ -102,16 +106,19 @@ Page({
   dateChange(e) { this.setData({ [`form.${e.currentTarget.dataset.key}`]: e.detail.value }); },
   timeChange(e) { this.setData({ [e.currentTarget.dataset.key]: e.detail.value }); },
   enterpriseChange(e) {
+    if (this.data.locked) return;
     const enterpriseIndex = Number(e.detail.value), enterprise = this.data.enterprises[enterpriseIndex];
     const scope = this.buildScope(this.data.allPositions, enterprise.id, 0, 0);
     this.setData({ enterpriseIndex, ...scope, ...this.planText(scope.selectedPosition), 'form.enterprise_id': enterprise.id, 'form.position_id': (scope.selectedPosition && scope.selectedPosition.id) || 0 });
   },
   employerChange(e) {
+    if (this.data.locked) return;
     const employerIndex = Number(e.detail.value), employer = this.data.employers[employerIndex];
     const scope = this.buildScope(this.data.allPositions, this.data.form.enterprise_id, employer.id, 0);
     this.setData({ ...scope, ...this.planText(scope.selectedPosition), 'form.position_id': (scope.selectedPosition && scope.selectedPosition.id) || 0 });
   },
   positionChange(e) {
+    if (this.data.locked) return;
     const positionIndex = Number(e.detail.value), position = this.data.positions[positionIndex];
     this.setData({ positionIndex, selectedPosition: position || null, ...this.planText(position), 'form.position_id': (position && position.id) || 0 });
   },
@@ -157,6 +164,25 @@ Page({
       if (terminatedAt) data.terminated_at = terminatedAt;
       request = app.request('/insured', { method: 'POST', data });
     }
-    request.then(() => { wx.showToast({ title: this.data.id ? '已保存' : '已提交审核' }); setTimeout(() => wx.navigateBack(), 500); }).catch(() => this.setData({ saving: false }));
+    request.then(() => {
+      if (this.data.id) {
+        wx.showToast({ title: '已保存' });
+        setTimeout(() => wx.navigateBack(), 500);
+        return;
+      }
+      // 新增模式：不返回列表，归属信息锁定，清空本人信息，留在本页连续添加下一人。
+      const addedCount = this.data.addedCount + 1;
+      this.setData({
+        saving: false,
+        locked: true,
+        addedCount,
+        'form.name': '', 'form.id_number': '', 'form.phone': '', 'form.effective_at': '', 'form.terminated_at': '',
+        effectiveTime: '00:00', terminatedTime: '00:00', originalEffectiveAt: '', originalTerminatedAt: ''
+      });
+      wx.showToast({ title: `已添加第 ${addedCount} 人，可继续添加`, icon: 'none', duration: 2200 });
+    }).catch(() => this.setData({ saving: false }));
+  },
+  finish() {
+    wx.navigateBack();
   }
 });

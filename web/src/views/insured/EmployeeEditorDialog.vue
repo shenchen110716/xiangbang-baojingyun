@@ -3,19 +3,22 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listEnterprises } from '@/api/enterprises'
 import { listPlans } from '@/api/plans'
-import { listPositions } from '@/api/positions'
+import { listActualEmployers, listPositions } from '@/api/positions'
 import { createInsured, setInsuredStatus, updateInsured } from '@/api/insured'
-import type { Enterprise, InsurancePlan, InsuredPerson, WorkPosition } from '@/api/types'
+import { recognizeIdCard } from '@/api/ocr'
+import type { ActualEmployer, Enterprise, InsurancePlan, InsuredPerson, WorkPosition } from '@/api/types'
 
 const props = defineProps<{ person: InsuredPerson | null }>()
 const visible = defineModel<boolean>({ default: false })
 const emit = defineEmits<{ saved: [] }>()
 
 const enterprises = ref<Enterprise[]>([])
+const employers = ref<ActualEmployer[]>([])
 const positions = ref<WorkPosition[]>([])
 const plans = ref<InsurancePlan[]>([])
 const form = reactive({
   enterprise_id: null as number | null,
+  actual_employer_id: null as number | null,
   position_id: null as number | null,
   name: '',
   id_number: '',
@@ -25,16 +28,28 @@ const form = reactive({
 })
 const dailyMode = ref<'temporary' | 'custom'>('temporary')
 const saving = ref(false)
+// 新增模式下，第一次成功保存后归属信息（投保单位/实际用工单位/岗位）锁定，
+// 弹窗不关闭，可以连续手工添加或连续 OCR 拍照添加，直到点"完成"。
+const locked = ref(false)
+const addedCount = ref(0)
+const ocrLoading = ref(false)
+const ocrHint = ref('')
 
 watch(visible, async (isVisible) => {
   if (!isVisible) return
-  const [enterpriseList, positionList, planList] = await Promise.all([listEnterprises(), listPositions(), listPlans()])
+  const [enterpriseList, employerList, positionList, planList] = await Promise.all([listEnterprises(), listActualEmployers(), listPositions(), listPlans()])
   enterprises.value = enterpriseList
+  employers.value = employerList
   positions.value = positionList
   plans.value = planList
+  locked.value = false
+  addedCount.value = 0
+  ocrHint.value = ''
   if (props.person) {
+    const matchedPosition = positionList.find((p) => p.id === props.person!.position_id)
     Object.assign(form, {
       enterprise_id: props.person.enterprise_id,
+      actual_employer_id: matchedPosition?.actual_employer_id ?? null,
       position_id: props.person.position_id,
       name: props.person.name,
       id_number: props.person.id_number,
@@ -43,13 +58,30 @@ watch(visible, async (isVisible) => {
       terminated_at: props.person.terminated_at ? props.person.terminated_at.replace('Z', '').slice(0, 19) : null,
     })
   } else {
-    Object.assign(form, { enterprise_id: null, position_id: null, name: '', id_number: '', phone: '', effective_at: null, terminated_at: null })
+    Object.assign(form, { enterprise_id: null, actual_employer_id: null, position_id: null, name: '', id_number: '', phone: '', effective_at: null, terminated_at: null })
     dailyMode.value = 'temporary'
   }
 })
 
+// 投保单位变化时，实际用工单位/岗位跟着重选（下级归属可能不再有效）。
+watch(() => form.enterprise_id, () => {
+  if (locked.value) return
+  form.actual_employer_id = null
+  form.position_id = null
+})
+// 实际用工单位变化时，岗位跟着重选。
+watch(() => form.actual_employer_id, () => {
+  if (locked.value) return
+  form.position_id = null
+})
+
+const availableEmployers = computed(() => employers.value.filter((e) => e.status === 'active' && (!form.enterprise_id || e.enterprise_id === form.enterprise_id)))
 const availablePositions = computed(() =>
-  positions.value.filter((p) => (p.status === 'approved' || p.id === props.person?.position_id) && (!form.enterprise_id || p.enterprise_id === form.enterprise_id)),
+  positions.value.filter((p) =>
+    (p.status === 'approved' || p.id === props.person?.position_id)
+    && (!form.enterprise_id || p.enterprise_id === form.enterprise_id)
+    && (!form.actual_employer_id || p.actual_employer_id === form.actual_employer_id),
+  ),
 )
 const selectedPositionHint = computed(() => {
   const pos = positions.value.find((p) => p.id === form.position_id)
@@ -66,6 +98,34 @@ const effectiveRuleHint = computed(() => selectedPlan.value?.effective_mode === 
 const isDailyBilling = computed(() => selectedPlan.value?.billing_mode === 'daily')
 const showDailyModeToggle = computed(() => !props.person && isDailyBilling.value)
 
+async function handleOcrFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  ocrLoading.value = true
+  ocrHint.value = ''
+  try {
+    const res = await recognizeIdCard(file)
+    form.name = res.name
+    form.id_number = res.id_number
+    ocrHint.value = res.mock ? '模拟识别结果，请核对后再保存' : '已识别，请核对后再保存'
+  } catch (e) {
+    ElMessage.error((e as Error).message || '识别失败，请手动填写')
+  } finally {
+    ocrLoading.value = false
+  }
+}
+
+function resetPersonFields() {
+  form.name = ''
+  form.id_number = ''
+  form.phone = ''
+  form.effective_at = null
+  form.terminated_at = null
+  ocrHint.value = ''
+}
+
 async function submit() {
   if (!props.person && !form.enterprise_id) { ElMessage.error('请选择投保单位'); return }
   if (!form.position_id) { ElMessage.error('请选择已审核岗位'); return }
@@ -78,6 +138,8 @@ async function submit() {
       if (form.effective_at !== (props.person.effective_at ? props.person.effective_at.replace('Z', '').slice(0, 19) : null)) payload.effective_at = form.effective_at
       if (form.terminated_at !== (props.person.terminated_at ? props.person.terminated_at.replace('Z', '').slice(0, 19) : null)) payload.terminated_at = form.terminated_at
       await updateInsured(props.person.id, payload)
+      ElMessage.success('保存成功')
+      visible.value = false
     } else if (showDailyModeToggle.value && dailyMode.value === 'temporary') {
       // 临时日结：不预先算日期，创建后依次调用"参保"（生效时间取服务端默认
       // 的"参保时间本身"）和"停保"（默认停保时间=生效时间+24小时），两步
@@ -87,14 +149,20 @@ async function submit() {
       })
       await setInsuredStatus(created.id, 'active')
       await setInsuredStatus(created.id, 'stopped')
+      addedCount.value += 1
+      locked.value = true
+      resetPersonFields()
+      ElMessage.success(`已添加第 ${addedCount.value} 人，可继续手工填写或拍照识别添加下一人`)
     } else {
       await createInsured({
         enterprise_id: form.enterprise_id!, position_id: form.position_id, name: form.name, id_number: form.id_number, phone: form.phone,
         effective_at: form.effective_at, terminated_at: form.terminated_at,
       })
+      addedCount.value += 1
+      locked.value = true
+      resetPersonFields()
+      ElMessage.success(`已添加第 ${addedCount.value} 人，可继续手工填写或拍照识别添加下一人`)
     }
-    ElMessage.success('保存成功')
-    visible.value = false
     emit('saved')
   } catch (e) {
     ElMessage.error((e as Error).message)
@@ -108,16 +176,29 @@ async function submit() {
   <el-dialog v-model="visible" :title="person ? '编辑参保员工' : '新增参保员工'" width="520px" append-to-body destroy-on-close>
     <el-form :model="form" label-width="110px">
       <el-form-item label="投保单位" required>
-        <el-select v-model="form.enterprise_id" :disabled="!!person" style="width: 100%" placeholder="请选择">
+        <el-select v-model="form.enterprise_id" :disabled="!!person || locked" style="width: 100%" placeholder="请选择">
           <el-option v-for="e in enterprises" :key="e.id" :label="e.name" :value="e.id" />
         </el-select>
       </el-form-item>
+      <el-form-item label="实际用工单位">
+        <el-select v-model="form.actual_employer_id" :disabled="locked" clearable style="width: 100%" placeholder="不选则不限（按岗位自带的用工单位）">
+          <el-option v-for="emp in availableEmployers" :key="emp.id" :label="emp.name" :value="emp.id" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="已审核岗位" required>
-        <el-select v-model="form.position_id" style="width: 100%" placeholder="请选择">
+        <el-select v-model="form.position_id" :disabled="locked" style="width: 100%" placeholder="请选择">
           <el-option v-for="p in availablePositions" :key="p.id" :label="`${p.actual_employer_name || p.actual_employer} · ${p.name}`" :value="p.id" />
         </el-select>
         <small class="hint">{{ selectedPositionHint }}</small>
       </el-form-item>
+
+      <el-form-item v-if="!person" label="拍照识别">
+        <input type="file" accept="image/*" capture="environment" @change="handleOcrFile" />
+        <div v-if="ocrLoading" class="hint">正在识别…</div>
+        <div v-else-if="ocrHint" class="hint" style="color: var(--el-color-success)">{{ ocrHint }}</div>
+        <div v-else class="hint">上传/拍摄身份证正面照可自动带出姓名和身份证号，也可直接手工填写</div>
+      </el-form-item>
+
       <el-form-item label="被保险人姓名" required><el-input v-model="form.name" /></el-form-item>
       <el-form-item label="身份证号" required><el-input v-model="form.id_number" /></el-form-item>
       <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
@@ -135,10 +216,14 @@ async function submit() {
         <el-date-picker v-model="form.terminated_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="请选择停保日期和时间" style="width: 100%" />
         <small class="hint">最早为操作日次日 00:00，且必须晚于生效时间；留空则不修改</small>
       </el-form-item>
+
+      <div v-if="locked" class="locked-banner">
+        归属信息已锁定（本次共添加 {{ addedCount }} 人），继续填写下一人信息后点"保存并继续"，或点"完成"结束。
+      </div>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
+      <el-button @click="visible = false">{{ locked ? '完成' : '取消' }}</el-button>
+      <el-button type="primary" :loading="saving" @click="submit">{{ locked ? '保存并继续' : '保存' }}</el-button>
     </template>
   </el-dialog>
 </template>
@@ -148,6 +233,14 @@ async function submit() {
   display: block;
   color: var(--el-text-color-placeholder);
   font-size: 11px;
+  margin-top: 4px;
+}
+.locked-banner {
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
   margin-top: 4px;
 }
 </style>

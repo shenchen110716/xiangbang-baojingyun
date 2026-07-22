@@ -6,6 +6,24 @@ export interface ReceiptAmountResult {
   message: string
 }
 
+export interface IdCardResult {
+  name: string
+  id_number: string
+  gender: string
+  birth: string
+  mock: boolean
+  message: string
+}
+
+// 识别身份证正面照，供新增参保员工时自动带出姓名/身份证号。
+export function recognizeIdCard(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  return client.post<IdCardResult>('/ocr/id-card', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((r) => r.data)
+}
+
 // 识别转账回单/发票金额，供充值时自动带出（到账仍需人工确认）。
 export function recognizeReceiptAmount(file: File) {
   const form = new FormData()
