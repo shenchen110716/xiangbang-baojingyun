@@ -10,7 +10,9 @@ Page({
     loading: false
   },
   onLoad(options) { if (options && options.status) this.setData({ status: options.status }); },
-  onShow() { this.load(); },
+  // 首页改为免登录直接打开后，底部 tabBar 从进入小程序起就一直可见，未登录时也能
+  // 点到这个 tab；这里补上登录态检查，避免未带 token 直接打接口报"登录已过期"。
+  onShow() { if (!app.globalData.token) { wx.reLaunch({ url: '/pages/login/login' }); return; } this.load(); },
   onPullDownRefresh() { this.load().finally(() => wx.stopPullDownRefresh()); },
   isPendingEffective(item) { return item.status === 'active' && item.effective_at && new Date(item.effective_at) > new Date(); },
   load() {
