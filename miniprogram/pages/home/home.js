@@ -3,6 +3,10 @@ const app = getApp();
 Page({
   data: {
     loading: true,
+    // 小程序必须先打开首页，登录是进入后的授权行为，不允许首次打开就强制
+    // 拦截跳登录页——未登录时首页照常渲染，只是展示品牌介绍 + 登录入口，
+    // 不请求任何需要鉴权的数据。
+    loggedIn: false,
     dashboard: { enterprises: 0, people: 0, pending_people: 0, premium_balance_total: 0, usage_balance: 0, usage_available: 0, usage_recharged: 0, usage_consumed: 0, claims_open: 0, balance_alerts: [] },
     messages: [],
     user: {},
@@ -10,8 +14,18 @@ Page({
     greeting: '你好',
     today: ''
   },
-  onShow() { this.load(); },
-  onPullDownRefresh() { this.load().finally(() => wx.stopPullDownRefresh()); },
+  onShow() {
+    if (!app.globalData.token) {
+      this.setData({ loggedIn: false, loading: false });
+      return;
+    }
+    this.setData({ loggedIn: true });
+    this.load();
+  },
+  onPullDownRefresh() {
+    if (!this.data.loggedIn) { wx.stopPullDownRefresh(); return; }
+    this.load().finally(() => wx.stopPullDownRefresh());
+  },
   load() {
     const hour = new Date().getHours();
     const greeting = hour < 6 ? '夜深了' : hour < 12 ? '上午好' : hour < 18 ? '下午好' : '晚上好';
@@ -30,5 +44,6 @@ Page({
   },
   go(e) { wx.navigateTo({ url: e.currentTarget.dataset.url }); },
   openMessage(e) { const path = e.currentTarget.dataset.path; if (path) wx.navigateTo({ url: path }); },
+  goLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
   onShareAppMessage() { return app.share('/pages/home/home', 'from=share'); }
 });
