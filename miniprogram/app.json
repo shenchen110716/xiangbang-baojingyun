@@ -19,6 +19,7 @@
     "pages/products/products",
     "pages/product-detail/product-detail",
     "pages/billing/billing",
+    "pages/recharge-request/recharge-request",
     "pages/policies/policies",
     "pages/policy-detail/policy-detail",
     "pages/claim-create/claim-create",

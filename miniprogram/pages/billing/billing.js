@@ -3,54 +3,16 @@ Page({
   data: { items: [], invoices: [], loading: true },
   onShow() { this.load(); },
   load() { return Promise.all([app.request('/billing', { silent: true }), app.request('/invoices', { silent: true })]).then(([items, invoices]) => this.setData({ items: items.map((item) => ({ ...item, balance_text: Number(item.balance || 0).toFixed(2), estimated_text: Number(item.estimated_daily || 0).toFixed(2), month_accrued_text: Number(item.month_accrued || 0).toFixed(2), total_accrued_text: Number(item.total_accrued || 0).toFixed(2) })), invoices: invoices.map((item) => ({ ...item, amount_text: Number(item.amount || 0).toFixed(2), status_label: ({ pending: '待审核', approved: '已审核', issued: '已开票', rejected: '已驳回' })[item.status] || item.status })), loading: false })).catch(() => this.setData({ loading: false })); },
+  // 充值支持微信支付（快捷）或银行转账+回单OCR（保费账户仅此一种）；统一跳转到充值页，
+  // 与电脑后台"账户充值"页保持一致的能力，而不是这里用弹窗简化处理。
   recharge(e) {
     const id = e.currentTarget.dataset.id;
-    // 平台服务费在线缴纳：微信支付（JSAPI），支付成功由后端 wechat-notify 回调自动到账。
-    wx.showModal({
-      title: '平台使用费缴纳', editable: true, placeholderText: '请输入缴纳金额', confirmText: '微信支付',
-      success: (res) => {
-        if (!res.confirm) return;
-        const amount = Number(res.content);
-        if (!amount || amount <= 0) { wx.showToast({ title: '请输入有效金额', icon: 'none' }); return; }
-        this.payWithWeChat(id, amount);
-      }
-    });
+    const accountType = e.currentTarget.dataset.account === 'premium' ? 'premium' : 'usage';
+    wx.navigateTo({ url: `/pages/recharge-request/recharge-request?enterpriseId=${id}&accountType=${accountType}` });
   },
-  ensureOpenid() {
-    if (app.globalData.user && app.globalData.user.wx_openid) return Promise.resolve(app.globalData.user.wx_openid);
-    return new Promise((resolve, reject) => {
-      wx.login({
-        success: (loginRes) => {
-          if (!loginRes.code) { reject(new Error('微信登录失败，请重试')); return; }
-          app.request('/wechat/bind-openid', { method: 'POST', data: { code: loginRes.code }, silent: true })
-            .then((r) => {
-              app.globalData.user = { ...(app.globalData.user || {}), wx_openid: r.wx_openid };
-              wx.setStorageSync('user', app.globalData.user);
-              resolve(r.wx_openid);
-            })
-            .catch(reject);
-        },
-        fail: () => reject(new Error('微信登录失败，请重试'))
-      });
-    });
-  },
-  payWithWeChat(enterpriseId, amount) {
-    wx.showLoading({ title: '正在下单…' });
-    this.ensureOpenid()
-      .then(() => app.request('/payments', { method: 'POST', data: { enterprise_id: Number(enterpriseId), account: 'usage', amount, channel: 'jsapi' }, silent: true }))
-      .then((order) => {
-        wx.hideLoading();
-        wx.requestPayment({
-          timeStamp: order.timeStamp,
-          nonceStr: order.nonceStr,
-          package: order.package,
-          signType: order.signType || 'RSA',
-          paySign: order.paySign,
-          success: () => { wx.showToast({ title: '支付成功' }); this.load(); },
-          fail: () => { wx.showToast({ title: '已取消支付', icon: 'none' }); }
-        });
-      })
-      .catch((error) => { wx.hideLoading(); wx.showToast({ title: error.message || '下单失败，请重试', icon: 'none' }); });
+  records() {
+    const item = this.data.items[0];
+    wx.navigateTo({ url: `/pages/recharge-request/recharge-request?enterpriseId=${item ? item.id : 0}&tab=records` });
   },
   invoice() {
     const account = this.data.items[0]; if (!account) { wx.showToast({ title: '暂无可开票账户', icon: 'none' }); return; }

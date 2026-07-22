@@ -1,0 +1,71 @@
+<view class="page safe-bottom">
+  <view class="row" style="gap:20rpx">
+    <view class="chip {{tab==='submit'?'active':''}}" data-tab="submit" bindtap="switchTab">发起充值</view>
+    <view class="chip {{tab==='records'?'active':''}}" data-tab="records" bindtap="switchTab">充值记录</view>
+  </view>
+
+  <view wx:if="{{tab==='submit'}}" class="card section">
+    <view class="field">
+      <view class="field-label">账户类型</view>
+      <view class="row" style="gap:20rpx">
+        <view class="chip {{accountType==='premium'?'active':''}}" data-value="premium" bindtap="accountTypeChange">保费账户</view>
+        <view class="chip {{accountType==='usage'?'active':''}}" data-value="usage" bindtap="accountTypeChange">系统服务费账户</view>
+      </view>
+    </view>
+
+    <view wx:if="{{accountType==='premium'}}" class="field">
+      <view class="field-label required">保司</view>
+      <picker range="{{insurerOptions}}" range-key="insurer" value="{{insurerIndex}}" bindchange="insurerChange">
+        <view class="picker">{{insurerIndex>-1?insurerOptions[insurerIndex].insurer:'请选择已配置收款账户的保司'}}</view>
+      </picker>
+    </view>
+
+    <view wx:if="{{accountType==='usage'}}" class="field">
+      <view class="field-label">充值方式</view>
+      <view class="row" style="gap:20rpx">
+        <view class="chip {{method==='wechat'?'active':''}}" data-value="wechat" bindtap="methodChange">微信支付</view>
+        <view class="chip {{method==='bank'?'active':''}}" data-value="bank" bindtap="methodChange">银行转账</view>
+      </view>
+    </view>
+
+    <label class="field">
+      <view class="field-label required">充值金额</view>
+      <input class="input" type="digit" value="{{amount}}" placeholder="请输入金额" bindinput="amountInput" />
+    </label>
+
+    <block wx:if="{{accountType==='usage' && method==='wechat'}}">
+      <button class="primary" style="margin-top:12rpx" bindtap="submitWeChat">微信支付</button>
+    </block>
+    <block wx:else>
+      <view wx:if="{{paymentAccount}}" class="card-plain" style="background:#f4f7ff;margin-top:8rpx">
+        <view class="strong">{{paymentAccount.account_holder}}</view>
+        <view class="list-meta">{{paymentAccount.bank_name}} · {{paymentAccount.account_no}}</view>
+        <view class="list-meta">请按此收款账户转账后上传回单</view>
+      </view>
+      <view wx:elif="{{!paymentLoading && (accountType==='usage' || insurerIndex>-1)}}" class="list-meta" style="margin-top:8rpx">平台尚未配置该账户的收款信息，请联系平台。</view>
+
+      <view class="field" style="margin-top:20rpx">
+        <view class="field-label required">转账回单</view>
+        <button class="secondary" bindtap="chooseReceipt" loading="{{ocrLoading}}" disabled="{{ocrLoading}}">📷 拍照或选择回单图片</button>
+        <view wx:if="{{receiptPath}}" class="list-meta">已选择回单图片</view>
+        <view wx:if="{{ocrLoading}}" class="list-meta">正在识别金额…</view>
+        <view wx:elif="{{ocrHint}}" class="list-meta" style="color:#059669">{{ocrHint}}</view>
+        <view wx:else class="list-meta">上传回单图片可自动识别金额，请核对后再提交</view>
+      </view>
+      <button class="primary" style="margin-top:20rpx" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submitBankTransfer">提交充值申请</button>
+    </block>
+  </view>
+
+  <view wx:if="{{tab==='records'}}" class="section">
+    <view wx:if="{{recordsLoading}}" class="loading">正在加载…</view>
+    <view wx:for="{{records}}" wx:key="id" class="card">
+      <view class="row between">
+        <text class="strong">{{item.account_text}}{{item.insurer?'（'+item.insurer+'）':''}}</text>
+        <text class="tag {{item.status==='confirmed'?'tag-success':(item.status==='rejected'?'tag-danger':'tag-warning')}}">{{item.status_text}}</text>
+      </view>
+      <view class="list-meta">¥{{item.amount_text}} · {{item.created_at}}</view>
+      <view wx:if="{{item.reject_reason}}" class="list-meta">驳回原因：{{item.reject_reason}}</view>
+    </view>
+    <view wx:if="{{!records.length && !recordsLoading}}" class="empty">暂无充值记录</view>
+  </view>
+</view>
