@@ -41,7 +41,11 @@ _RECEIPT_URL = "https://aip.baidubce.com/rest/2.0/ocr/v1/receipt"
 # 进程内缓存 access_token；{"token": str, "expires_at": float(epoch秒)}。
 _token_cache: dict[str, object] = {}
 
-_AMOUNT_PATTERN = re.compile(r"[¥￥]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)\s*元?")
+# 先匹配千位加逗号分组的格式（1,234.56），逗号分组至少要有一组；否则退到普通
+# 连续数字（5000.00）——原先用 (?:,\d{3})* 时后半支路径永远可以匹配 0 组，
+# 导致贪婪的 \d{1,3} 抢先吃掉前 3 位就收工，把不带逗号的 4 位以上金额（真实
+# 回单最常见的写法）错误截断，例如 "5000.00" 被读成 "500"。
+_AMOUNT_PATTERN = re.compile(r"[¥￥]?\s*(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)\s*元?")
 _AMOUNT_KEYWORDS = ("金额", "合计", "总计", "实付")
 
 

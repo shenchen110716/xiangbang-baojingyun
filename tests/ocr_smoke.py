@@ -108,6 +108,18 @@ def run():
     assert amt["mock"] is False and amt["amount"] == 8888.88, amt
     print("real receipt amount heuristic (金额 keyword line) OK")
 
+    # 没有千位逗号分隔的 4 位以上金额（真实回单最常见的写法，如"5000.00"）
+    # 之前的正则只支持逗号分组格式，会把 "5000.00" 错误截断成 "500"。
+    def fake_receipt_post_no_comma(url, form):
+        return {"words_result": [
+            {"words": "转账凭证"},
+            {"words": "金额：5000.00元"},
+        ]}
+    ocr._baidu_post = fake_receipt_post_no_comma
+    amt_no_comma = ocr.recognize_receipt_amount(b"img")
+    assert amt_no_comma["amount"] == 5000.00, amt_no_comma
+    print("real receipt amount heuristic (no comma separator, 4+ digits) OK")
+
     # 没有"金额/合计"关键字行时，退而求其次抓第一个金额格式的数字
     def fake_receipt_post_fallback(url, form):
         return {"words_result": [
