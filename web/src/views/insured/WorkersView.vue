@@ -234,6 +234,11 @@ function exportCsv() {
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="insuredStatusLabel(row).type">{{ insuredStatusLabel(row).text }}</el-tag></template>
         </el-table-column>
+        <el-table-column label="保司标注" width="140">
+          <template #default="{ row }">
+            <el-tag v-if="row.insurer_flag_reason" type="danger" size="small">{{ row.insurer_flag_reason }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="添加时间" width="150">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>

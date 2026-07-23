@@ -6,14 +6,15 @@ honoured, only the authenticated user's own insurer_id.
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.db import db
 from ..core.rbac import require_insurer_scope
 from ..core.security import current_user
-from ..models import Insurer, User
+from ..models import Insurer, InsuredPerson, User, WorkPosition
 from ..schemas.insurer import InsurerProfileIn
-from ..services import insurer_settlement_summary, serialize
+from ..services import insurer_plan_ids, insurer_settlement_summary, serialize
 
 router = APIRouter(prefix="/api/insurer-portal", tags=["insurer-portal"])
 
@@ -44,3 +45,13 @@ def submit_profile_edit(data: InsurerProfileIn, user: User = Depends(current_use
 @router.get("/settlement", dependencies=[Depends(_INSURER)])
 def settlement(user: User = Depends(current_user), session: Session = Depends(db)):
     return insurer_settlement_summary(session, user.insurer_id, user)
+
+
+@router.get("/insured", dependencies=[Depends(_INSURER)])
+def insured_for_review(user: User = Depends(current_user), session: Session = Depends(db)):
+    plan_ids = insurer_plan_ids(session, user.insurer_id)
+    if not plan_ids:
+        return []
+    stmt = select(InsuredPerson).join(WorkPosition, InsuredPerson.position_id == WorkPosition.id).where(
+        WorkPosition.plan_id.in_(plan_ids)).order_by(InsuredPerson.id.desc())
+    return [serialize(x) for x in session.scalars(stmt)]

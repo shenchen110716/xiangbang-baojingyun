@@ -1,5 +1,5 @@
 import { client } from './client'
-import type { Insurer, Invoice, Policy, WorkPosition } from './types'
+import type { Insurer, Invoice, InsuredPerson, Policy, WorkPosition } from './types'
 
 export function getInsurerProfile() {
   return client.get<Insurer>('/insurer-portal/profile').then((response) => response.data)
@@ -55,4 +55,12 @@ export function getInsurerSettlement() {
 
 export function listInsurerInvoices() {
   return client.get<Invoice[]>('/invoices').then((response) => response.data)
+}
+
+export function listInsurerInsured() {
+  return client.get<InsuredPerson[]>('/insurer-portal/insured').then((response) => response.data)
+}
+
+export function flagInsuredPerson(id: number, reason: string) {
+  return client.patch<InsuredPerson>(`/insured/${id}/insurer-flag`, { reason }).then((response) => response.data)
 }

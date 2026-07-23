@@ -7,7 +7,7 @@ from .position import (
     PositionVideoIn, PositionVideoReviewIn, PositionReviewIn,
 )
 from .plan import PlanTierIn, PlanIn, PlanUpdate
-from .insured import PersonIn, PersonUpdate, BulkPersonRow, BulkPersonIn
+from .insured import PersonIn, PersonUpdate, BulkPersonRow, BulkPersonIn, InsurerFlagIn
 from .claim import (
     ClaimIn, ClaimUpdate, ClaimStatusIn, ClaimDocumentIn, ClaimDocumentReviewIn,
 )
@@ -30,7 +30,7 @@ __all__ = [
     "PositionIn", "ActualEmployerIn", "ActualEmployerUpdate",
     "PositionVideoIn", "PositionVideoReviewIn", "PositionReviewIn",
     "PlanTierIn", "PlanIn", "PlanUpdate",
-    "PersonIn", "PersonUpdate", "BulkPersonRow", "BulkPersonIn",
+    "PersonIn", "PersonUpdate", "BulkPersonRow", "BulkPersonIn", "InsurerFlagIn",
     "ClaimIn", "ClaimUpdate", "ClaimStatusIn", "ClaimDocumentIn", "ClaimDocumentReviewIn",
     "PaymentIn", "PaymentCallbackIn", "InvoiceIn", "InvoiceUpdate", "InsurerAccountIn", "InsurerAccountUpdate", "InsurerAccountLinkIn",
     "InsurerIn", "InsurerUpdate", "InsurerEditReviewIn", "InsurerMergeIn", "InsurerProfileIn",

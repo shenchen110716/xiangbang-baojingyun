@@ -3,9 +3,9 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { getInsurerProfile, getInsurerSettlement, listInsurerInvoices, listInsurerPolicies, listInsurerPositions, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
+import { flagInsuredPerson, getInsurerProfile, getInsurerSettlement, listInsurerInsured, listInsurerInvoices, listInsurerPolicies, listInsurerPositions, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
 import type { InsurerSettlement } from '@/api/insurerPortal'
-import type { Insurer, Invoice, Policy, WorkPosition } from '@/api/types'
+import type { Insurer, Invoice, InsuredPerson, Policy, WorkPosition } from '@/api/types'
 import PageCard from '@/components/PageCard.vue'
 import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
 
@@ -57,6 +57,31 @@ async function loadInvoices() {
   invoices.value = await listInsurerInvoices()
 }
 
+const insuredList = ref<InsuredPerson[]>([])
+async function loadInsured() {
+  insuredList.value = await listInsurerInsured()
+}
+
+const flagDialogVisible = ref(false)
+const flagTarget = ref<InsuredPerson | null>(null)
+const flagReason = ref('')
+function openFlagDialog(row: InsuredPerson) {
+  flagTarget.value = row
+  flagReason.value = row.insurer_flag_reason || ''
+  flagDialogVisible.value = true
+}
+async function submitFlag() {
+  if (!flagTarget.value) return
+  try {
+    await flagInsuredPerson(flagTarget.value.id, flagReason.value)
+    ElMessage.success(flagReason.value ? '已标注' : '已取消标注')
+    flagDialogVisible.value = false
+    loadInsured()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
 async function load() {
   loading.value = true
   try {
@@ -70,6 +95,7 @@ async function load() {
     await loadPolicies()
     await loadSettlement()
     await loadInvoices()
+    await loadInsured()
   } catch (e) {
     ElMessage.error((e as Error).message)
   } finally {
@@ -216,8 +242,36 @@ function logout() {
             <el-empty v-if="!invoices.length" description="暂无发票申请" :image-size="60" />
           </PageCard>
         </el-tab-pane>
+
+        <el-tab-pane label="员工参停保异常标注" name="insured">
+          <PageCard title="名下参保员工" :count="insuredList.length" hint="只能标注异常原因，不能直接修改参保状态">
+            <el-table :data="insuredList" size="small">
+              <el-table-column prop="name" label="姓名" width="100" />
+              <el-table-column prop="id_number" label="身份证号" min-width="180" />
+              <el-table-column prop="status" label="状态" width="90" />
+              <el-table-column label="异常标注" min-width="160">
+                <template #default="{ row }">
+                  <el-tag v-if="row.insurer_flag_reason" type="danger" size="small">{{ row.insurer_flag_reason }}</el-tag>
+                  <span v-else class="muted">无</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="100">
+                <template #default="{ row }"><el-button link type="primary" size="small" @click="openFlagDialog(row)">标注</el-button></template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!insuredList.length" description="暂无名下参保员工" :image-size="60" />
+          </PageCard>
+        </el-tab-pane>
       </el-tabs>
     </main>
+
+    <el-dialog v-model="flagDialogVisible" title="标注参停保异常" width="420px">
+      <el-input v-model="flagReason" type="textarea" :rows="3" placeholder="留空并提交表示取消标注" />
+      <template #footer>
+        <el-button @click="flagDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitFlag">提交</el-button>
+      </template>
+    </el-dialog>
 
     <PasswordChangeDialog v-model="passwordDialogVisible" />
   </div>

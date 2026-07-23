@@ -157,6 +157,9 @@ export interface InsuredPerson extends Partial<PricingSnapshot> {
   created_at: string
   effective_at?: string | null
   terminated_at?: string | null
+  insurer_flag_reason: string
+  insurer_flagged_at: string | null
+  insurer_flagged_by: number | null
 }
 
 export interface PolicyMemberHistory {
