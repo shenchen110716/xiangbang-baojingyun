@@ -65,6 +65,21 @@ def _require_employer_master_manager(user: User, enterprise_id: int) -> None:
         raise HTTPException(403, "仅企业主管可管理实际工作单位")
 
 
+def _position_has_active_people(session: Session, position_id: int) -> bool:
+    """在保/待生效才算"有参保员工"；已停保的历史记录不应该继续锁定岗位信息。"""
+    return session.scalar(select(InsuredPerson.id).where(
+        InsuredPerson.position_id == position_id, InsuredPerson.status.in_(["active", "pending"]),
+    ).limit(1)) is not None
+
+
+def _employer_has_active_people(session: Session, employer_id: int) -> bool:
+    return session.scalar(select(InsuredPerson.id).join(
+        WorkPosition, InsuredPerson.position_id == WorkPosition.id,
+    ).where(
+        WorkPosition.actual_employer_id == employer_id, InsuredPerson.status.in_(["active", "pending"]),
+    ).limit(1)) is not None
+
+
 @router.get("/positions")
 def positions(user: User = Depends(current_user), session: Session = Depends(db)):
     stmt=select(WorkPosition).order_by(WorkPosition.id.desc())
@@ -75,7 +90,7 @@ def positions(user: User = Depends(current_user), session: Session = Depends(db)
     elif user.role != "admin": raise HTTPException(403,"无权查看岗位")
     result=[]
     for x in session.scalars(stmt):
-        item=serialize(x);em=session.get(ActualEmployer,x.actual_employer_id) if x.actual_employer_id else None;plan=session.get(InsurancePlan,x.plan_id) if x.plan_id else None;creator=session.get(User,x.created_by) if x.created_by else None;videos=session.scalars(select(PositionVideo).where(PositionVideo.position_id==x.id).order_by(PositionVideo.id.desc())).all();item['actual_employer_name']=em.name if em else x.actual_employer;item['plan_name']=plan.name if plan else '';item['creator_name']=creator.name if creator else '';item['video_count']=len(videos);item['latest_video_status']=videos[0].status if videos else 'missing';item['review_note']=videos[0].review_note if videos else '';result.append(item)
+        item=serialize(x);em=session.get(ActualEmployer,x.actual_employer_id) if x.actual_employer_id else None;plan=session.get(InsurancePlan,x.plan_id) if x.plan_id else None;creator=session.get(User,x.created_by) if x.created_by else None;videos=session.scalars(select(PositionVideo).where(PositionVideo.position_id==x.id).order_by(PositionVideo.id.desc())).all();item['actual_employer_name']=em.name if em else x.actual_employer;item['plan_name']=plan.name if plan else '';item['creator_name']=creator.name if creator else '';item['video_count']=len(videos);item['latest_video_status']=videos[0].status if videos else 'missing';item['review_note']=videos[0].review_note if videos else '';item['has_active_people']=_position_has_active_people(session,x.id);result.append(item)
     return result
 
 @router.get("/actual-employers")
@@ -86,7 +101,10 @@ def actual_employers(user:User=Depends(current_user),session:Session=Depends(db)
         allowed=allowed_employer_ids(session,user)
         if allowed is not None: stmt=stmt.where(ActualEmployer.id.in_(allowed))
     elif user.role!='admin': raise HTTPException(403,'无权查看实际工作单位')
-    return [serialize(x) for x in session.scalars(stmt)]
+    result=[]
+    for x in session.scalars(stmt):
+        item=serialize(x);item['has_active_people']=_employer_has_active_people(session,x.id);result.append(item)
+    return result
 
 @router.post("/actual-employers")
 def add_actual_employer(data:ActualEmployerIn,user:User=Depends(current_user),session:Session=Depends(db)):
@@ -100,6 +118,7 @@ def update_actual_employer(item_id:int,data:ActualEmployerUpdate,user:User=Depen
     item=session.get(ActualEmployer,item_id)
     if not item: raise HTTPException(404,'实际工作单位不存在')
     _require_employer_master_manager(user,item.enterprise_id)
+    if user.role=='enterprise' and _employer_has_active_people(session,item.id): raise HTTPException(400,"该实际用工单位下已有参保员工，不能修改，如需变更请联系平台")
     for key,value in data.model_dump(exclude_unset=True).items():
         if value is not None: setattr(item,key,value.strip() if isinstance(value,str) else value)
     for position in session.scalars(select(WorkPosition).where(WorkPosition.actual_employer_id==item.id)):
@@ -223,9 +242,10 @@ def update_position(item_id:int,data:PositionIn,user:User=Depends(current_user),
     item=session.get(WorkPosition,item_id)
     if not item: raise HTTPException(404,"岗位不存在")
     _position_employer_access(session,user,item)
-    # 已定类的岗位企业端不能再改，否则会被下面的逻辑静默清空职业类别/保险方案、打回待定类，
-    # 参保记录和保司对接都可能被打乱；如需变更须走平台后台。
-    if user.role=='enterprise' and item.status=='approved': raise HTTPException(400,"已定类的岗位不能修改，如需变更请联系平台")
+    # 已经有在保/待生效员工的岗位企业端不能再改，否则会被下面的逻辑静默清空职业类别/保险方案、
+    # 打回待定类，参保记录和保司对接都可能被打乱；如需变更须走平台后台。空岗位（哪怕已定类）
+    # 允许继续调整，不属于"有参保员工"的锁定范围。
+    if user.role=='enterprise' and _position_has_active_people(session,item.id): raise HTTPException(400,"该岗位已有参保员工，不能修改实际用工单位/岗位信息，如需变更请联系平台")
     employer=session.get(ActualEmployer,data.actual_employer_id) if data.actual_employer_id else None
     if not employer or employer.enterprise_id!=item.enterprise_id: raise HTTPException(400,"请选择本企业添加的有效实际工作单位")
     assert_employer_access(session,user,employer.id)
@@ -241,7 +261,7 @@ def delete_position(item_id:int,user:User=Depends(current_user),session:Session=
     item=session.get(WorkPosition,item_id)
     if not item: raise HTTPException(404,"岗位不存在")
     _position_employer_access(session,user,item)
-    if user.role=='enterprise' and item.status=='approved': raise HTTPException(400,"已定类的岗位不能删除，如需变更请联系平台")
+    if user.role=='enterprise' and _position_has_active_people(session,item.id): raise HTTPException(400,"该岗位已有参保员工，不能删除，如需变更请联系平台")
     if session.scalar(select(InsuredPerson.id).where(InsuredPerson.position_id==item_id).limit(1)): raise HTTPException(409,'该岗位已关联参保员工，不能删除')
     for video in session.scalars(select(PositionVideo).where(PositionVideo.position_id==item_id)):
         session.delete(video)

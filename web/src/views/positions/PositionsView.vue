@@ -289,9 +289,9 @@ function finishQuickInsure() {
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <template v-if="isEnterprise">
-              <template v-if="row.status === 'approved'">
-                <el-button type="primary" size="small" @click="openQuickInsure(row)">立即投保</el-button>
-                <span class="muted">已定类，不可编辑/删除</span>
+              <el-button v-if="row.status === 'approved'" type="primary" size="small" @click="openQuickInsure(row)">立即投保</el-button>
+              <template v-if="row.has_active_people">
+                <span class="muted">已有参保员工，不可编辑/删除</span>
               </template>
               <template v-else>
                 <el-button link type="primary" size="small" @click="openEdit(row)">编辑/上传视频</el-button>

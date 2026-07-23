@@ -44,6 +44,7 @@ export interface ActualEmployer {
   contact: string
   phone: string
   status: 'active' | 'paused'
+  has_active_people?: boolean
   created_at: string
 }
 
@@ -62,6 +63,7 @@ export interface WorkPosition {
   video_count?: number
   latest_video_status?: string
   review_note?: string
+  has_active_people?: boolean
   created_at: string
 }
 

@@ -67,6 +67,14 @@ def run():
     assert S.get_bool("OCR_ENABLED") is True
     print("get_bool OK")
 
+    # 粘贴商户号/密钥常见带首尾空格或换行；原样存库会在下游产生难以肉眼分辨的
+    # "格式错误"（微信支付商户号被拒绝就是这么栽的）。写入和读取都应该 strip。
+    S.set_many({"WECHAT_PAY_MCH_ID": "  1234567890\n"}, user_id=1)
+    assert S.get("WECHAT_PAY_MCH_ID") == "1234567890"
+    S.set_many({"S3_SECRET_ACCESS_KEY": "  secret-with-space  "}, user_id=1)
+    assert S.get("S3_SECRET_ACCESS_KEY") == "secret-with-space", "密钥同样要 strip"
+    print("strip whitespace on write/read OK")
+
     print("settings_smoke: ALL GREEN")
 
 

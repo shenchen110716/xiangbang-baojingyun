@@ -79,11 +79,11 @@ def get(key: str, default: str = "") -> str:
     if raw not in (None, ""):
         if is_secret(key):
             try:
-                return decrypt_bytes(raw.encode()).decode()
+                return decrypt_bytes(raw.encode()).decode().strip()
             except Exception:
                 return default
-        return raw
-    return os.getenv(key, default)
+        return raw.strip()
+    return os.getenv(key, default).strip()
 
 
 def get_bool(key: str, default: bool = False) -> bool:
@@ -121,6 +121,9 @@ def set_many(values: dict[str, str], user_id: Optional[int]) -> None:
                 continue
             if item["secret"] and value == MASK:
                 continue  # 未改动
+            # 后台粘贴密钥/商户号时经常带上首尾空格或换行（复制来源常见），原样存库会
+            # 在后续请求里产生难以肉眼分辨的"格式错误"（比如微信支付商户号校验失败）。
+            value = value.strip() if isinstance(value, str) else value
             stored = encrypt_bytes(value.encode()).decode() if (item["secret"] and value) else value
             row = s.get(SystemSetting, key)
             if row:
