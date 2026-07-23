@@ -45,15 +45,11 @@
     "list": [
       {
         "pagePath": "pages/home/home",
-        "text": "首页"
-      },
-      {
-        "pagePath": "pages/employees/employees",
-        "text": "员工"
+        "text": "方案管理"
       },
       {
         "pagePath": "pages/claims/claims",
-        "text": "理赔"
+        "text": "报案理赔"
       },
       {
         "pagePath": "pages/profile/profile",

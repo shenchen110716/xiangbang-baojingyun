@@ -53,21 +53,27 @@ Page({
     };
   },
   onLoad(options) {
-    const id = Number(options.id || 0); this.setData({ id });
+    const id = Number(options.id || 0); const presetPositionId = Number(options.positionId || 0);
+    this.setData({ id });
     Promise.all([app.request('/enterprises'), app.request('/positions'), app.request('/plans'), id ? app.request('/insured') : Promise.resolve([])])
       .then(([enterprises, allPositions, plans, people]) => {
         const approved = allPositions.filter((item) => item.status === 'approved');
         const current = people.find((item) => item.id === id);
-        const currentPos = current ? approved.find((p) => p.id === current.position_id) : null;
-        const enterpriseId = current ? current.enterprise_id : (enterprises[0] && enterprises[0].id) || 0;
+        // 从「方案管理」列表点"去投保"直接进来：岗位已经定好了，投保单位/实际用工单位/岗位
+        // 三级选择直接跳过、立刻锁定，不用再选一遍（保经云 7-23 反馈，参考竞品首页的
+        // "今日投保(点击加减人)"体验）。
+        const presetPos = presetPositionId ? approved.find((p) => p.id === presetPositionId) : null;
+        const currentPos = current ? approved.find((p) => p.id === current.position_id) : presetPos;
+        const enterpriseId = current ? current.enterprise_id : (presetPos ? presetPos.enterprise_id : (enterprises[0] && enterprises[0].id) || 0);
         const employerId = currentPos ? (currentPos.actual_employer_id || 0) : 0;
-        const scope = this.buildScope(approved, enterpriseId, employerId, current ? current.position_id : 0);
+        const scope = this.buildScope(approved, enterpriseId, employerId, current ? current.position_id : (presetPos ? presetPos.id : 0));
         const enterpriseIndex = Math.max(0, enterprises.findIndex((item) => item.id === enterpriseId));
         const effectiveAt = current && current.effective_at ? current.effective_at.slice(0, 10) : '';
         const terminatedAt = current && current.terminated_at ? current.terminated_at.slice(0, 10) : '';
         const effectiveTime = current && current.effective_at && current.effective_at.length >= 16 ? current.effective_at.slice(11, 16) : '00:00';
         const terminatedTime = current && current.terminated_at && current.terminated_at.length >= 16 ? current.terminated_at.slice(11, 16) : '00:00';
         this.setData({ enterprises, allPositions: approved, plans, ...scope, enterpriseIndex,
+          locked: !!presetPos,
           form: current
             ? { name: current.name, id_number: current.id_number, phone: current.phone || '', enterprise_id: current.enterprise_id, position_id: current.position_id || 0, effective_at: effectiveAt, terminated_at: terminatedAt }
             : { ...this.data.form, enterprise_id: enterpriseId, position_id: (scope.selectedPosition && scope.selectedPosition.id) || 0 },

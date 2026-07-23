@@ -7,12 +7,13 @@ Page({
     // 拦截跳登录页——未登录时首页照常渲染，只是展示品牌介绍 + 登录入口，
     // 不请求任何需要鉴权的数据。
     loggedIn: false,
-    dashboard: { enterprises: 0, people: 0, pending_people: 0, premium_balance_total: 0, usage_balance: 0, usage_available: 0, usage_recharged: 0, usage_consumed: 0, claims_open: 0, balance_alerts: [] },
-    messages: [],
+    dashboard: { active_people: 0, claims_open: 0, usage_available: 0 },
     user: {},
     enterprise: {},
     greeting: '你好',
-    today: ''
+    search: '',
+    positions: [],
+    filtered: []
   },
   onShow() {
     if (!app.globalData.token) {
@@ -29,21 +30,41 @@ Page({
   load() {
     const hour = new Date().getHours();
     const greeting = hour < 6 ? '夜深了' : hour < 12 ? '上午好' : hour < 18 ? '下午好' : '晚上好';
-    const today = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
-    this.setData({ loading: true, greeting, today });
-    return Promise.all([app.request('/dashboard', { silent: true }), app.request('/messages', { silent: true }), app.loadProfile()])
-      .then(([dashboard, messages, user]) => {
+    this.setData({ loading: true, greeting });
+    return Promise.all([app.request('/dashboard', { silent: true }), app.request('/positions', { silent: true }), app.loadProfile()])
+      .then(([dashboard, positions, user]) => {
         const premiumAccounts = dashboard.premium_accounts || [];
-        // balance 现在等于可用余额（充值 − 已消耗），与三端口径一致。
         dashboard.premium_balance_total = premiumAccounts.reduce((sum, item) => sum + (item.available != null ? item.available : (item.balance || 0)), 0);
-        dashboard.premium_recharged_total = premiumAccounts.reduce((sum, item) => sum + (item.recharged != null ? item.recharged : (item.balance || 0)), 0);
-        dashboard.premium_consumed_total = premiumAccounts.reduce((sum, item) => sum + (item.consumed || 0), 0);
-        this.setData({ dashboard, messages: messages.slice(0, 3), user, enterprise: app.globalData.enterprise || {}, loading: false });
+        const mapped = positions.filter((item) => item.status === 'approved').map((item) => ({
+          ...item,
+          status_label: item.has_active_people ? '保障中' : '暂无参保',
+        }));
+        this.setData({ dashboard, positions: mapped, user, enterprise: app.globalData.enterprise || {}, loading: false });
+        this.filter();
       })
       .catch((error) => { this.setData({ loading: false }); wx.showToast({ title: error.message, icon: 'none' }); });
   },
+  onSearch(e) { this.setData({ search: e.detail.value }); this.filter(); },
+  filter() {
+    const q = this.data.search.trim().toLowerCase();
+    const filtered = !q ? this.data.positions : this.data.positions.filter((item) =>
+      [item.name, item.actual_employer_name, item.plan_name].some((v) => (v || '').toLowerCase().includes(q)));
+    this.setData({ filtered });
+  },
   go(e) { wx.navigateTo({ url: e.currentTarget.dataset.url }); },
-  openMessage(e) { const path = e.currentTarget.dataset.path; if (path) wx.navigateTo({ url: path }); },
   goLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
+  addPosition() { wx.navigateTo({ url: '/pages/position-edit/position-edit' }); },
+  editPosition(e) { wx.navigateTo({ url: `/pages/position-edit/position-edit?id=${e.currentTarget.dataset.id}` }); },
+  // 已有参保员工的岗位不允许改实际用工单位/岗位信息，和 Web 端参保方案页规则一致
+  // （保经云 7-24 反馈）；这里直接复用 /positions 已经返回的 has_active_people。
+  removePosition(e) {
+    const item = this.data.positions.find((p) => p.id === e.currentTarget.dataset.id);
+    if (item && item.has_active_people) { wx.showToast({ title: '该岗位已有参保员工，不能删除', icon: 'none' }); return; }
+    wx.showModal({
+      title: '删除方案', content: '删除后不可恢复，确认删除该方案吗？', confirmColor: '#dc2626',
+      success: (res) => { if (res.confirm) app.request(`/positions/${item.id}`, { method: 'DELETE' }).then(() => { wx.showToast({ title: '已删除' }); this.load(); }); }
+    });
+  },
+  goInsure(e) { wx.navigateTo({ url: `/pages/employee-edit/employee-edit?positionId=${e.currentTarget.dataset.id}` }); },
   onShareAppMessage() { return app.share('/pages/home/home', 'from=share'); }
 });

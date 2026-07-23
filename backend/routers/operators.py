@@ -28,7 +28,12 @@ def add_operator(data:OperatorIn,user:User=Depends(require_operator_manager),ses
     enterprise_id=user.enterprise_id if user.role=="enterprise" else data.enterprise_id
     if not enterprise_id or not session.get(Enterprise,enterprise_id): raise HTTPException(400,"请选择有效投保单位")
     if session.scalar(select(User).where(User.username==data.username)): raise HTTPException(409,"登录账号已存在")
-    item=User(username=data.username.strip(),password_hash=pwd.hash(data.password),name=data.name.strip(),phone=data.phone.strip(),role="enterprise",enterprise_id=enterprise_id,enterprise_role="project_manager",is_owner=False,active=True,status="active")
+    phone=data.phone.strip()
+    # 同一投保单位内手机号唯一匹配人员——避免同一个人被重复建了好几个操作员账号
+    # （保经云 7-23 反馈：企业人员管理要"通过手机号进行唯一匹配"）。
+    if phone and session.scalar(select(User).where(User.role=="enterprise",User.enterprise_id==enterprise_id,User.phone==phone)):
+        raise HTTPException(409,"该手机号已存在对应的企业人员账号")
+    item=User(username=data.username.strip(),password_hash=pwd.hash(data.password),name=data.name.strip(),phone=phone,role="enterprise",enterprise_id=enterprise_id,enterprise_role="project_manager",is_owner=False,active=True,status="active")
     session.add(item);session.commit();session.refresh(item);audit(session,user,"create","operator",str(item.id));return operator_dict(item,session)
 
 @router.patch("/operators/{item_id}")
@@ -62,7 +67,11 @@ def update_operator(item_id:int,data:OperatorUpdate,user:User=Depends(current_us
         if session.scalar(select(User).where(User.username==values["username"].strip(),User.id!=item.id)): raise HTTPException(409,"登录账号已存在")
         item.username=values["username"].strip();item.session_version+=1
     if values.get("name") is not None: item.name=values["name"].strip()
-    if values.get("phone") is not None: item.phone=values["phone"].strip()
+    if values.get("phone") is not None:
+        new_phone=values["phone"].strip()
+        if new_phone and session.scalar(select(User).where(User.role=="enterprise",User.enterprise_id==item.enterprise_id,User.phone==new_phone,User.id!=item.id)):
+            raise HTTPException(409,"该手机号已存在对应的企业人员账号")
+        item.phone=new_phone
     if values.get("password"): item.password_hash=pwd.hash(values["password"]);item.session_version+=1
     if values.get("active") is not None:
         item.active=values["active"];item.status="active" if item.active else "inactive"
