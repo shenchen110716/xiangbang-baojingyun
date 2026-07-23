@@ -3,8 +3,8 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { getInsurerProfile, listInsurerPositions, reviewInsurerPosition, submitInsurerProfileEdit } from '@/api/insurerPortal'
-import type { Insurer, WorkPosition } from '@/api/types'
+import { getInsurerProfile, listInsurerPolicies, listInsurerPositions, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
+import type { Insurer, Policy, WorkPosition } from '@/api/types'
 import PageCard from '@/components/PageCard.vue'
 import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
 
@@ -31,6 +31,21 @@ async function loadPositions() {
   positions.value = await listInsurerPositions()
 }
 
+const policies = ref<Policy[]>([])
+async function loadPolicies() {
+  policies.value = await listInsurerPolicies()
+}
+
+async function handlePolicyUpload(policyId: number, file: File) {
+  try {
+    await uploadInsurerPolicyDocument(policyId, file)
+    ElMessage.success('保单文件已上传')
+    loadPolicies()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
 async function load() {
   loading.value = true
   try {
@@ -41,6 +56,7 @@ async function load() {
     }
     await loadProfile()
     await loadPositions()
+    await loadPolicies()
   } catch (e) {
     ElMessage.error((e as Error).message)
   } finally {
@@ -125,6 +141,30 @@ function logout() {
               </el-table-column>
             </el-table>
             <el-empty v-if="!positions.length" description="暂无名下岗位" :image-size="60" />
+          </PageCard>
+        </el-tab-pane>
+
+        <el-tab-pane label="上传保单" name="policies">
+          <PageCard title="名下保单" :count="policies.length">
+            <el-table :data="policies" size="small">
+              <el-table-column prop="policy_no" label="保单号" min-width="160" />
+              <el-table-column label="保费" width="100"><template #default="{ row }">{{ row.premium }}</template></el-table-column>
+              <el-table-column label="保单文件" min-width="160">
+                <template #default="{ row }">
+                  <a v-if="row.document_download_url" :href="row.document_download_url" target="_blank">{{ row.document_name || '查看文件' }}</a>
+                  <span v-else class="muted">未上传</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="140">
+                <template #default="{ row }">
+                  <el-upload :show-file-list="false" :auto-upload="false" accept=".pdf,.jpg,.jpeg,.png"
+                             @change="(f: { raw: File }) => handlePolicyUpload(row.id, f.raw)">
+                    <el-button link type="primary" size="small">{{ row.document_download_url ? '重新上传' : '上传' }}</el-button>
+                  </el-upload>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!policies.length" description="暂无名下保单" :image-size="60" />
           </PageCard>
         </el-tab-pane>
       </el-tabs>

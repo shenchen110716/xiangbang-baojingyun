@@ -21,7 +21,7 @@ from ..models import (
     ActualEmployer, AgentCommission, Claim, Enterprise, InsurancePlan,
     InsuredPerson, Policy, PolicyMember, User, WorkPosition,
 )
-from ..services import amount, billable_date_range, period_amount, plan_price_for_class, policy_dict, premium_account_view, premium_accounts_for_enterprise, pricing_snapshot, strip_internal_pricing, usage_person_days
+from ..services import amount, assert_plan_belongs_to_insurer, billable_date_range, period_amount, plan_price_for_class, policy_dict, premium_account_view, premium_accounts_for_enterprise, pricing_snapshot, strip_internal_pricing, usage_person_days
 
 router = APIRouter(prefix="/api", tags=["reports"])
 
@@ -251,12 +251,16 @@ def billing(user: User = Depends(current_user), session: Session = Depends(db)):
 def policies(user: User = Depends(current_user), session: Session = Depends(db)):
     stmt=select(Policy).order_by(Policy.id.desc())
     if user.role=="enterprise" and user.enterprise_id: stmt=stmt.where(Policy.enterprise_id==user.enterprise_id)
+    elif user.role=="insurer":
+        plan_ids={x.id for x in session.scalars(select(InsurancePlan.id).where(InsurancePlan.insurer_id==user.insurer_id))}
+        stmt=stmt.where(Policy.plan_id.in_(plan_ids)) if plan_ids else stmt.where(Policy.id.is_(None))
     return [_policy_with_document(x,session,user) for x in session.scalars(stmt)]
 
-@router.post("/policies/{item_id}/document/upload", dependencies=[Depends(require_role("admin", detail="仅平台端可导入保单文件"))])
+@router.post("/policies/{item_id}/document/upload", dependencies=[Depends(require_role("admin", "insurer", detail="仅平台或保司端可导入保单文件"))])
 async def upload_policy_document(item_id:int,file:UploadFile=File(...),user:User=Depends(current_user),session:Session=Depends(db)):
     policy=session.get(Policy,item_id)
     if not policy: raise HTTPException(404,'保单不存在')
+    assert_plan_belongs_to_insurer(session,user,policy.plan_id)
     suffix=Path(file.filename or '').suffix.lower()
     if suffix not in {'.pdf','.jpg','.jpeg','.png'}: raise HTTPException(400,'仅支持 PDF 或图片格式')
     content=await file.read()
