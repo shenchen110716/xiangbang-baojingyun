@@ -95,6 +95,20 @@ def test_insurer_cannot_skip_to_paid():
     assert resp.status_code in (403, 409)
 
 
+def test_insurer_cannot_act_on_approved_claim_even_if_transition_allowed():
+    """Prove insurer restriction is independent of CLAIM_TRANSITIONS table.
+
+    CLAIM_TRANSITIONS['approved'] permits 'approved'→'paid' for any role.
+    _INSURER_VISIBLE_CLAIM_STATUSES includes 'approved', so insurer can read it.
+    But insurer-specific check requires item.status=='insurer_review' to ACT.
+    This test verifies that restriction fires independently: 403 must come
+    from the insurer check, not from the general transition table.
+    """
+    claim_a_id, claim_b_id, claim_early_id, username = _setup(claim_a_status="approved")
+    resp = client.patch(f"/api/claims/{claim_a_id}/status", json={"status": "paid"}, headers=_headers(username))
+    assert resp.status_code == 403
+
+
 def run():
     test_insurer_sees_only_own_insurer_review_stage_claims()
     print("test_insurer_sees_only_own_insurer_review_stage_claims: OK")
@@ -106,6 +120,8 @@ def run():
     print("test_insurer_cannot_act_on_early_stage_claim: OK")
     test_insurer_cannot_skip_to_paid()
     print("test_insurer_cannot_skip_to_paid: OK")
+    test_insurer_cannot_act_on_approved_claim_even_if_transition_allowed()
+    print("test_insurer_cannot_act_on_approved_claim_even_if_transition_allowed: OK")
     print("\nAll insurer claims scope tests: PASS")
 
 
