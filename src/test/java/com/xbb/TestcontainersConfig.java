@@ -23,7 +23,7 @@ public class TestcontainersConfig {
      * 因此这里只提供可复用的注册逻辑,每个测试类需自带一个 {@code @DynamicPropertySource}
      * 方法调用本方法(见 SchemaIsolationTests 等)。
      */
-    static void registerProperties(DynamicPropertyRegistry registry) {
+    public static void registerProperties(DynamicPropertyRegistry registry) {
         // 应用运行时:受限用户
         registry.add("spring.datasource.url", PG::getJdbcUrl);
         registry.add("spring.datasource.username", () -> "identity_user");
