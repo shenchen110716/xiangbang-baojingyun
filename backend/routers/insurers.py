@@ -5,16 +5,16 @@ old PlansAdminView.vue page calls "保险公司" in its title): this router
 manages the Insurer *entity* introduced 2026-07-24 to back the insurer login
 portal's data isolation.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.audit import audit
 from ..core.db import db
 from ..core.rbac import require_role
-from ..core.security import current_user
+from ..core.security import current_user, pwd
 from ..models import Insurer, InsurancePlan, InsurerAccountLink, User
-from ..schemas.insurer import InsurerEditReviewIn, InsurerIn, InsurerMergeIn, InsurerUpdate
+from ..schemas.insurer import InsurerAccountIn, InsurerEditReviewIn, InsurerIn, InsurerMergeIn, InsurerUpdate
 from ..services import serialize
 
 router = APIRouter(prefix="/api", tags=["insurers"])
@@ -95,3 +95,36 @@ def merge_insurers(data: InsurerMergeIn, user: User = Depends(current_user), ses
     session.commit()
     audit(session, user, "merge", "insurer", str(target.id), f"merged={source_ids}")
     return serialize(target)
+
+
+def _account_dict(item: User) -> dict:
+    return {"id": item.id, "username": item.username, "name": item.name, "active": item.active, "status": item.status, "created_at": item.created_at}
+
+
+@router.get("/insurers/{item_id}/accounts", dependencies=[Depends(_ADMIN)])
+def insurer_accounts(item_id: int, session: Session = Depends(db)):
+    if not session.get(Insurer, item_id): raise HTTPException(404, "保险公司不存在")
+    stmt = select(User).where(User.role == "insurer", User.insurer_id == item_id).order_by(User.id.desc())
+    return [_account_dict(x) for x in session.scalars(stmt)]
+
+
+@router.post("/insurers/{item_id}/accounts", dependencies=[Depends(_ADMIN)])
+def create_insurer_account(item_id: int, data: InsurerAccountIn, user: User = Depends(current_user), session: Session = Depends(db)):
+    insurer = session.get(Insurer, item_id)
+    if not insurer: raise HTTPException(404, "保险公司不存在")
+    if session.scalar(select(User.id).where(User.username == data.username).limit(1)):
+        raise HTTPException(409, "该用户名已存在")
+    item = User(username=data.username, password_hash=pwd.hash(data.password), name=data.name.strip() or insurer.name, role="insurer", insurer_id=insurer.id)
+    session.add(item); session.commit(); session.refresh(item)
+    audit(session, user, "create", "insurer_account", str(item.id), f"insurer_id={insurer.id}")
+    return _account_dict(item)
+
+
+@router.patch("/insurers/accounts/{account_id}/status", dependencies=[Depends(_ADMIN)])
+def insurer_account_status(account_id: int, status_value: str = Query(..., alias="status"), user: User = Depends(current_user), session: Session = Depends(db)):
+    item = session.get(User, account_id)
+    if not item or item.role != "insurer": raise HTTPException(404, "保司账号不存在")
+    item.status = status_value; item.active = status_value == "active"
+    item.session_version += 1
+    session.commit(); audit(session, user, "status_change", "insurer_account", str(item.id), status_value)
+    return _account_dict(item)

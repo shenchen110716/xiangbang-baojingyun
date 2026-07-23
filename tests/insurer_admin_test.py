@@ -9,6 +9,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mktemp(suffix='.db')}"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import select  # noqa: E402
 
 from backend.app import app, startup  # noqa: E402
 from backend.core.db import SessionLocal  # noqa: E402
@@ -113,6 +114,48 @@ def test_merge_insurers_repoints_plans():
         assert s.get(Insurer, b["id"]) is None
 
 
+def test_create_insurer_account_and_login():
+    token = _admin_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    insurer = client.post("/api/insurers", json={"name": "账号测试保司"}, headers=headers).json()
+    resp = client.post(f"/api/insurers/{insurer['id']}/accounts",
+                       json={"username": "insurer_account_test", "password": "test1234", "name": "测试账号"},
+                       headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["username"] == "insurer_account_test"
+    with SessionLocal() as s:
+        user = s.scalar(select(User).where(User.username == "insurer_account_test"))
+        assert user.role == "insurer"
+        assert user.insurer_id == insurer["id"]
+    login = client.post("/api/auth/login", json={"username": "insurer_account_test", "password": "test1234", "portal": "insurer"})
+    assert login.status_code == 200
+
+    listing = client.get(f"/api/insurers/{insurer['id']}/accounts", headers=headers)
+    assert any(x["username"] == "insurer_account_test" for x in listing.json())
+
+
+def test_create_insurer_account_duplicate_username_rejected():
+    token = _admin_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    insurer = client.post("/api/insurers", json={"name": "重复账号测试保司"}, headers=headers).json()
+    client.post(f"/api/insurers/{insurer['id']}/accounts", json={"username": "dup_insurer_account", "password": "test1234"}, headers=headers)
+    resp = client.post(f"/api/insurers/{insurer['id']}/accounts", json={"username": "dup_insurer_account", "password": "test1234"}, headers=headers)
+    assert resp.status_code == 409
+
+
+def test_pause_insurer_account_blocks_login():
+    token = _admin_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    insurer = client.post("/api/insurers", json={"name": "暂停测试保司"}, headers=headers).json()
+    account = client.post(f"/api/insurers/{insurer['id']}/accounts", json={"username": "pause_insurer_account", "password": "test1234"}, headers=headers).json()
+    resp = client.patch(f"/api/insurers/accounts/{account['id']}/status", params={"status": "paused"}, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "paused"
+    login = client.post("/api/auth/login", json={"username": "pause_insurer_account", "password": "test1234", "portal": "insurer"})
+    assert login.status_code == 403
+
+
 def run():
     test_create_and_list_insurer()
     print("test_create_and_list_insurer: OK")
@@ -122,6 +165,12 @@ def run():
     print("test_pending_edit_reject_leaves_name_unchanged: OK")
     test_merge_insurers_repoints_plans()
     print("test_merge_insurers_repoints_plans: OK")
+    test_create_insurer_account_and_login()
+    print("test_create_insurer_account_and_login: OK")
+    test_create_insurer_account_duplicate_username_rejected()
+    print("test_create_insurer_account_duplicate_username_rejected: OK")
+    test_pause_insurer_account_blocks_login()
+    print("test_pause_insurer_account_blocks_login: OK")
     print("\nAll insurer admin tests: PASS")
 
 

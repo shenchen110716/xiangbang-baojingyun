@@ -24,3 +24,24 @@ export function reviewInsurerEdit(id: number, data: { approve: boolean; reject_r
 export function mergeInsurers(data: { source_ids: number[]; target_id: number }) {
   return client.post<Insurer>('/insurers/merge', data).then((response) => response.data)
 }
+
+export interface InsurerAccount {
+  id: number
+  username: string
+  name: string
+  active: boolean
+  status: string
+  created_at: string
+}
+
+export function listInsurerAccounts(insurerId: number) {
+  return client.get<InsurerAccount[]>(`/insurers/${insurerId}/accounts`).then((response) => response.data)
+}
+
+export function createInsurerAccount(insurerId: number, data: { username: string; password: string; name?: string }) {
+  return client.post<InsurerAccount>(`/insurers/${insurerId}/accounts`, data).then((response) => response.data)
+}
+
+export function setInsurerAccountStatus(accountId: number, status: 'active' | 'paused') {
+  return client.patch<InsurerAccount>(`/insurers/accounts/${accountId}/status`, null, { params: { status } }).then((response) => response.data)
+}

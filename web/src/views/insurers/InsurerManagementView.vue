@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as insurersApi from '@/api/insurers'
+import type { InsurerAccount } from '@/api/insurers'
 import type { Insurer } from '@/api/types'
 import PageCard from '@/components/PageCard.vue'
 
@@ -65,6 +66,52 @@ async function rejectEdit(item: Insurer) {
   } catch { /* cancelled */ }
 }
 
+const accountsVisible = ref(false)
+const accountsTarget = ref<Insurer | null>(null)
+const accounts = ref<InsurerAccount[]>([])
+const accountsLoading = ref(false)
+const accountForm = reactive({ username: '', password: '', name: '' })
+async function openAccounts(item: Insurer) {
+  accountsTarget.value = item
+  Object.assign(accountForm, { username: '', password: '', name: '' })
+  accountsVisible.value = true
+  accountsLoading.value = true
+  try {
+    accounts.value = await insurersApi.listInsurerAccounts(item.id)
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    accountsLoading.value = false
+  }
+}
+const accountSaving = ref(false)
+async function submitAccount() {
+  if (!accountsTarget.value) return
+  if (!accountForm.username.trim()) { ElMessage.error('请填写登录账号'); return }
+  if (accountForm.password.length < 6) { ElMessage.error('密码至少 6 位'); return }
+  accountSaving.value = true
+  try {
+    await insurersApi.createInsurerAccount(accountsTarget.value.id, accountForm)
+    ElMessage.success('已创建登录账号')
+    Object.assign(accountForm, { username: '', password: '', name: '' })
+    accounts.value = await insurersApi.listInsurerAccounts(accountsTarget.value.id)
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    accountSaving.value = false
+  }
+}
+async function toggleAccountStatus(item: InsurerAccount) {
+  if (!accountsTarget.value) return
+  try {
+    await insurersApi.setInsurerAccountStatus(item.id, item.status === 'active' ? 'paused' : 'active')
+    ElMessage.success('已更新')
+    accounts.value = await insurersApi.listInsurerAccounts(accountsTarget.value.id)
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
 const mergeVisible = ref(false)
 const mergeTarget = ref<number | null>(null)
 const mergeSources = ref<number[]>([])
@@ -115,8 +162,11 @@ async function submitMerge() {
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '启用' : '暂停' }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="100">
-          <template #default="{ row }"><el-button link type="primary" size="small" @click="editInsurer(row)">编辑</el-button></template>
+        <el-table-column label="操作" width="180">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="editInsurer(row)">编辑</el-button>
+            <el-button link type="primary" size="small" @click="openAccounts(row)">登录账号</el-button>
+          </template>
         </el-table-column>
       </el-table>
     </PageCard>
@@ -138,6 +188,29 @@ async function submitMerge() {
         </el-table-column>
       </el-table>
     </PageCard>
+
+    <el-dialog v-model="accountsVisible" :title="`${accountsTarget?.name || ''} · 登录账号`" width="520px">
+      <el-table v-loading="accountsLoading" :data="accounts" size="small" style="margin-bottom: 18px">
+        <el-table-column prop="username" label="账号" min-width="120" />
+        <el-table-column prop="name" label="名称" min-width="120" />
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }"><el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '启用' : '暂停' }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="操作" width="90">
+          <template #default="{ row }"><el-button link type="primary" size="small" @click="toggleAccountStatus(row)">{{ row.status === 'active' ? '暂停' : '启用' }}</el-button></template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!accountsLoading && !accounts.length" description="暂无登录账号" :image-size="50" />
+      <el-form :model="accountForm" label-width="100px">
+        <el-form-item label="登录账号" required><el-input v-model="accountForm.username" placeholder="用于登录保司端" /></el-form-item>
+        <el-form-item label="登录密码" required><el-input v-model="accountForm.password" type="password" show-password placeholder="至少 6 位" /></el-form-item>
+        <el-form-item label="账号名称"><el-input v-model="accountForm.name" placeholder="留空则使用保司名称" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="accountsVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="accountSaving" @click="submitAccount">创建账号</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="mergeVisible" title="合并保司" width="480px">
       <el-form label-width="110px">

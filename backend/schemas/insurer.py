@@ -29,3 +29,9 @@ class InsurerProfileIn(BaseModel):
     name: Optional[str] = None
     contact: Optional[str] = None
     phone: Optional[str] = None
+
+
+class InsurerAccountIn(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=6, max_length=128)
+    name: str = ""
