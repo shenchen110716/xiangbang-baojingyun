@@ -55,11 +55,41 @@ def test_admin_approve_commits_change():
     assert resp.json()["pending_name"] is None
 
 
+def test_credit_code_email_address_two_stage():
+    token, insurer_id = _insurer_token(name="阳光保险", username="insurer_profile_test3")
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = client.patch("/api/insurer-portal/profile",
+                        json={"credit_code": "91320100MA1XXXXX1X", "email": "test@example.com", "address": "南京市江北新区"},
+                        headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["credit_code"] == ""
+    assert body["pending_credit_code"] == "91320100MA1XXXXX1X"
+    assert body["pending_email"] == "test@example.com"
+    assert body["pending_address"] == "南京市江北新区"
+
+    with SessionLocal() as s:
+        if not s.query(User).filter(User.username == "admin_profile_test3").first():
+            s.add(User(username="admin_profile_test3", password_hash=pwd.hash("admin1234"), name="平台", role="admin"))
+            s.commit()
+    admin_login = client.post("/api/auth/login", json={"username": "admin_profile_test3", "password": "admin1234", "portal": "admin"})
+    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+    approved = client.post(f"/api/insurers/{insurer_id}/review-edit", json={"approve": True}, headers=admin_headers).json()
+    assert approved["credit_code"] == "91320100MA1XXXXX1X"
+    assert approved["email"] == "test@example.com"
+    assert approved["address"] == "南京市江北新区"
+    assert approved["pending_credit_code"] is None
+    assert approved["pending_email"] is None
+    assert approved["pending_address"] is None
+
+
 def run():
     test_submit_edit_writes_pending_only()
     print("test_submit_edit_writes_pending_only: OK")
     test_admin_approve_commits_change()
     print("test_admin_approve_commits_change: OK")
+    test_credit_code_email_address_two_stage()
+    print("test_credit_code_email_address_two_stage: OK")
     print("\nAll insurer profile tests: PASS")
 
 

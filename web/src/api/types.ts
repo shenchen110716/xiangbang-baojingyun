@@ -54,10 +54,16 @@ export interface Insurer {
   name: string
   contact: string
   phone: string
+  credit_code: string
+  email: string
+  address: string
   status: string
   pending_name: string | null
   pending_contact: string | null
   pending_phone: string | null
+  pending_credit_code: string | null
+  pending_email: string | null
+  pending_address: string | null
   pending_submitted_at: string | null
   created_at: string
 }

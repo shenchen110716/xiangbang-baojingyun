@@ -23,14 +23,14 @@ async function load() {
 onMounted(load)
 
 const editingId = ref<number | null>(null)
-const form = reactive({ name: '', contact: '', phone: '' })
+const form = reactive({ name: '', contact: '', phone: '', credit_code: '', email: '', address: '' })
 function resetForm() {
   editingId.value = null
-  Object.assign(form, { name: '', contact: '', phone: '' })
+  Object.assign(form, { name: '', contact: '', phone: '', credit_code: '', email: '', address: '' })
 }
 function editInsurer(item: Insurer) {
   editingId.value = item.id
-  Object.assign(form, { name: item.name, contact: item.contact, phone: item.phone })
+  Object.assign(form, { name: item.name, contact: item.contact, phone: item.phone, credit_code: item.credit_code, email: item.email, address: item.address })
 }
 const saving = ref(false)
 async function submitForm() {
@@ -111,6 +111,15 @@ async function toggleAccountStatus(item: InsurerAccount) {
     ElMessage.error((e as Error).message)
   }
 }
+async function resetAccountPassword(item: InsurerAccount) {
+  try {
+    const { value } = await ElMessageBox.prompt(`为账号「${item.username}」设置新密码（至少 6 位）`, '重置密码', {
+      inputPattern: /^.{6,}$/, inputErrorMessage: '密码至少 6 位', inputType: 'password',
+    })
+    await insurersApi.resetInsurerAccountPassword(item.id, value)
+    ElMessage.success('密码已重置，该账号需用新密码重新登录')
+  } catch { /* cancelled */ }
+}
 
 const mergeVisible = ref(false)
 const mergeTarget = ref<number | null>(null)
@@ -142,8 +151,11 @@ async function submitMerge() {
     <PageCard title="录入保险公司" hint="保司账号登录后只能看到、只能操作自己名下的数据，名称需与历史录入保持一致才能自动关联">
       <el-form :model="form" label-width="120px" class="insurer-form">
         <el-form-item label="保险公司名称" required><el-input v-model="form.name" placeholder="如：中国人保财险" /></el-form-item>
+        <el-form-item label="统一社会信用代码"><el-input v-model="form.credit_code" /></el-form-item>
         <el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item>
         <el-form-item label="联系电话"><el-input v-model="form.phone" /></el-form-item>
+        <el-form-item label="邮箱"><el-input v-model="form.email" /></el-form-item>
+        <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="saving" @click="submitForm">{{ editingId ? '保存修改' : '保存' }}</el-button>
           <el-button v-if="editingId" @click="resetForm">取消编辑</el-button>
@@ -174,10 +186,10 @@ async function submitMerge() {
     <PageCard v-if="pendingEdits.length" title="待审核的保司信息变更" :count="pendingEdits.length">
       <el-table :data="pendingEdits" size="small">
         <el-table-column label="当前名称" min-width="140"><template #default="{ row }">{{ row.name }}</template></el-table-column>
-        <el-table-column label="申请修改为" min-width="140">
+        <el-table-column label="申请修改为" min-width="220">
           <template #default="{ row }">
             <div>{{ row.pending_name || row.name }}</div>
-            <small class="muted">{{ row.pending_contact || row.contact }} · {{ row.pending_phone || row.phone }}</small>
+            <small class="muted">{{ row.pending_contact || row.contact }} · {{ row.pending_phone || row.phone }} · {{ row.pending_email || row.email || '无邮箱' }}</small>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="160">
@@ -189,15 +201,18 @@ async function submitMerge() {
       </el-table>
     </PageCard>
 
-    <el-dialog v-model="accountsVisible" :title="`${accountsTarget?.name || ''} · 登录账号`" width="520px">
+    <el-dialog v-model="accountsVisible" :title="`${accountsTarget?.name || ''} · 登录账号`" width="600px">
       <el-table v-loading="accountsLoading" :data="accounts" size="small" style="margin-bottom: 18px">
         <el-table-column prop="username" label="账号" min-width="120" />
         <el-table-column prop="name" label="名称" min-width="120" />
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '启用' : '暂停' }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="90">
-          <template #default="{ row }"><el-button link type="primary" size="small" @click="toggleAccountStatus(row)">{{ row.status === 'active' ? '暂停' : '启用' }}</el-button></template>
+        <el-table-column label="操作" width="150">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="toggleAccountStatus(row)">{{ row.status === 'active' ? '暂停' : '启用' }}</el-button>
+            <el-button link type="primary" size="small" @click="resetAccountPassword(row)">重置密码</el-button>
+          </template>
         </el-table-column>
       </el-table>
       <el-empty v-if="!accountsLoading && !accounts.length" description="暂无登录账号" :image-size="50" />

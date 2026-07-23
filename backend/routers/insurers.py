@@ -14,7 +14,7 @@ from ..core.db import db
 from ..core.rbac import require_role
 from ..core.security import current_user, pwd
 from ..models import Insurer, InsurancePlan, InsurerAccountLink, User
-from ..schemas.insurer import InsurerAccountIn, InsurerEditReviewIn, InsurerIn, InsurerMergeIn, InsurerUpdate
+from ..schemas.insurer import InsurerAccountIn, InsurerAccountPasswordResetIn, InsurerEditReviewIn, InsurerIn, InsurerMergeIn, InsurerUpdate
 from ..services import serialize
 
 router = APIRouter(prefix="/api", tags=["insurers"])
@@ -32,7 +32,8 @@ def add_insurer(data: InsurerIn, user: User = Depends(current_user), session: Se
     name = data.name.strip()
     if session.scalar(select(Insurer.id).where(Insurer.name == name).limit(1)):
         raise HTTPException(409, "该保司名称已存在，如需处理重复录入请使用合并保司工具")
-    item = Insurer(name=name, contact=data.contact.strip(), phone=data.phone.strip())
+    item = Insurer(name=name, contact=data.contact.strip(), phone=data.phone.strip(),
+                    credit_code=data.credit_code.strip(), email=data.email.strip(), address=data.address.strip())
     session.add(item); session.commit(); session.refresh(item)
     audit(session, user, "create", "insurer", str(item.id))
     return serialize(item)
@@ -63,9 +64,15 @@ def review_insurer_edit(item_id: int, data: InsurerEditReviewIn, user: User = De
         if item.pending_name is not None: item.name = item.pending_name
         if item.pending_contact is not None: item.contact = item.pending_contact
         if item.pending_phone is not None: item.phone = item.pending_phone
+        if item.pending_credit_code is not None: item.credit_code = item.pending_credit_code
+        if item.pending_email is not None: item.email = item.pending_email
+        if item.pending_address is not None: item.address = item.pending_address
     item.pending_name = None
     item.pending_contact = None
     item.pending_phone = None
+    item.pending_credit_code = None
+    item.pending_email = None
+    item.pending_address = None
     item.pending_submitted_at = None
     session.commit()
     audit(session, user, "review", "insurer", str(item.id), "approved" if data.approve else f"rejected:{data.reject_reason}")
@@ -127,4 +134,15 @@ def insurer_account_status(account_id: int, status_value: str = Query(..., alias
     item.status = status_value; item.active = status_value == "active"
     item.session_version += 1
     session.commit(); audit(session, user, "status_change", "insurer_account", str(item.id), status_value)
+    return _account_dict(item)
+
+
+@router.post("/insurers/accounts/{account_id}/reset-password", dependencies=[Depends(_ADMIN)])
+def reset_insurer_account_password(account_id: int, data: InsurerAccountPasswordResetIn, user: User = Depends(current_user), session: Session = Depends(db)):
+    item = session.get(User, account_id)
+    if not item or item.role != "insurer": raise HTTPException(404, "保司账号不存在")
+    item.password_hash = pwd.hash(data.password)
+    item.session_version += 1
+    session.commit()
+    audit(session, user, "password_reset", "insurer_account", str(item.id))
     return _account_dict(item)

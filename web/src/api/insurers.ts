@@ -5,11 +5,11 @@ export function listInsurers() {
   return client.get<Insurer[]>('/insurers').then((response) => response.data)
 }
 
-export function createInsurer(data: { name: string; contact?: string; phone?: string }) {
+export function createInsurer(data: { name: string; contact?: string; phone?: string; credit_code?: string; email?: string; address?: string }) {
   return client.post<Insurer>('/insurers', data).then((response) => response.data)
 }
 
-export function updateInsurer(id: number, data: Partial<{ name: string; contact: string; phone: string }>) {
+export function updateInsurer(id: number, data: Partial<{ name: string; contact: string; phone: string; credit_code: string; email: string; address: string }>) {
   return client.patch<Insurer>(`/insurers/${id}`, data).then((response) => response.data)
 }
 
@@ -44,4 +44,8 @@ export function createInsurerAccount(insurerId: number, data: { username: string
 
 export function setInsurerAccountStatus(accountId: number, status: 'active' | 'paused') {
   return client.patch<InsurerAccount>(`/insurers/accounts/${accountId}/status`, null, { params: { status } }).then((response) => response.data)
+}
+
+export function resetInsurerAccountPassword(accountId: number, password: string) {
+  return client.post<InsurerAccount>(`/insurers/accounts/${accountId}/reset-password`, { password }).then((response) => response.data)
 }

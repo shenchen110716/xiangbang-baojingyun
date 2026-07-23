@@ -12,18 +12,18 @@ import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
 const router = useRouter()
 const auth = useAuthStore()
 
-const tab = ref('profile')
+const tab = ref('positions')
 const loading = ref(true)
 const passwordDialogVisible = ref(false)
 
 const profile = ref<Insurer | null>(null)
-const profileForm = reactive({ name: '', contact: '', phone: '' })
+const profileForm = reactive({ name: '', contact: '', phone: '', credit_code: '', email: '', address: '' })
 const profileSaving = ref(false)
 
 async function loadProfile() {
   profile.value = await getInsurerProfile()
   if (profile.value) {
-    Object.assign(profileForm, { name: profile.value.name, contact: profile.value.contact, phone: profile.value.phone })
+    Object.assign(profileForm, { name: profile.value.name, contact: profile.value.contact, phone: profile.value.phone, credit_code: profile.value.credit_code, email: profile.value.email, address: profile.value.address })
   }
 }
 
@@ -176,22 +176,6 @@ function logout() {
 
     <main class="portal-body" v-loading="loading">
       <el-tabs v-model="tab">
-        <el-tab-pane label="基本信息" name="profile">
-          <PageCard title="保司基本信息" hint="修改需经平台审核通过后才会生效">
-            <el-form :model="profileForm" label-width="120px" style="max-width: 480px; padding: 0 20px 20px">
-              <el-form-item label="保险公司名称" required><el-input v-model="profileForm.name" /></el-form-item>
-              <el-form-item label="联系人"><el-input v-model="profileForm.contact" /></el-form-item>
-              <el-form-item label="联系电话"><el-input v-model="profileForm.phone" /></el-form-item>
-              <el-form-item>
-                <el-button type="primary" :loading="profileSaving" @click="submitProfileEdit">提交变更</el-button>
-              </el-form-item>
-            </el-form>
-            <div v-if="profile?.pending_submitted_at" class="pending-banner">
-              有一项变更正在等待平台审核：{{ profile.pending_name || profile.name }} / {{ profile.pending_contact || profile.contact }} / {{ profile.pending_phone || profile.phone }}
-            </div>
-          </PageCard>
-        </el-tab-pane>
-
         <el-tab-pane label="岗位核保" name="positions">
           <PageCard title="名下岗位" :count="positions.length" hint="仅显示已分派到本保司产品线下的岗位">
             <el-table :data="positions" size="small">
@@ -211,7 +195,25 @@ function logout() {
           </PageCard>
         </el-tab-pane>
 
-        <el-tab-pane label="上传保单" name="policies">
+        <el-tab-pane label="参保管理" name="enrollment">
+          <PageCard title="参保员工" :count="insuredList.length" hint="只能标注异常原因，不能直接修改参保状态">
+            <el-table :data="insuredList" size="small">
+              <el-table-column prop="name" label="姓名" width="100" />
+              <el-table-column prop="id_number" label="身份证号" min-width="180" />
+              <el-table-column prop="status" label="状态" width="90" />
+              <el-table-column label="异常标注" min-width="160">
+                <template #default="{ row }">
+                  <el-tag v-if="row.insurer_flag_reason" type="danger" size="small">{{ row.insurer_flag_reason }}</el-tag>
+                  <span v-else class="muted">无</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="100">
+                <template #default="{ row }"><el-button link type="primary" size="small" @click="openFlagDialog(row)">标注</el-button></template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!insuredList.length" description="暂无名下参保员工" :image-size="60" />
+          </PageCard>
+
           <PageCard title="名下保单" :count="policies.length">
             <el-table :data="policies" size="small">
               <el-table-column prop="policy_no" label="保单号" min-width="160" />
@@ -232,6 +234,23 @@ function logout() {
               </el-table-column>
             </el-table>
             <el-empty v-if="!policies.length" description="暂无名下保单" :image-size="60" />
+          </PageCard>
+        </el-tab-pane>
+
+        <el-tab-pane label="理赔管理" name="claims">
+          <PageCard title="名下理赔案件" :count="claims.length" hint="只展示已流转到保司审核中或之后节点的案件">
+            <el-table :data="claims" size="small">
+              <el-table-column prop="claim_no" label="案件号" min-width="160" />
+              <el-table-column prop="person_name" label="被保险人" width="100" />
+              <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
+              <el-table-column prop="status" label="状态" width="110" />
+              <el-table-column label="操作" width="100">
+                <template #default="{ row }">
+                  <el-button v-if="row.status === 'insurer_review'" link type="primary" size="small" @click="openClaimDialog(row)">审核</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!claims.length" description="暂无名下理赔案件" :image-size="60" />
           </PageCard>
         </el-tab-pane>
 
@@ -271,40 +290,22 @@ function logout() {
           </PageCard>
         </el-tab-pane>
 
-        <el-tab-pane label="员工参停保异常标注" name="insured">
-          <PageCard title="名下参保员工" :count="insuredList.length" hint="只能标注异常原因，不能直接修改参保状态">
-            <el-table :data="insuredList" size="small">
-              <el-table-column prop="name" label="姓名" width="100" />
-              <el-table-column prop="id_number" label="身份证号" min-width="180" />
-              <el-table-column prop="status" label="状态" width="90" />
-              <el-table-column label="异常标注" min-width="160">
-                <template #default="{ row }">
-                  <el-tag v-if="row.insurer_flag_reason" type="danger" size="small">{{ row.insurer_flag_reason }}</el-tag>
-                  <span v-else class="muted">无</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="100">
-                <template #default="{ row }"><el-button link type="primary" size="small" @click="openFlagDialog(row)">标注</el-button></template>
-              </el-table-column>
-            </el-table>
-            <el-empty v-if="!insuredList.length" description="暂无名下参保员工" :image-size="60" />
-          </PageCard>
-        </el-tab-pane>
-
-        <el-tab-pane label="理赔管理" name="claims">
-          <PageCard title="名下理赔案件" :count="claims.length" hint="只展示已流转到保司审核中或之后节点的案件">
-            <el-table :data="claims" size="small">
-              <el-table-column prop="claim_no" label="案件号" min-width="160" />
-              <el-table-column prop="person_name" label="被保险人" width="100" />
-              <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
-              <el-table-column prop="status" label="状态" width="110" />
-              <el-table-column label="操作" width="100">
-                <template #default="{ row }">
-                  <el-button v-if="row.status === 'insurer_review'" link type="primary" size="small" @click="openClaimDialog(row)">审核</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-            <el-empty v-if="!claims.length" description="暂无名下理赔案件" :image-size="60" />
+        <el-tab-pane label="基本信息" name="profile">
+          <PageCard title="保司基本信息" hint="修改需经平台审核通过后才会生效">
+            <el-form :model="profileForm" label-width="120px" style="max-width: 480px; padding: 0 20px 20px">
+              <el-form-item label="保险公司名称" required><el-input v-model="profileForm.name" /></el-form-item>
+              <el-form-item label="统一社会信用代码"><el-input v-model="profileForm.credit_code" /></el-form-item>
+              <el-form-item label="联系人"><el-input v-model="profileForm.contact" /></el-form-item>
+              <el-form-item label="联系电话"><el-input v-model="profileForm.phone" /></el-form-item>
+              <el-form-item label="邮箱"><el-input v-model="profileForm.email" /></el-form-item>
+              <el-form-item label="地址"><el-input v-model="profileForm.address" /></el-form-item>
+              <el-form-item>
+                <el-button type="primary" :loading="profileSaving" @click="submitProfileEdit">提交变更</el-button>
+              </el-form-item>
+            </el-form>
+            <div v-if="profile?.pending_submitted_at" class="pending-banner">
+              有一项变更正在等待平台审核：{{ profile.pending_name || profile.name }} / {{ profile.pending_contact || profile.contact }} / {{ profile.pending_phone || profile.phone }} / {{ profile.pending_credit_code || profile.credit_code }} / {{ profile.pending_email || profile.email }} / {{ profile.pending_address || profile.address }}
+            </div>
           </PageCard>
         </el-tab-pane>
       </el-tabs>

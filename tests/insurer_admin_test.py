@@ -38,6 +38,24 @@ def test_create_and_list_insurer():
     assert any(x["name"] == "太平洋保险" for x in listing.json())
 
 
+def test_create_insurer_with_credit_code_email_address():
+    token = _admin_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = client.post("/api/insurers", json={
+        "name": "字段测试保司", "credit_code": "91320100MA1YYYYY2Y", "email": "biz@example.com", "address": "苏州市工业园区",
+    }, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["credit_code"] == "91320100MA1YYYYY2Y"
+    assert body["email"] == "biz@example.com"
+    assert body["address"] == "苏州市工业园区"
+
+    update = client.patch(f"/api/insurers/{body['id']}", json={"email": "new@example.com"}, headers=headers)
+    assert update.status_code == 200
+    assert update.json()["email"] == "new@example.com"
+    assert update.json()["credit_code"] == "91320100MA1YYYYY2Y"
+
+
 def test_pending_edit_two_stage_approval():
     token = _admin_token()
     headers = {"Authorization": f"Bearer {token}"}
@@ -69,6 +87,7 @@ def test_pending_edit_reject_leaves_name_unchanged():
     with SessionLocal() as s:
         item = s.get(Insurer, insurer_id)
         item.pending_name = "友邦保险(错误改名)"
+        item.pending_email = "wrong@example.com"
         from datetime import datetime, timezone
         item.pending_submitted_at = datetime.now(timezone.utc)
         s.commit()
@@ -76,6 +95,8 @@ def test_pending_edit_reject_leaves_name_unchanged():
     assert resp.status_code == 200
     assert resp.json()["name"] == "友邦保险"
     assert resp.json()["pending_name"] is None
+    assert resp.json()["email"] == ""
+    assert resp.json()["pending_email"] is None
 
 
 def test_merge_insurers_repoints_plans():
@@ -156,9 +177,39 @@ def test_pause_insurer_account_blocks_login():
     assert login.status_code == 403
 
 
+def test_reset_insurer_account_password():
+    token = _admin_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    insurer = client.post("/api/insurers", json={"name": "重置密码测试保司"}, headers=headers).json()
+    account = client.post(f"/api/insurers/{insurer['id']}/accounts", json={"username": "reset_pw_insurer_account", "password": "old12345"}, headers=headers).json()
+
+    old_login = client.post("/api/auth/login", json={"username": "reset_pw_insurer_account", "password": "old12345", "portal": "insurer"})
+    assert old_login.status_code == 200
+    old_token = old_login.json()["access_token"]
+    # old token demonstrably valid before the reset, so a later 401 is caused by the reset itself
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {old_token}"}).status_code == 200
+
+    reset = client.post(f"/api/insurers/accounts/{account['id']}/reset-password", json={"password": "new67890"}, headers=headers)
+    assert reset.status_code == 200
+
+    # old password no longer works
+    old_password_login = client.post("/api/auth/login", json={"username": "reset_pw_insurer_account", "password": "old12345", "portal": "insurer"})
+    assert old_password_login.status_code == 401
+
+    # new password works
+    new_login = client.post("/api/auth/login", json={"username": "reset_pw_insurer_account", "password": "new67890", "portal": "insurer"})
+    assert new_login.status_code == 200
+
+    # any token issued before the reset is now invalidated (session_version bump)
+    stale_me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {old_token}"})
+    assert stale_me.status_code == 401
+
+
 def run():
     test_create_and_list_insurer()
     print("test_create_and_list_insurer: OK")
+    test_create_insurer_with_credit_code_email_address()
+    print("test_create_insurer_with_credit_code_email_address: OK")
     test_pending_edit_two_stage_approval()
     print("test_pending_edit_two_stage_approval: OK")
     test_pending_edit_reject_leaves_name_unchanged()
@@ -171,6 +222,8 @@ def run():
     print("test_create_insurer_account_duplicate_username_rejected: OK")
     test_pause_insurer_account_blocks_login()
     print("test_pause_insurer_account_blocks_login: OK")
+    test_reset_insurer_account_password()
+    print("test_reset_insurer_account_password: OK")
     print("\nAll insurer admin tests: PASS")
 
 
