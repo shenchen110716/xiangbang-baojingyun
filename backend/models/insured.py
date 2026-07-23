@@ -19,6 +19,12 @@ class InsuredPerson(Base):
     occupation_class: Mapped[str] = mapped_column(String(20), default="3类")
     position_id: Mapped[Optional[int]] = mapped_column(ForeignKey("work_positions.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="pending")
+    # 保司标注的异常原因（"参保/停保信息有问题"），空字符串表示当前没有标注。
+    # 只能由 role='insurer' 通过 PATCH /insured/{id}/insurer-flag 写入/清空，
+    # 企业端和平台端的参保状态本身不受影响——见 2026-07-24 设计文档"范围边界"。
+    insurer_flag_reason: Mapped[str] = mapped_column(Text, default="")
+    insurer_flagged_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    insurer_flagged_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     policy_id: Mapped[Optional[int]] = mapped_column(ForeignKey("policies.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=business_default)
 

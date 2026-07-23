@@ -29,6 +29,7 @@ class InsurerAccountLink(Base):
     __tablename__ = "insurer_account_links"
     id: Mapped[int] = mapped_column(primary_key=True)
     insurer: Mapped[str] = mapped_column(String(100))
+    insurer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("insurers.id"), nullable=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("insurer_accounts.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 

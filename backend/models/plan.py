@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -10,6 +11,9 @@ class InsurancePlan(Base):
     __tablename__ = "insurance_plans"
     id: Mapped[int] = mapped_column(primary_key=True)
     insurer: Mapped[str] = mapped_column(String(100))
+    # 迁移时按 insurer 字符串精确匹配回填；insurer 字符串字段保留不删，作为
+    # 展示层过渡（见 2026-07-24 保司工作台设计）。
+    insurer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("insurers.id"), nullable=True)
     insurer_email: Mapped[str] = mapped_column(String(160), default="")
     name: Mapped[str] = mapped_column(String(160))
     coverage: Mapped[str] = mapped_column(Text, default="")
