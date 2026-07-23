@@ -10,8 +10,11 @@ public class User {
     private String username;
     private String passwordHash;
     private String name;
-    private String role; // admin | enterprise | salesperson
+    private String role; // admin | enterprise | salesperson | insurer
     private Integer enterpriseId;
+    // Nullable FK to insurers.id, only meaningful for role='insurer'
+    // (2026-07-24 insurer-portal feature) — see plan.Insurer.
+    private Integer insurerId;
     private String enterpriseRole;
     private String phone = "";
     private String status = "active";
@@ -38,6 +41,8 @@ public class User {
     public void setRole(String v) { this.role = v; }
     public Integer getEnterpriseId() { return enterpriseId; }
     public void setEnterpriseId(Integer v) { this.enterpriseId = v; }
+    public Integer getInsurerId() { return insurerId; }
+    public void setInsurerId(Integer v) { this.insurerId = v; }
     @JsonProperty("enterprise_role")
     public String getEnterpriseRole() { return enterpriseRole; }
     public void setEnterpriseRole(String v) { this.enterpriseRole = v; }

@@ -7,7 +7,7 @@ import java.util.List;
 @Mapper
 public interface UserMapper {
 
-    String COLUMNS = "id, username, password_hash as passwordHash, name, role, enterprise_id as enterpriseId, " +
+    String COLUMNS = "id, username, password_hash as passwordHash, name, role, enterprise_id as enterpriseId, insurer_id as insurerId, " +
             "phone, status, active, is_owner as owner, enterprise_role as enterpriseRole, session_version as sessionVersion, created_at as createdAt";
 
     @Select("SELECT " + COLUMNS + " FROM users WHERE id = #{id}")
@@ -35,13 +35,13 @@ public interface UserMapper {
     @Select("SELECT " + COLUMNS + " FROM users WHERE role = 'enterprise' AND is_owner = true AND phone = #{phone} AND id != #{excludeId} AND active = true ORDER BY id ASC")
     List<User> findLinkedOwnersByPhone(@Param("phone") String phone, @Param("excludeId") int excludeId);
 
-    @Insert("INSERT INTO users (username, password_hash, name, role, enterprise_id, phone, status, active, is_owner, enterprise_role, session_version, created_at) " +
-            "VALUES (#{username}, #{passwordHash}, #{name}, #{role}, #{enterpriseId}, #{phone}, #{status}, #{active}, #{owner}, #{enterpriseRole}, #{sessionVersion}, #{createdAt})")
+    @Insert("INSERT INTO users (username, password_hash, name, role, enterprise_id, insurer_id, phone, status, active, is_owner, enterprise_role, session_version, created_at) " +
+            "VALUES (#{username}, #{passwordHash}, #{name}, #{role}, #{enterpriseId}, #{insurerId}, #{phone}, #{status}, #{active}, #{owner}, #{enterpriseRole}, #{sessionVersion}, #{createdAt})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(User user);
 
     @Update("UPDATE users SET username=#{username}, password_hash=#{passwordHash}, name=#{name}, role=#{role}, " +
-            "enterprise_id=#{enterpriseId}, phone=#{phone}, status=#{status}, active=#{active}, is_owner=#{owner}, enterprise_role=#{enterpriseRole}, " +
+            "enterprise_id=#{enterpriseId}, insurer_id=#{insurerId}, phone=#{phone}, status=#{status}, active=#{active}, is_owner=#{owner}, enterprise_role=#{enterpriseRole}, " +
             "session_version=#{sessionVersion} WHERE id=#{id}")
     int update(User user);
 
