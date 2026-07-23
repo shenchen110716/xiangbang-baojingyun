@@ -40,7 +40,7 @@ watch(
       <template v-if="auth.isEnterprise() && person.sale_price !== undefined">
         <div class="row"><span>实际销售价</span><b>{{ money(person.sale_price) }}</b></div>
       </template>
-      <template v-else-if="person.insurance_base_price !== undefined">
+      <template v-else-if="auth.isAdmin() && person.insurance_base_price !== undefined">
         <div class="row"><span>保险原价</span><b>{{ money(person.insurance_base_price) }}</b></div>
         <div class="row"><span>保司结算底价</span><b>{{ money(person.policy_floor_price) }}</b></div>
         <div class="row"><span>平台利润</span><b>{{ money(person.profit_amount) }}</b></div>
