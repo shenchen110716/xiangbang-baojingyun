@@ -252,7 +252,7 @@ def policies(user: User = Depends(current_user), session: Session = Depends(db))
     stmt=select(Policy).order_by(Policy.id.desc())
     if user.role=="enterprise" and user.enterprise_id: stmt=stmt.where(Policy.enterprise_id==user.enterprise_id)
     elif user.role=="insurer":
-        plan_ids={x.id for x in session.scalars(select(InsurancePlan.id).where(InsurancePlan.insurer_id==user.insurer_id))}
+        plan_ids=set(session.scalars(select(InsurancePlan.id).where(InsurancePlan.insurer_id==user.insurer_id)))
         stmt=stmt.where(Policy.plan_id.in_(plan_ids)) if plan_ids else stmt.where(Policy.id.is_(None))
     return [_policy_with_document(x,session,user) for x in session.scalars(stmt)]
 
