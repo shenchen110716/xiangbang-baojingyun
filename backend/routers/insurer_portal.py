@@ -13,7 +13,7 @@ from ..core.rbac import require_insurer_scope
 from ..core.security import current_user
 from ..models import Insurer, User
 from ..schemas.insurer import InsurerProfileIn
-from ..services import serialize
+from ..services import insurer_settlement_summary, serialize
 
 router = APIRouter(prefix="/api/insurer-portal", tags=["insurer-portal"])
 
@@ -39,3 +39,8 @@ def submit_profile_edit(data: InsurerProfileIn, user: User = Depends(current_use
     item.pending_submitted_at = datetime.now(timezone.utc)
     session.commit()
     return serialize(item)
+
+
+@router.get("/settlement", dependencies=[Depends(_INSURER)])
+def settlement(user: User = Depends(current_user), session: Session = Depends(db)):
+    return insurer_settlement_summary(session, user.insurer_id, user)

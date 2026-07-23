@@ -3,7 +3,8 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { getInsurerProfile, listInsurerPolicies, listInsurerPositions, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
+import { getInsurerProfile, getInsurerSettlement, listInsurerPolicies, listInsurerPositions, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
+import type { InsurerSettlement } from '@/api/insurerPortal'
 import type { Insurer, Policy, WorkPosition } from '@/api/types'
 import PageCard from '@/components/PageCard.vue'
 import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
@@ -46,6 +47,11 @@ async function handlePolicyUpload(policyId: number, file: File) {
   }
 }
 
+const settlement = ref<InsurerSettlement | null>(null)
+async function loadSettlement() {
+  settlement.value = await getInsurerSettlement()
+}
+
 async function load() {
   loading.value = true
   try {
@@ -57,6 +63,7 @@ async function load() {
     await loadProfile()
     await loadPositions()
     await loadPolicies()
+    await loadSettlement()
   } catch (e) {
     ElMessage.error((e as Error).message)
   } finally {
@@ -167,6 +174,28 @@ function logout() {
             <el-empty v-if="!policies.length" description="暂无名下保单" :image-size="60" />
           </PageCard>
         </el-tab-pane>
+
+        <el-tab-pane label="财务管理" name="settlement">
+          <PageCard title="保费结算总览" hint="仅显示保费与结算价，平台内部利润/返佣数据不对保司开放">
+            <div class="stat-grid">
+              <div class="stat-tile">
+                <div class="stat-label">在保保费合计</div>
+                <div class="stat-value">{{ settlement?.total_active_premium ?? '—' }}</div>
+              </div>
+            </div>
+          </PageCard>
+          <PageCard title="保单结算明细" :count="settlement?.rows.length || 0">
+            <el-table :data="settlement?.rows || []" size="small">
+              <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
+              <el-table-column prop="plan_name" label="产品方案" min-width="140" />
+              <el-table-column prop="policy_no" label="保单号" min-width="140" />
+              <el-table-column label="保费" width="100"><template #default="{ row }">{{ row.premium }}</template></el-table-column>
+              <el-table-column label="结算价" width="100"><template #default="{ row }">{{ row.policy_floor_price ?? '—' }}</template></el-table-column>
+              <el-table-column prop="status" label="状态" width="90" />
+            </el-table>
+            <el-empty v-if="!settlement?.rows.length" description="暂无结算数据" :image-size="60" />
+          </PageCard>
+        </el-tab-pane>
       </el-tabs>
     </main>
 
@@ -212,5 +241,25 @@ function logout() {
   background: var(--el-color-warning-light-9);
   color: var(--el-color-warning-dark-2);
   font-size: 13px;
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  padding: 0 20px 20px;
+}
+.stat-tile {
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--el-fill-color-light);
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 6px;
 }
 </style>

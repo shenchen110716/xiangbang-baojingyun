@@ -28,3 +28,27 @@ export function uploadInsurerPolicyDocument(policyId: number, file: File) {
     headers: { 'Content-Type': 'multipart/form-data' },
   }).then((response) => response.data)
 }
+
+export interface InsurerSettlementRow {
+  policy_id: number
+  policy_no: string
+  enterprise_name: string
+  plan_name: string
+  status: string
+  premium: number
+  insurance_base_price?: number
+  policy_floor_price?: number
+  insurer_settlement_price?: number
+  minimum_sale_price?: number
+  sale_price?: number
+}
+
+export interface InsurerSettlement {
+  insurer_id: number
+  total_active_premium: number
+  rows: InsurerSettlementRow[]
+}
+
+export function getInsurerSettlement() {
+  return client.get<InsurerSettlement>('/insurer-portal/settlement').then((response) => response.data)
+}
