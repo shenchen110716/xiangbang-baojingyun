@@ -3,8 +3,8 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { getInsurerProfile, submitInsurerProfileEdit } from '@/api/insurerPortal'
-import type { Insurer } from '@/api/types'
+import { getInsurerProfile, listInsurerPositions, reviewInsurerPosition, submitInsurerProfileEdit } from '@/api/insurerPortal'
+import type { Insurer, WorkPosition } from '@/api/types'
 import PageCard from '@/components/PageCard.vue'
 import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
 
@@ -26,6 +26,11 @@ async function loadProfile() {
   }
 }
 
+const positions = ref<WorkPosition[]>([])
+async function loadPositions() {
+  positions.value = await listInsurerPositions()
+}
+
 async function load() {
   loading.value = true
   try {
@@ -35,6 +40,7 @@ async function load() {
       return
     }
     await loadProfile()
+    await loadPositions()
   } catch (e) {
     ElMessage.error((e as Error).message)
   } finally {
@@ -53,6 +59,16 @@ async function submitProfileEdit() {
     ElMessage.error((e as Error).message)
   } finally {
     profileSaving.value = false
+  }
+}
+
+async function approvePosition(row: WorkPosition) {
+  try {
+    await reviewInsurerPosition(row.id, { status: 'approved', occupation_class: row.occupation_class, plan_id: row.plan_id })
+    ElMessage.success('已核保')
+    loadPositions()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
   }
 }
 
@@ -90,6 +106,25 @@ function logout() {
             <div v-if="profile?.pending_submitted_at" class="pending-banner">
               有一项变更正在等待平台审核：{{ profile.pending_name || profile.name }} / {{ profile.pending_contact || profile.contact }} / {{ profile.pending_phone || profile.phone }}
             </div>
+          </PageCard>
+        </el-tab-pane>
+
+        <el-tab-pane label="岗位核保" name="positions">
+          <PageCard title="名下岗位" :count="positions.length" hint="仅显示已分派到本保司产品线下的岗位">
+            <el-table :data="positions" size="small">
+              <el-table-column prop="name" label="岗位名称" min-width="140" />
+              <el-table-column prop="actual_employer_name" label="实际用工单位" min-width="160" />
+              <el-table-column prop="occupation_class" label="职业类别" width="100" />
+              <el-table-column label="状态" width="90">
+                <template #default="{ row }"><el-tag size="small" :type="row.status === 'approved' ? 'success' : 'info'">{{ row.status === 'approved' ? '已核保' : row.status }}</el-tag></template>
+              </el-table-column>
+              <el-table-column label="操作" width="100">
+                <template #default="{ row }">
+                  <el-button v-if="row.status !== 'approved'" link type="primary" size="small" @click="approvePosition(row)">核保通过</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!positions.length" description="暂无名下岗位" :image-size="60" />
           </PageCard>
         </el-tab-pane>
       </el-tabs>

@@ -22,6 +22,8 @@ from ..schemas import (
 from ..services import (
     allowed_employer_ids,
     assert_employer_access,
+    assert_plan_belongs_to_insurer,
+    insurer_plan_ids,
     is_enterprise_owner,
     serialize,
 )
@@ -87,6 +89,11 @@ def positions(user: User = Depends(current_user), session: Session = Depends(db)
         stmt=stmt.where(WorkPosition.enterprise_id==user.enterprise_id)
         allowed=allowed_employer_ids(session,user)
         if allowed is not None: stmt=stmt.where(WorkPosition.actual_employer_id.in_(allowed))
+    elif user.role == "insurer":
+        # 保司只看得到已经分派到自己名下方案的岗位——未定类（plan_id 为空）
+        # 的岗位默认由平台先行审核，不进保司视图。
+        plan_ids = insurer_plan_ids(session, user.insurer_id)
+        stmt = stmt.where(WorkPosition.plan_id.in_(plan_ids)) if plan_ids else stmt.where(WorkPosition.id.is_(None))
     elif user.role != "admin": raise HTTPException(403,"无权查看岗位")
     result=[]
     for x in session.scalars(stmt):
@@ -211,10 +218,12 @@ def delete_position_video(item_id:int,user:User=Depends(current_user),session:Se
         position.status='pending';position.occupation_class='待定';position.plan_id=None
     session.commit();audit(session,user,'delete','position_video',str(item_id));return {'ok':True}
 
-@router.patch("/positions/{item_id}/review", dependencies=[Depends(require_role("admin", detail="仅平台端可确定岗位职业类别"))])
+@router.patch("/positions/{item_id}/review", dependencies=[Depends(require_role("admin", "insurer", detail="仅平台或保司端可确定岗位职业类别"))])
 def review_position(item_id:int,data:PositionReviewIn,user:User=Depends(current_user),session:Session=Depends(db)):
     item=session.get(WorkPosition,item_id)
     if not item: raise HTTPException(404,'岗位不存在')
+    # 保司只能把岗位分派到自己名下的方案；管理员不受此限制。
+    assert_plan_belongs_to_insurer(session,user,data.plan_id)
     videos=session.scalars(select(PositionVideo).where(PositionVideo.position_id==item_id).order_by(PositionVideo.id.desc())).all()
     if data.status=='approved' and not videos: raise HTTPException(400,'岗位视频上传后才能完成定类')
     if data.status=='approved' and not data.occupation_class: raise HTTPException(400,'请选择岗位职业类别')
