@@ -11,6 +11,9 @@ class Claim(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     enterprise_id: Mapped[int] = mapped_column(ForeignKey("enterprises.id"))
     person_id: Mapped[int] = mapped_column(ForeignKey("insured_people.id"))
+    # 7-23 反馈：报案时可以指定这次事故具体挂在哪张保单下（同一人可能有多段参保历史/多张保单）。
+    # 可空——旧记录和不指定保单的报案仍然合法，仅按 person_id 关联。
+    policy_id: Mapped[int | None] = mapped_column(ForeignKey("policies.id"), nullable=True)
     claim_no: Mapped[str] = mapped_column(String(80), unique=True)
     description: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(30), default="reported")
@@ -18,6 +21,8 @@ class Claim(Base):
     accident_at: Mapped[str] = mapped_column(String(30), default="")
     accident_place: Mapped[str] = mapped_column(String(200), default="")
     accident_type: Mapped[str] = mapped_column(String(60), default="工伤事故")
+    injury_part: Mapped[str] = mapped_column(String(80), default="")
+    payee_type: Mapped[str] = mapped_column(String(20), default="")
     hospital: Mapped[str] = mapped_column(String(160), default="")
     diagnosis: Mapped[str] = mapped_column(Text, default="")
     medical_cost: Mapped[float] = mapped_column(Float, default=0)

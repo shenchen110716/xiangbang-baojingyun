@@ -18,6 +18,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PREV_HEAD = "27951ec2f8ee"
+# Pinned to this one migration, not "head": this test isolates its SELECT+UPDATE
+# backfill logic, which is engine-agnostic. Later migrations added downstream
+# (e.g. new ADD COLUMNs) are not idempotent against create_all() and would
+# break "upgrade head" here even though they have nothing to do with this test.
+TARGET = "a1b2c3d4e5f6"
 
 
 def _alembic(url, *args):
@@ -66,7 +71,7 @@ def run():
             s.commit()
 
         _alembic(url, "stamp", PREV_HEAD)
-        _alembic(url, "upgrade", "head")
+        _alembic(url, "upgrade", TARGET)
 
         eng = sa.create_engine(url)
         with eng.connect() as c:
@@ -82,7 +87,7 @@ def run():
 
         # Idempotent: re-applying must not promote the already-non-owner second admin.
         _alembic(url, "downgrade", PREV_HEAD)
-        _alembic(url, "upgrade", "head")
+        _alembic(url, "upgrade", TARGET)
         with eng.connect() as c:
             still_non_owner = not bool(c.execute(sa.text("SELECT is_owner FROM users WHERE id=:i"), {"i": c2}).scalar())
         assert still_non_owner, "re-apply must stay idempotent"

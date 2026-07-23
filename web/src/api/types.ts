@@ -197,6 +197,7 @@ export interface Claim {
   id_number: string
   position_name: string
   actual_employer_name: string
+  policy_id: number | null
   policy_no: string
   plan_name: string
   insurer: string
@@ -207,6 +208,8 @@ export interface Claim {
   accident_at: string
   accident_place: string
   accident_type: string
+  injury_part: string
+  payee_type: string
   hospital: string
   diagnosis: string
   medical_cost: number
