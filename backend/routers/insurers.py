@@ -29,9 +29,10 @@ def insurers(session: Session = Depends(db)):
 
 @router.post("/insurers", dependencies=[Depends(_ADMIN)])
 def add_insurer(data: InsurerIn, user: User = Depends(current_user), session: Session = Depends(db)):
-    if session.scalar(select(Insurer.id).where(Insurer.name == data.name).limit(1)):
+    name = data.name.strip()
+    if session.scalar(select(Insurer.id).where(Insurer.name == name).limit(1)):
         raise HTTPException(409, "该保司名称已存在，如需处理重复录入请使用合并保司工具")
-    item = Insurer(name=data.name.strip(), contact=data.contact.strip(), phone=data.phone.strip())
+    item = Insurer(name=name, contact=data.contact.strip(), phone=data.phone.strip())
     session.add(item); session.commit(); session.refresh(item)
     audit(session, user, "create", "insurer", str(item.id))
     return serialize(item)
