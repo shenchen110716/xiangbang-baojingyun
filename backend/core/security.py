@@ -27,6 +27,16 @@ SALESPERSON_ALLOWED_PATHS = {"/api/agents/me", "/api/auth/me", "/api/auth/passwo
 # guard grants no access the routes themselves wouldn't.
 SALESPERSON_ALLOWED_PREFIXES = ("/api/agent-portal/",)
 
+# The insurer portal is not fully self-contained like the salesperson one — it
+# reuses six existing shared routers (positions, policies, claims, invoices)
+# with narrowed per-request permission, alongside its own /insurer-portal/*
+# endpoints. So this is a wider allowlist than SALESPERSON_ALLOWED_*, but every
+# path on it is either already role-narrowed at the route level (positions,
+# policies, claims, invoices — see Tasks 6/7/9/11) or lives under
+# /insurer-portal/ where every route requires require_insurer_scope.
+INSURER_ALLOWED_PATHS = {"/api/auth/me", "/api/auth/password", "/api/positions", "/api/claims", "/api/invoices", "/api/policies"}
+INSURER_ALLOWED_PREFIXES = ("/api/insurer-portal/", "/api/positions/", "/api/policies/", "/api/claims/")
+
 
 def current_user(request: Request, creds: HTTPAuthorizationCredentials = Depends(security), session: Session = Depends(db)) -> User:
     if not creds: raise HTTPException(status_code=401, detail="请先登录")
@@ -35,6 +45,7 @@ def current_user(request: Request, creds: HTTPAuthorizationCredentials = Depends
     user = session.get(User, uid)
     if not user or not user.active: raise HTTPException(status_code=401, detail="用户无效")
     if token_sv != user.session_version: raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
-    if user.role not in {"admin","enterprise","salesperson"}: raise HTTPException(status_code=403, detail="该账号暂未开通管理端权限")
+    if user.role not in {"admin","enterprise","salesperson","insurer"}: raise HTTPException(status_code=403, detail="该账号暂未开通管理端权限")
     if user.role == "salesperson" and request.url.path not in SALESPERSON_ALLOWED_PATHS and not request.url.path.startswith(SALESPERSON_ALLOWED_PREFIXES): raise HTTPException(status_code=403, detail="业务员账号仅可访问业务员工作台相关接口")
+    if user.role == "insurer" and request.url.path not in INSURER_ALLOWED_PATHS and not request.url.path.startswith(INSURER_ALLOWED_PREFIXES): raise HTTPException(status_code=403, detail="保司账号仅可访问保司工作台相关接口")
     return user

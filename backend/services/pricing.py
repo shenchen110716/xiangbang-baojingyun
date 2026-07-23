@@ -76,9 +76,19 @@ _INTERNAL_PRICING_FIELDS = {
 _AGENT_VISIBLE_PRICING_FIELDS = {'minimum_sale_price', 'minimum_sale_total'}
 _AGENT_INTERNAL_PRICING_FIELDS = _INTERNAL_PRICING_FIELDS - _AGENT_VISIBLE_PRICING_FIELDS
 
+# 保司能看到结算价/保费（这正是他们的收款依据），但不能看到平台的返佣、利润、
+# 差价——这是和 enterprise/salesperson 两份黑名单相反方向的裁剪：那两份藏起
+# 平台的成本基准，这份藏起平台的"赚了多少"。见 2026-07-24 设计文档"范围边界"。
+_INSURER_HIDDEN_PRICING_FIELDS = {
+    'profit_amount', 'commission_mode', 'agent_commission_rate', 'agent_commission_amount',
+    'platform_margin_amount', 'total_commission_rate', 'total_commission_amount',
+    'total_commission_total', 'agent_commission_total', 'commission_rate',
+}
+
 _HIDDEN_PRICING_FIELDS_BY_ROLE = {
     'enterprise': _INTERNAL_PRICING_FIELDS,
     'salesperson': _AGENT_INTERNAL_PRICING_FIELDS,
+    'insurer': _INSURER_HIDDEN_PRICING_FIELDS,
 }
 
 def strip_internal_pricing(data:dict,user) -> dict:

@@ -27,6 +27,7 @@ def login(data: LoginIn, session: Session = Depends(db)):
     if data.portal == "admin" and user.role != "admin": raise HTTPException(403, "该账号不是总后台账号")
     if data.portal == "enterprise" and user.role != "enterprise": raise HTTPException(403, "该账号不是参保单位账号")
     if data.portal == "salesperson" and user.role != "salesperson": raise HTTPException(403, "该账号不是业务员账号")
+    if data.portal == "insurer" and user.role != "insurer": raise HTTPException(403, "该账号不是保司账号")
     return TokenOut(access_token=_issue_token(user))
 
 @router.get("/auth/me", response_model=UserOut)
