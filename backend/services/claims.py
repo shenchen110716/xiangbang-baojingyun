@@ -34,7 +34,10 @@ def claim_access(item:Claim,user:User,session:Session):
     person_claim_access(person,user,session)
 
 def claim_payload(item:Claim,session:Session):
-    result=serialize(item);enterprise=session.get(Enterprise,item.enterprise_id);person=session.get(InsuredPerson,item.person_id);position=session.get(WorkPosition,person.position_id) if person and person.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None;policy=session.get(Policy,person.policy_id) if person and person.policy_id else None;plan=session.get(InsurancePlan,policy.plan_id) if policy else None
+    result=serialize(item);enterprise=session.get(Enterprise,item.enterprise_id);person=session.get(InsuredPerson,item.person_id);position=session.get(WorkPosition,person.position_id) if person and person.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None
+    # 报案时可以指定这次事故挂在哪张保单下（同一人可能有多段参保历史）；没指定的旧记录/旧流程
+    # 仍退回到"被保险人当前保单"这个近似值，行为和改动前一致。
+    policy=session.get(Policy,item.policy_id) if item.policy_id else (session.get(Policy,person.policy_id) if person and person.policy_id else None);plan=session.get(InsurancePlan,policy.plan_id) if policy else None
     docs=session.scalars(select(ClaimDocument).where(ClaimDocument.claim_id==item.id)).all();valid_types={doc.doc_type for doc in docs if doc.status in {'uploaded','accepted'}}&CLAIM_REQUIRED_TYPES;missing=CLAIM_REQUIRED_TYPES-valid_types
     deadline_days=None
     try: deadline_days=(datetime.strptime(item.deadline[:10],'%Y-%m-%d').date()-date.today()).days if item.deadline else None

@@ -49,11 +49,11 @@ public class ClaimController {
         this.uploadsDir = props.getUploadsDir();
     }
 
-    public record ClaimIn(Integer enterpriseId, Integer personId, String description, double amount, double medicalCost,
-                           String accidentAt, String accidentPlace, String accidentType, String hospital, String diagnosis,
+    public record ClaimIn(Integer enterpriseId, Integer personId, Integer policyId, String description, double amount, double medicalCost,
+                           String accidentAt, String accidentPlace, String accidentType, String injuryPart, String payeeType, String hospital, String diagnosis,
                            String contactName, String contactPhone) {}
 
-    public record ClaimUpdate(String description, String hospital, String diagnosis, Double medicalCost, Double amount,
+    public record ClaimUpdate(String description, String hospital, String diagnosis, String injuryPart, String payeeType, Double medicalCost, Double amount,
                                String contactName, String contactPhone, String insurerReportNo, String currentHandler,
                                String deadline, String slaDeadline, String rejectionReason, String reviewNote, String riskLevel) {}
 
@@ -103,6 +103,10 @@ public class ClaimController {
             Policy policy = policyMapper.findById(person.getPolicyId());
             if (policy == null || !"active".equals(policy.getStatus())) throw ApiException.conflict("被保险人当前保单无效，请先核对保单");
         }
+        if (data.policyId() != null) {
+            Policy chosen = policyMapper.findById(data.policyId());
+            if (chosen == null || !chosen.getEnterpriseId().equals(data.enterpriseId())) throw ApiException.badRequest("保单号无效或不属于该投保单位");
+        }
         String deadline;
         try {
             LocalDate accident = LocalDate.parse(data.accidentAt().substring(0, 10));
@@ -113,12 +117,15 @@ public class ClaimController {
         Claim item = new Claim();
         item.setEnterpriseId(data.enterpriseId());
         item.setPersonId(data.personId());
+        item.setPolicyId(data.policyId());
         item.setDescription(data.description() == null ? "" : data.description());
         item.setAmount(data.amount());
         item.setMedicalCost(data.medicalCost());
         item.setAccidentAt(data.accidentAt());
         item.setAccidentPlace(data.accidentPlace() == null ? "" : data.accidentPlace());
         item.setAccidentType(data.accidentType() == null || data.accidentType().isBlank() ? "工伤事故" : data.accidentType());
+        item.setInjuryPart(data.injuryPart() == null ? "" : data.injuryPart());
+        item.setPayeeType(data.payeeType() == null ? "" : data.payeeType());
         item.setHospital(data.hospital() == null ? "" : data.hospital());
         item.setDiagnosis(data.diagnosis() == null ? "" : data.diagnosis());
         item.setContactName(data.contactName() == null ? "" : data.contactName());
@@ -156,6 +163,8 @@ public class ClaimController {
         if (data.description() != null) item.setDescription(data.description());
         if (data.hospital() != null) item.setHospital(data.hospital());
         if (data.diagnosis() != null) item.setDiagnosis(data.diagnosis());
+        if (data.injuryPart() != null) item.setInjuryPart(data.injuryPart());
+        if (data.payeeType() != null) item.setPayeeType(data.payeeType());
         if (data.medicalCost() != null) item.setMedicalCost(data.medicalCost());
         if (data.amount() != null) item.setAmount(data.amount());
         if (data.contactName() != null) item.setContactName(data.contactName());

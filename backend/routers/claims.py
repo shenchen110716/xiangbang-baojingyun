@@ -65,6 +65,9 @@ def add_claim(data: ClaimIn, user: User = Depends(current_user), session: Sessio
     if person.policy_id:
         policy=session.get(Policy,person.policy_id)
         if not policy or policy.status!='active': raise HTTPException(409,'被保险人当前保单无效，请先核对保单')
+    if data.policy_id is not None:
+        chosen_policy=session.get(Policy,data.policy_id)
+        if not chosen_policy or chosen_policy.enterprise_id!=data.enterprise_id: raise HTTPException(400,'保单号无效或不属于该投保单位')
     try: deadline=(datetime.strptime(data.accident_at[:10],'%Y-%m-%d')+timedelta(days=30)).strftime('%Y-%m-%d')
     except Exception: deadline=''
     sla_deadline=(datetime.now()+timedelta(days=2)).strftime('%Y-%m-%d %H:%M')
@@ -77,7 +80,7 @@ def update_claim(item_id:int,data:ClaimUpdate,user:User=Depends(current_user),se
     claim_access(item,user,session);values=data.model_dump(exclude_unset=True)
     if user.role=='enterprise':
         if item.status not in {'reported','collecting','supplement'}: raise HTTPException(409,'当前节点不允许企业修改报案信息')
-        allowed={'description','hospital','diagnosis','medical_cost','amount','contact_name','contact_phone'}
+        allowed={'description','hospital','diagnosis','injury_part','payee_type','medical_cost','amount','contact_name','contact_phone'}
         if set(values)-allowed: raise HTTPException(403,'保司报案号、SLA、风险和审核意见仅平台可修改')
     for key,value in values.items():
         if value is not None:setattr(item,key,value)

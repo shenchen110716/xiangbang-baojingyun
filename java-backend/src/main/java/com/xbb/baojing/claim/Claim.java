@@ -7,6 +7,7 @@ public class Claim {
     private Integer id;
     private Integer enterpriseId;
     private Integer personId;
+    private Integer policyId;
     private String claimNo;
     private String description = "";
     private String status = "reported";
@@ -14,6 +15,8 @@ public class Claim {
     private String accidentAt = "";
     private String accidentPlace = "";
     private String accidentType = "工伤事故";
+    private String injuryPart = "";
+    private String payeeType = "";
     private String hospital = "";
     private String diagnosis = "";
     private double medicalCost = 0;
@@ -54,6 +57,8 @@ public class Claim {
     public void setEnterpriseId(Integer v) { this.enterpriseId = v; }
     public Integer getPersonId() { return personId; }
     public void setPersonId(Integer v) { this.personId = v; }
+    public Integer getPolicyId() { return policyId; }
+    public void setPolicyId(Integer v) { this.policyId = v; }
     public String getClaimNo() { return claimNo; }
     public void setClaimNo(String v) { this.claimNo = v; }
     public String getDescription() { return description; }
@@ -68,6 +73,10 @@ public class Claim {
     public void setAccidentPlace(String v) { this.accidentPlace = v; }
     public String getAccidentType() { return accidentType; }
     public void setAccidentType(String v) { this.accidentType = v; }
+    public String getInjuryPart() { return injuryPart; }
+    public void setInjuryPart(String v) { this.injuryPart = v; }
+    public String getPayeeType() { return payeeType; }
+    public void setPayeeType(String v) { this.payeeType = v; }
     public String getHospital() { return hospital; }
     public void setHospital(String v) { this.hospital = v; }
     public String getDiagnosis() { return diagnosis; }
