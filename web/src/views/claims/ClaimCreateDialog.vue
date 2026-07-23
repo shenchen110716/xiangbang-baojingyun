@@ -40,6 +40,15 @@ watch(visible, async (isVisible) => {
 
 const activePeople = computed(() => people.value.filter((p) => p.status === 'active' && (!form.enterprise_id || p.enterprise_id === form.enterprise_id)))
 
+// 选中被保险人后自动带入联系人/联系电话（默认用本人信息，报案人可再改成其他联系人）
+watch(
+  () => form.person_id,
+  (personId) => {
+    const person = people.value.find((p) => p.id === personId)
+    if (person) Object.assign(form, { contact_name: person.name, contact_phone: person.phone || '' })
+  },
+)
+
 async function submit() {
   if (!form.enterprise_id || !form.person_id) { ElMessage.error('请选择投保单位和被保险人'); return }
   if (!form.accident_at || !form.accident_place || !form.description) { ElMessage.error('请填写事故时间、地点和案情描述'); return }
@@ -66,7 +75,7 @@ async function submit() {
         </el-select>
       </el-form-item>
       <el-form-item label="被保险人" required>
-        <el-select v-model="form.person_id" style="width: 100%" placeholder="仅可选择当前在保员工">
+        <el-select v-model="form.person_id" filterable style="width: 100%" placeholder="输入姓名搜索当前在保员工">
           <el-option v-for="p in activePeople" :key="p.id" :label="`${p.name} · ${p.id_number}`" :value="p.id" />
         </el-select>
       </el-form-item>

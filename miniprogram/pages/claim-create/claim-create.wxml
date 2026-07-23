@@ -1,7 +1,10 @@
 <view class="page"><view class="title">新增工伤报案</view><view class="subtitle">尽快登记事故，系统将按事故日期计算 30 日工伤认定提醒</view>
   <view class="card section">
     <label class="field"><view class="field-label required">投保单位</view><picker range="{{enterprises}}" range-key="name" value="{{enterpriseIndex}}" bindchange="enterpriseChange"><view class="picker">{{enterprises[enterpriseIndex].name||'请选择'}}</view></picker></label>
-    <label class="field"><view class="field-label required">受伤员工</view><picker range="{{people}}" range-key="name" value="{{personIndex}}" bindchange="personChange"><view class="picker">{{people[personIndex].name||'暂无在保员工'}}</view></picker></label>
+    <label class="field"><view class="field-label required">受伤员工</view>
+      <input class="input" value="{{personQuery}}" placeholder="输入姓名搜索" bindinput="personQueryInput" />
+      <picker range="{{people}}" range-key="name" value="{{personIndex}}" bindchange="personChange"><view class="picker" style="margin-top:12rpx">{{people[personIndex].name||'暂无匹配员工'}}</view></picker>
+    </label>
     <view class="grid-2"><label class="field"><view class="field-label required">事故日期</view><picker mode="date" bindchange="dateChange"><view class="picker">{{form.accident_date||'请选择'}}</view></picker></label><label class="field"><view class="field-label">事故时间</view><picker mode="time" bindchange="timeChange"><view class="picker">{{form.accident_time||'请选择'}}</view></picker></label></view>
     <label class="field"><view class="field-label required">事故地点</view><input class="input" data-key="accident_place" bindinput="input" placeholder="请填写事故发生地点" /></label>
     <label class="field"><view class="field-label">事故类型</view><picker range="{{accidentTypes}}" value="{{typeIndex}}" bindchange="typeChange"><view class="picker">{{accidentTypes[typeIndex]}}</view></picker></label>
