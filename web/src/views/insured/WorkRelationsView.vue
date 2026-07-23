@@ -51,7 +51,7 @@ function editFromDetail() {
 function exportCsv() {
   const header = ['被保险人', '投保单位', '实际工作单位', '岗位', '职业类别', '保险方案', '状态']
   const rows = filtered.value.map((p) => [p.name, p.enterprise_name, p.actual_employer_name, p.position_name, p.occupation_class, p.plan_name, insuredStatusLabel(p).text])
-  downloadCsv([header, ...rows], `响帮帮保经云-劳动关系-${Date.now()}.csv`)
+  downloadCsv([header, ...rows], `响帮帮无忧保-劳动关系-${Date.now()}.csv`)
 }
 </script>
 

@@ -86,9 +86,9 @@ function navLabel(r: (typeof navRoutes)[number]) {
   return r.meta.title
 }
 const currentTitle = computed(() => route.meta.title as string)
-// 侧边栏顶部原来是固定文案「响帮帮保经云 · 参保单位」，看不出是哪家单位登录的；
+// 侧边栏顶部原来是固定文案「响帮帮无忧保 · 参保单位」，看不出是哪家单位登录的；
 // 改成显示当前登录的投保单位名称本身，管理端（平台）保持产品名。
-const brandSubtitle = computed(() => (auth.isEnterprise() ? currentEnterpriseName.value || '加载中…' : '响帮帮保经云'))
+const brandSubtitle = computed(() => (auth.isEnterprise() ? currentEnterpriseName.value || '加载中…' : '响帮帮无忧保'))
 const siteName = '响帮帮无忧保'
 
 async function loadCurrentEnterpriseName() {

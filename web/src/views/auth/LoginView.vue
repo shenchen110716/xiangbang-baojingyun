@@ -72,7 +72,7 @@ async function submit() {
       </a>
 
       <div class="side-body">
-        <div class="hero-eyebrow">AUTH · 响帮帮保经云</div>
+        <div class="hero-eyebrow">AUTH · 响帮帮无忧保</div>
         <h1>参保、理赔、结算，<br>三端实时同步。</h1>
         <p class="lede">{{ activeCopy.desc }}，登录后数据与移动端、总后台即时联动。</p>
       </div>

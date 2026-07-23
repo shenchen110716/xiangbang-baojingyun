@@ -1,6 +1,6 @@
 <view class="login-page">
   <view class="login-logo">响</view>
-  <view class="login-title">响帮帮保经云</view>
+  <view class="login-title">响帮帮无忧保</view>
   <view class="subtitle">企业员工保障与理赔服务平台</view>
   <view class="login-card">
     <label class="field">

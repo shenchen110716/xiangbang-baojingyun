@@ -93,7 +93,7 @@ function displayValue(row: ReportRow) {
 
 function exportCsv() {
   const header = ['报表', '周期', '指标', '说明']
-  downloadCsv([header, ...visibleRows.value.map((r) => [r.name, r.period, displayValue(r), r.detail])], `响帮帮保经云-报表-${Date.now()}.csv`)
+  downloadCsv([header, ...visibleRows.value.map((r) => [r.name, r.period, displayValue(r), r.detail])], `响帮帮无忧保-报表-${Date.now()}.csv`)
 }
 
 async function exportPremiumDetails() {

@@ -75,7 +75,7 @@ function exportPeopleCsv() {
     p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, insuredStatusLabel(p).text,
     formatDateTime(p.created_at), formatCoverageDate(p.effective_at, p.effective_mode), formatCoverageDate(p.terminated_at, p.effective_mode),
   ])
-  downloadCsv([header, ...rows], `响帮帮保经云-参停保人员-${Date.now()}.csv`)
+  downloadCsv([header, ...rows], `响帮帮无忧保-参停保人员-${Date.now()}.csv`)
 }
 
 async function reloadSummary() {

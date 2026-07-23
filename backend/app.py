@@ -12,7 +12,7 @@ from .core.db import Base, engine, SessionLocal
 from .core.migrations import run_sqlite_bridge_migrations, migrate_premium_balances
 from .core.seed import seed_default_accounts
 
-app = FastAPI(title="响帮帮保经云 API", version="3.6.0")
+app = FastAPI(title="响帮帮无忧保 API", version="3.6.0")
 cors_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "*").split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,

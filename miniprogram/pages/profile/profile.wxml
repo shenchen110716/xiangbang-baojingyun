@@ -23,5 +23,5 @@
   <button class="secondary" bindtap="switchUser">切换登录用户</button>
   <button class="secondary" bindtap="changePassword">修改登录密码</button>
   <button class="danger-btn" bindtap="logout">退出当前账号</button>
-  <view class="small" style="text-align:center;margin-top:24rpx">响帮帮保经云用户端 v3.5</view>
+  <view class="small" style="text-align:center;margin-top:24rpx">响帮帮无忧保用户端 v3.5</view>
 </view>

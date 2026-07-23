@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import * as enterprisesApi from '@/api/enterprises'
 import * as agentsApi from '@/api/agents'
 import { getDashboard } from '@/api/dashboard'
+import { recognizeBusinessLicense } from '@/api/ocr'
 import type { Enterprise, Agent } from '@/api/types'
 import { money } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
@@ -53,12 +54,35 @@ const form = reactive({
 function openCreate() {
   editingId.value = null
   Object.assign(form, { name: '', kind: '企业', credit_code: '', contact: '', phone: '', agent_id: null, usage_fee_daily: 0.1, alert_days: 3 })
+  ocrHint.value = ''
   formVisible.value = true
 }
 function openEdit(item: Enterprise) {
   editingId.value = item.id
   Object.assign(form, { name: item.name, kind: item.kind, credit_code: item.credit_code, contact: item.contact, phone: item.phone, agent_id: item.agent_id, usage_fee_daily: item.usage_fee_daily, alert_days: item.alert_days })
   formVisible.value = true
+}
+
+// ---- 营业执照识别：自动带出单位全称/统一社会信用代码，仅新增时提供，编辑单位不建议用照片覆盖 ----
+const ocrLoading = ref(false)
+const ocrHint = ref('')
+async function handleLicenseFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  ocrLoading.value = true
+  ocrHint.value = ''
+  try {
+    const res = await recognizeBusinessLicense(file)
+    form.name = res.name
+    if (res.credit_code) form.credit_code = res.credit_code
+    ocrHint.value = res.mock ? '模拟识别结果，请核对后再保存' : '已识别，请核对后再保存'
+  } catch (e) {
+    ElMessage.error((e as Error).message || '识别失败，请手动填写')
+  } finally {
+    ocrLoading.value = false
+  }
 }
 async function submitForm() {
   if (!form.name || !form.contact || !form.phone) { ElMessage.error('请填写单位名称、联系人、联系电话'); return }
@@ -160,6 +184,12 @@ async function removeEnterprise(item: Enterprise) {
 
     <el-dialog v-model="formVisible" :title="editingId ? '编辑投保单位' : '新增投保单位'" width="520px">
       <el-form :model="form" label-width="110px">
+        <el-form-item v-if="!editingId" label="营业执照">
+          <input type="file" accept="image/*" @change="handleLicenseFile" />
+          <div v-if="ocrLoading" class="hint">正在识别…</div>
+          <div v-else-if="ocrHint" class="hint" style="color: var(--el-color-success)">{{ ocrHint }}</div>
+          <div v-else class="hint">上传营业执照照片可自动带出单位名称/统一社会信用代码，也可直接手工填写</div>
+        </el-form-item>
         <el-form-item label="单位名称" required><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="单位类型">
           <el-select v-model="form.kind" style="width: 100%">
@@ -216,5 +246,11 @@ async function removeEnterprise(item: Enterprise) {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+}
+.hint {
+  display: block;
+  color: var(--el-text-color-placeholder);
+  font-size: 11px;
+  margin-top: 4px;
 }
 </style>

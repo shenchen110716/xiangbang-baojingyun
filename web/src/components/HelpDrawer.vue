@@ -132,7 +132,7 @@ function scrollTo(id: string) {
           </ul>
         </template>
       </section>
-      <p class="help-foot">如需完整版说明，可向管理员索取《响帮帮保经云 · 系统使用说明》PDF。</p>
+      <p class="help-foot">如需完整版说明，可向管理员索取《响帮帮无忧保 · 系统使用说明》PDF。</p>
     </div>
   </el-drawer>
 </template>
