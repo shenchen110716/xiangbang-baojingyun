@@ -19,9 +19,10 @@ from ..models import Claim, ClaimDocument, ClaimTimeline, InsuredPerson, Policy,
 from ..schemas import ClaimDocumentIn, ClaimDocumentReviewIn, ClaimIn, ClaimStatusIn, ClaimUpdate
 from ..services import allowed_employer_ids, serialize
 from ..services.claims import (
-    CLAIM_REQUIRED_DOCS, CLAIM_REQUIRED_TYPES, CLAIM_TRANSITIONS,
+    CLAIM_REQUIRED_DOCS, CLAIM_REQUIRED_TYPES, CLAIM_TRANSITIONS, _INSURER_VISIBLE_CLAIM_STATUSES,
     claim_access, claim_payload, person_claim_access, prepare_claim_upload,
 )
+from ..services.insurer_scope import claim_insurer_id
 
 router = APIRouter(prefix="/api", tags=["claims"])
 
@@ -41,9 +42,13 @@ def claims(q:str="",status_filter:Optional[str]=Query(default=None,alias='status
             from ..models import WorkPosition
             stmt=stmt.join(InsuredPerson,Claim.person_id==InsuredPerson.id).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(WorkPosition.actual_employer_id.in_(allowed))
     elif enterprise_id: stmt=stmt.where(Claim.enterprise_id==enterprise_id)
-    if user.role not in {'admin','enterprise'}: raise HTTPException(403,'无权查看理赔案件')
+    if user.role not in {'admin','enterprise','insurer'}: raise HTTPException(403,'无权查看理赔案件')
     if status_filter: stmt=stmt.where(Claim.status==status_filter)
     rows=[claim_payload(item,session) for item in session.scalars(stmt)]
+    if user.role=='insurer':
+        rows=[row for row in rows if row['id'] in {
+            item.id for item in session.scalars(select(Claim)) if item.status in _INSURER_VISIBLE_CLAIM_STATUSES and claim_insurer_id(item,session)==user.insurer_id
+        }]
     if q:
         needle=q.lower();rows=[item for item in rows if needle in f"{item['claim_no']}{item['person_name']}{item['enterprise_name']}{item['actual_employer_name']}".lower()]
     if risk: rows=[item for item in rows if item['calculated_risk']==risk]
@@ -93,6 +98,10 @@ def claim_status(item_id:int,data:ClaimStatusIn,user:User=Depends(current_user),
     claim_access(item,user,session)
     if data.status not in CLAIM_TRANSITIONS.get(item.status,set()): raise HTTPException(409,f'案件不能从 {item.status} 变更为 {data.status}')
     if user.role=='enterprise' and data.status!='submitted': raise HTTPException(403,'该节点需由平台理赔人员处理')
+    if user.role=='insurer':
+        if item.status!='insurer_review': raise HTTPException(403,'保司只能处理保司审核中的案件')
+        if data.status not in {'approved','rejected','supplement'}: raise HTTPException(403,'保司只能核赔通过、拒赔或打回补件')
+        if claim_insurer_id(item,session)!=user.insurer_id: raise HTTPException(403,'无权操作其他保险公司的理赔案件')
     if data.status=='submitted':
         uploaded={x.doc_type for x in session.scalars(select(ClaimDocument).where(ClaimDocument.claim_id==item.id,ClaimDocument.status.in_(['uploaded','accepted'])))};missing=CLAIM_REQUIRED_TYPES-uploaded
         if missing: raise HTTPException(409,f'材料未齐全，还缺少 {len(missing)} 项')

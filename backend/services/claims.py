@@ -10,6 +10,7 @@ from ..models import (
 )
 from .serialization import serialize
 from .employer_scopes import assert_employer_access, is_enterprise_owner
+from .insurer_scope import claim_insurer_id
 
 CLAIM_REQUIRED_DOCS=[('id_card','被保险人身份证明'),('labor_relation','劳动关系证明'),('diagnosis','医疗诊断证明'),('medical_record','病历或出院记录'),('invoice','医疗发票和费用清单'),('accident_proof','事故经过及证明'),('bank_card','收款银行卡信息')]
 CLAIM_REQUIRED_TYPES={key for key,_ in CLAIM_REQUIRED_DOCS}
@@ -26,7 +27,18 @@ def person_claim_access(person:InsuredPerson,user:User,session:Session):
         raise HTTPException(403,'理赔员工未关联实际工作单位，项目负责人无权访问')
 
 
+_INSURER_VISIBLE_CLAIM_STATUSES = {'insurer_review', 'supplement', 'approved', 'paid', 'rejected', 'closed'}
+
+
 def claim_access(item:Claim,user:User,session:Session):
+    if user.role=='insurer':
+        # 保司只看得到已经流转到 insurer_review 或之后节点、且挂在自己
+        # insurer_id 名下的案件——更早期节点（reported/collecting/submitted）
+        # 不需要保司介入，不开放查看，减少不必要的信息暴露（见设计文档
+        # "理赔管理"）。
+        if item.status not in _INSURER_VISIBLE_CLAIM_STATUSES or claim_insurer_id(item,session)!=user.insurer_id:
+            raise HTTPException(403,'无权访问该理赔案件')
+        return
     if user.role=='enterprise' and user.enterprise_id!=item.enterprise_id: raise HTTPException(403,'无权访问该理赔案件')
     if user.role not in {'admin','enterprise'}: raise HTTPException(403,'无权访问理赔案件')
     person=session.get(InsuredPerson,item.person_id)

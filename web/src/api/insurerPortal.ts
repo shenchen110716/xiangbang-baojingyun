@@ -1,5 +1,5 @@
 import { client } from './client'
-import type { Insurer, Invoice, InsuredPerson, Policy, WorkPosition } from './types'
+import type { Claim, Insurer, Invoice, InsuredPerson, Policy, WorkPosition } from './types'
 
 export function getInsurerProfile() {
   return client.get<Insurer>('/insurer-portal/profile').then((response) => response.data)
@@ -63,4 +63,12 @@ export function listInsurerInsured() {
 
 export function flagInsuredPerson(id: number, reason: string) {
   return client.patch<InsuredPerson>(`/insured/${id}/insurer-flag`, { reason }).then((response) => response.data)
+}
+
+export function listInsurerClaims() {
+  return client.get<Claim[]>('/claims').then((response) => response.data)
+}
+
+export function reviewInsurerClaim(id: number, data: { status: 'approved' | 'rejected' | 'supplement'; approved_amount?: number; rejection_reason?: string; note?: string }) {
+  return client.patch<Claim>(`/claims/${id}/status`, data).then((response) => response.data)
 }

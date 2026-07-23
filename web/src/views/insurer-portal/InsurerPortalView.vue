@@ -3,9 +3,9 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { flagInsuredPerson, getInsurerProfile, getInsurerSettlement, listInsurerInsured, listInsurerInvoices, listInsurerPolicies, listInsurerPositions, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
+import { flagInsuredPerson, getInsurerProfile, getInsurerSettlement, listInsurerClaims, listInsurerInsured, listInsurerInvoices, listInsurerPolicies, listInsurerPositions, reviewInsurerClaim, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
 import type { InsurerSettlement } from '@/api/insurerPortal'
-import type { Insurer, Invoice, InsuredPerson, Policy, WorkPosition } from '@/api/types'
+import type { Claim, Insurer, Invoice, InsuredPerson, Policy, WorkPosition } from '@/api/types'
 import PageCard from '@/components/PageCard.vue'
 import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
 
@@ -82,6 +82,33 @@ async function submitFlag() {
   }
 }
 
+const claims = ref<Claim[]>([])
+async function loadClaims() {
+  claims.value = await listInsurerClaims()
+}
+
+const claimDialogVisible = ref(false)
+const claimTarget = ref<Claim | null>(null)
+const claimForm = reactive({ status: 'approved' as 'approved' | 'rejected' | 'supplement', approved_amount: 0, rejection_reason: '', note: '' })
+function openClaimDialog(row: Claim) {
+  claimTarget.value = row
+  Object.assign(claimForm, { status: 'approved', approved_amount: 0, rejection_reason: '', note: '' })
+  claimDialogVisible.value = true
+}
+async function submitClaimReview() {
+  if (!claimTarget.value) return
+  if (claimForm.status === 'approved' && claimForm.approved_amount <= 0) { ElMessage.error('核赔通过需登记核赔金额'); return }
+  if (claimForm.status === 'rejected' && !claimForm.rejection_reason.trim()) { ElMessage.error('拒赔需填写原因'); return }
+  try {
+    await reviewInsurerClaim(claimTarget.value.id, claimForm)
+    ElMessage.success('已提交')
+    claimDialogVisible.value = false
+    loadClaims()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
 async function load() {
   loading.value = true
   try {
@@ -96,6 +123,7 @@ async function load() {
     await loadSettlement()
     await loadInvoices()
     await loadInsured()
+    await loadClaims()
   } catch (e) {
     ElMessage.error((e as Error).message)
   } finally {
@@ -262,6 +290,23 @@ function logout() {
             <el-empty v-if="!insuredList.length" description="暂无名下参保员工" :image-size="60" />
           </PageCard>
         </el-tab-pane>
+
+        <el-tab-pane label="理赔管理" name="claims">
+          <PageCard title="名下理赔案件" :count="claims.length" hint="只展示已流转到保司审核中或之后节点的案件">
+            <el-table :data="claims" size="small">
+              <el-table-column prop="claim_no" label="案件号" min-width="160" />
+              <el-table-column prop="person_name" label="被保险人" width="100" />
+              <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
+              <el-table-column prop="status" label="状态" width="110" />
+              <el-table-column label="操作" width="100">
+                <template #default="{ row }">
+                  <el-button v-if="row.status === 'insurer_review'" link type="primary" size="small" @click="openClaimDialog(row)">审核</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!claims.length" description="暂无名下理赔案件" :image-size="60" />
+          </PageCard>
+        </el-tab-pane>
       </el-tabs>
     </main>
 
@@ -270,6 +315,29 @@ function logout() {
       <template #footer>
         <el-button @click="flagDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="submitFlag">提交</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="claimDialogVisible" title="理赔审核" width="480px">
+      <el-form :model="claimForm" label-width="100px">
+        <el-form-item label="审核结论">
+          <el-radio-group v-model="claimForm.status">
+            <el-radio-button value="approved">核赔通过</el-radio-button>
+            <el-radio-button value="rejected">拒赔</el-radio-button>
+            <el-radio-button value="supplement">打回补件</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="claimForm.status === 'approved'" label="核赔金额" required>
+          <el-input-number v-model="claimForm.approved_amount" :min="0" :step="100" />
+        </el-form-item>
+        <el-form-item v-if="claimForm.status === 'rejected'" label="拒赔原因" required>
+          <el-input v-model="claimForm.rejection_reason" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="备注"><el-input v-model="claimForm.note" type="textarea" :rows="2" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="claimDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitClaimReview">提交</el-button>
       </template>
     </el-dialog>
 
