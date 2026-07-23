@@ -34,6 +34,7 @@ page{background:#f4f6fa;color:#17213a;font-family:-apple-system,BlinkMacSystemFo
 .input,.picker,.textarea{width:100%;box-sizing:border-box;background:#f8f9fc;border:1px solid #e6e9f1;border-radius:14rpx;padding:0 22rpx;margin-top:12rpx;font-size:27rpx;color:#17213a}
 .input,.picker{height:86rpx;line-height:86rpx}
 .textarea{min-height:180rpx;padding-top:20rpx}
+.input-invalid{border-color:#dc2626}
 .field{display:block;margin-bottom:22rpx}
 .field-label{font-size:25rpx;color:#5f6b82}
 .required:after{content:" *";color:#dc2626}

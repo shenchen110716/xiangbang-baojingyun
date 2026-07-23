@@ -22,6 +22,7 @@ Page({
     selectedPosition: null,
     saving: false,
     ocrLoading: false,
+    idNumberInvalid: false,
     loading: true,
     // 连续添加：第一次新增成功后归属信息（投保单位/实际用工单位/岗位）锁定，
     // 不返回列表页，可以连续手工填写或连续拍照 OCR 添加，直到点"完成"。
@@ -74,7 +75,27 @@ Page({
           ...this.planText(scope.selectedPosition), loading: false });
       }).catch(() => this.setData({ loading: false }));
   },
-  input(e) { this.setData({ [`form.${e.currentTarget.dataset.key}`]: e.detail.value }); },
+  input(e) {
+    const key = e.currentTarget.dataset.key, value = e.detail.value;
+    const patch = { [`form.${key}`]: value };
+    if (key === 'id_number') patch.idNumberInvalid = !!value.trim() && !this.isValidIdNumber(value);
+    this.setData(patch);
+  },
+  // 与 backend/core/id_number.py 的 is_valid_id_number 同一套 GB 11643 校验位算法，
+  // 手工输入和 OCR 识别都实时校验，不用等提交才发现号码打错/拍错。
+  isValidIdNumber(value) {
+    const v = String(value || '').trim().toUpperCase();
+    if (!/^\d{17}[\dX]$/.test(v)) return false;
+    const y = +v.slice(6, 10), m = +v.slice(10, 12), d = +v.slice(12, 14);
+    const birth = new Date(y, m - 1, d);
+    if (birth.getFullYear() !== y || birth.getMonth() !== m - 1 || birth.getDate() !== d) return false;
+    if (birth.getTime() > Date.now()) return false;
+    const weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+    const checkCodes = '10X98765432';
+    let total = 0;
+    for (let i = 0; i < 17; i++) total += Number(v[i]) * weights[i];
+    return checkCodes[total % 11] === v[17];
+  },
   // 7.18-4：拍身份证正面照 → 后端 OCR → 自动填充姓名/身份证号（识别结果需人工核对）。
   scanIdCard() {
     if (this.data.ocrLoading) return;
@@ -94,7 +115,8 @@ Page({
               wx.showToast({ title: data.detail || '识别失败', icon: 'none' });
               return;
             }
-            this.setData({ 'form.name': data.name || this.data.form.name, 'form.id_number': data.id_number || this.data.form.id_number });
+            const idNumber = data.id_number || this.data.form.id_number;
+            this.setData({ 'form.name': data.name || this.data.form.name, 'form.id_number': idNumber, idNumberInvalid: !!idNumber && !this.isValidIdNumber(idNumber) });
             wx.showToast({ title: data.mock ? '模拟识别，请核对' : '识别成功，请核对', icon: 'none', duration: 2200 });
           },
           fail: () => wx.showToast({ title: '上传失败，请重试', icon: 'none' }),
@@ -135,6 +157,7 @@ Page({
   save() {
     const form = this.data.form;
     if (!form.name.trim() || !form.id_number.trim()) { wx.showToast({ title: '姓名和身份证号必填', icon: 'none' }); return; }
+    if (!this.isValidIdNumber(form.id_number)) { wx.showToast({ title: '身份证号校验位不正确，请核对', icon: 'none' }); return; }
     const age = this.ageFromId(form.id_number);
     if (age !== null && age < 16) { wx.showToast({ title: '被保险人未满16周岁，不可参保', icon: 'none' }); return; }
     if (!form.position_id) { wx.showToast({ title: '暂无审核通过的可投保岗位', icon: 'none' }); return; }
@@ -176,6 +199,7 @@ Page({
         saving: false,
         locked: true,
         addedCount,
+        idNumberInvalid: false,
         'form.name': '', 'form.id_number': '', 'form.phone': '', 'form.effective_at': '', 'form.terminated_at': '',
         effectiveTime: '00:00', terminatedTime: '00:00', originalEffectiveAt: '', originalTerminatedAt: ''
       });

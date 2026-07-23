@@ -230,13 +230,15 @@ function exportCsv() {
         <el-table-column label="停保时间" width="150">
           <template #default="{ row }">{{ formatCoverageDate(row.terminated_at, row.effective_mode) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="330" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openDetail(row)">查看</el-button>
-            <el-button link type="primary" size="small" @click="openEditor(row)">编辑</el-button>
-            <el-button v-if="row.effective_at" link type="primary" size="small" @click="openCertificate(row)">参保证明</el-button>
-            <el-button v-if="row.status === 'active'" link type="danger" size="small" @click="openStopDialog(row)">停保</el-button>
-            <el-button v-else link type="success" size="small" @click="changeStatus(row, 'active')">参保</el-button>
+            <!-- 参保/停保是最常用的操作，用实心按钮加大字号突出显示，避免和查看/编辑等
+                 次要操作一样细小、难点中；查看/编辑/参保证明保留 link 样式，视觉上分层。 -->
+            <el-button v-if="row.status === 'active'" type="danger" class="primary-action-btn" @click="openStopDialog(row)">停保</el-button>
+            <el-button v-else type="success" class="primary-action-btn" @click="changeStatus(row, 'active')">参保</el-button>
+            <el-button link type="primary" @click="openDetail(row)">查看</el-button>
+            <el-button link type="primary" @click="openEditor(row)">编辑</el-button>
+            <el-button v-if="row.effective_at" link type="primary" @click="openCertificate(row)">参保证明</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -283,5 +285,11 @@ function exportCsv() {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+}
+.primary-action-btn {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 14px;
+  margin-right: 4px;
 }
 </style>
