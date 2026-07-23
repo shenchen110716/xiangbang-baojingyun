@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: xbb-v1
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+    username: ${DB_IDENTITY_USER:identity_user}
+    password: ${DB_IDENTITY_PASSWORD:identity_pw}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: identity
+  flyway:
+    enabled: true
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+    user: ${DB_ADMIN_USER:postgres}
+    password: ${DB_ADMIN_PASSWORD:postgres}
+    schemas: identity
+    default-schema: identity
+    locations: classpath:db/migration/identity
+
+xbb:
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-at-least-32-bytes-long}
+    ttl-minutes: 120
