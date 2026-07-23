@@ -44,5 +44,6 @@ export const routes: Array<RouteRecordRaw & { meta: NavMeta }> = [
   { path: '/system-settings', name: 'systemSettings', component: () => import('@/views/settings/SystemSettingsView.vue'), meta: { title: '系统设置', group: '其他', adminOnly: true } },
   { path: '/login', name: 'login', component: () => import('@/views/auth/LoginView.vue'), meta: { title: '登录' } },
   { path: '/agent-portal', name: 'agent-portal', component: () => import('@/views/agent-portal/AgentPortalView.vue'), meta: { title: '业务员工作台' } },
+  { path: '/insurer-portal', name: 'insurer-portal', component: () => import('@/views/insurer-portal/InsurerPortalView.vue'), meta: { title: '保司工作台' } },
   { path: '/certificate/:type/:id', name: 'certificate', component: () => import('@/views/certificate/CertificateView.vue'), meta: { title: '参保证明' } },
 ]

@@ -118,6 +118,10 @@ onMounted(async () => {
     router.replace({ name: 'agent-portal' })
     return
   }
+  if (auth.user?.role === 'insurer') {
+    router.replace({ name: 'insurer-portal' })
+    return
+  }
   loadMessageCount()
   loadLinkedAccounts()
   loadCurrentEnterpriseName()

@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'enterprise' | 'salesperson'
+export type Role = 'admin' | 'enterprise' | 'salesperson' | 'insurer'
 export type EnterpriseRole = 'owner' | 'project_manager'
 
 export interface User {
@@ -8,6 +8,7 @@ export interface User {
   role: Role
   enterprise_id: number | null
   enterprise_role: EnterpriseRole | null
+  insurer_id: number | null
   phone: string
   is_owner: boolean
   active: boolean

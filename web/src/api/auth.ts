@@ -1,7 +1,7 @@
 import { client } from './client'
 import type { User } from './types'
 
-export function login(username: string, password: string, portal: 'admin' | 'enterprise' | 'salesperson') {
+export function login(username: string, password: string, portal: 'admin' | 'enterprise' | 'salesperson' | 'insurer') {
   return client.post<{ access_token: string; token_type: string }>('/auth/login', { username, password, portal }).then((r) => r.data)
 }
 
