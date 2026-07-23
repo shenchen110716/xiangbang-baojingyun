@@ -82,7 +82,9 @@ def add_claim(data: ClaimIn, user: User = Depends(current_user), session: Sessio
 def update_claim(item_id:int,data:ClaimUpdate,user:User=Depends(current_user),session:Session=Depends(db)):
     item=session.get(Claim,item_id)
     if not item: raise HTTPException(404,'理赔案件不存在')
-    claim_access(item,user,session);values=data.model_dump(exclude_unset=True)
+    claim_access(item,user,session)
+    if user.role=='insurer': raise HTTPException(403,'保司账号请通过理赔状态流转接口操作，不支持直接编辑理赔字段')
+    values=data.model_dump(exclude_unset=True)
     if user.role=='enterprise':
         if item.status not in {'reported','collecting','supplement'}: raise HTTPException(409,'当前节点不允许企业修改报案信息')
         allowed={'description','hospital','diagnosis','injury_part','payee_type','medical_cost','amount','contact_name','contact_phone'}
@@ -169,9 +171,12 @@ def review_claim_document(item_id:int,document_id:int,data:ClaimDocumentReviewIn
 
 @router.delete("/claims/{item_id}/documents/{document_id}")
 def delete_claim_document(item_id:int,document_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
-    item=session.get(Claim,item_id);document=session.get(ClaimDocument,document_id)
-    if not item or not document or document.claim_id!=item_id: raise HTTPException(404,'理赔材料不存在')
+    item=session.get(Claim,item_id)
+    if not item: raise HTTPException(404,'理赔材料不存在')
     claim_access(item,user,session)
+    if user.role=='insurer': raise HTTPException(403,'保司账号无权删除理赔材料')
+    document=session.get(ClaimDocument,document_id)
+    if not document or document.claim_id!=item_id: raise HTTPException(404,'理赔材料不存在')
     if user.role=='enterprise' and item.status not in {'reported','collecting','supplement'}: raise HTTPException(409,'当前节点不允许删除材料')
     if item.status=='closed': raise HTTPException(409,'已结案材料不能删除')
     session.add(ClaimTimeline(claim_id=item.id,node=item.status,action=f'删除材料：{document.name}',note=document.doc_type,operator=user.name));session.delete(document);session.commit();audit(session,user,'delete','claim_document',str(document_id));return {'ok':True}

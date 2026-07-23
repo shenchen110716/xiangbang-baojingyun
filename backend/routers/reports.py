@@ -284,6 +284,7 @@ def download_policy_document(item_id:int,token:str,expires:int,session:Session=D
 def export_policy(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
     policy=session.get(Policy,item_id)
     if not policy: raise HTTPException(404,'保单不存在')
+    if user.role=='insurer': raise HTTPException(403,'保司账号无权导出保单明细')
     if user.role=='enterprise' and user.enterprise_id!=policy.enterprise_id: raise HTTPException(403,'无权导出该保单')
     enterprise=session.get(Enterprise,policy.enterprise_id);plan=session.get(InsurancePlan,policy.plan_id)
     relation=session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id==policy.enterprise_id,AgentCommission.plan_id==policy.plan_id,AgentCommission.status=='active').order_by(AgentCommission.id.desc()))

@@ -123,6 +123,15 @@ def test_insurer_a_touches_nothing_belonging_to_insurer_b():
                               files={"file": ("t.pdf", b"%PDF fake", "application/pdf")})
     assert upload_resp.status_code == 403
 
+    export_resp = client.get(f"/api/policies/{ids['policy_b']}/export", headers=headers)
+    assert export_resp.status_code == 403
+
+    update_resp = client.patch(f"/api/claims/{ids['claim_a']}", json={"amount": 99999}, headers=headers)
+    assert update_resp.status_code == 403
+
+    delete_doc_resp = client.delete(f"/api/claims/{ids['claim_a']}/documents/1", headers=headers)
+    assert delete_doc_resp.status_code == 403
+
 
 if __name__ == "__main__":
     test_insurer_a_touches_nothing_belonging_to_insurer_b()
