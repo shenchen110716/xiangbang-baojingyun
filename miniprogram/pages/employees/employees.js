@@ -6,7 +6,7 @@ Page({
     filtered: [],
     q: '',
     status: '',
-    statuses: [{ value: '', label: '全部' }, { value: 'pending', label: '待生效' }, { value: 'active-pending', label: '待生效(倒计时)' }, { value: 'active', label: '在保' }, { value: 'stopped', label: '已停保' }],
+    statuses: [{ value: '', label: '全部' }, { value: 'pending', label: '待生效' }, { value: 'active', label: '在保' }, { value: 'stopped', label: '已停保' }],
     loading: false
   },
   onLoad(options) { if (options && options.status) this.setData({ status: options.status }); },
@@ -20,7 +20,10 @@ Page({
     return app.request('/insured', { silent: true }).then((items) => {
       const mapped = items.map((item) => {
         const pendingEffective = this.isPendingEffective(item);
-        return { ...item, initial: String(item.name || '员').slice(0, 1), status_label: (pendingEffective || item.status === 'pending') ? '待生效' : app.statusText(item.status), status_display: pendingEffective ? 'active-pending' : item.status, id_masked: this.maskId(item.id_number) };
+        // 待生效对外统一成一个筛选值：待审核(pending) + 已通过但未来才生效(active 但 effective_at
+        // 还没到)，之前拆成 pending/active-pending 两个同名不同值的筛选项，看着像重复。
+        const pendingBucket = pendingEffective || item.status === 'pending';
+        return { ...item, initial: String(item.name || '员').slice(0, 1), status_label: pendingBucket ? '待生效' : app.statusText(item.status), status_display: pendingBucket ? 'pending' : item.status, id_masked: this.maskId(item.id_number) };
       });
       this.setData({ items: mapped, loading: false }); this.applyFilter();
     }).catch((error) => { this.setData({ loading: false }); wx.showToast({ title: error.message, icon: 'none' }); });

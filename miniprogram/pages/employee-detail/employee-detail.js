@@ -9,8 +9,9 @@ Page({
       const item = items.find((row) => row.id === this.data.id) || null;
       if (item) {
         const pendingEffective = item.status === 'active' && item.effective_at && new Date(item.effective_at) > new Date();
-        item.status_label = (pendingEffective || item.status === 'pending') ? '待生效' : app.statusText(item.status);
-        item.status_display = pendingEffective ? 'active-pending' : item.status;
+        const pendingBucket = pendingEffective || item.status === 'pending';
+        item.status_label = pendingBucket ? '待生效' : app.statusText(item.status);
+        item.status_display = pendingBucket ? 'pending' : item.status;
         item.initial = String(item.name || '员').slice(0, 1);
         item.effective_at_display = app.formatCoverageDate(item.effective_at, item.effective_mode);
         item.terminated_at_display = app.formatCoverageDate(item.terminated_at, item.effective_mode);

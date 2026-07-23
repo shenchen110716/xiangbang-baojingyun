@@ -38,7 +38,10 @@ function isPendingEffective(x: InsuredPerson) {
 
 const filtered = computed(() => {
   let rows = list.value
-  if (statusFilter.value === 'active-pending') rows = rows.filter(isPendingEffective)
+  // “待生效”对外统一成一个筛选项：待审核(pending) + 已通过但未来才生效(active 但
+  // effective_at 还没到)。这两种状态在列表的状态标签上本来就显示同一个“待生效”文案
+  // （见 insuredStatusLabel），筛选下拉框以前拆成两个同名不同值的选项，看着像重复。
+  if (statusFilter.value === 'pending') rows = rows.filter((x) => x.status === 'pending' || isPendingEffective(x))
   else if (statusFilter.value === 'active') rows = rows.filter((x) => x.status === 'active' && !isPendingEffective(x))
   else if (statusFilter.value) rows = rows.filter((x) => x.status === statusFilter.value)
   if (planFilter.value) rows = rows.filter((x) => x.plan_id === planFilter.value)
@@ -192,7 +195,6 @@ function exportCsv() {
           </el-select>
           <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 130px">
             <el-option label="待生效" value="pending" />
-            <el-option label="待生效(倒计时)" value="active-pending" />
             <el-option label="在保" value="active" />
             <el-option label="已停保" value="stopped" />
           </el-select>
