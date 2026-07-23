@@ -6,59 +6,52 @@
   <view wx:if="{{!loggedIn}}" class="section">
     <view class="card notice">
       <view class="strong">欢迎使用响帮帮无忧保</view>
-      <view class="list-meta">登录后可查看参保方案、理赔进度、资金账户等信息</view>
+      <view class="list-meta">登录后可查看参保员工、理赔进度、资金账户等信息</view>
     </view>
     <button class="primary" style="margin-top:20rpx" bindtap="goLogin">登录 / 切换账号</button>
   </view>
 
   <block wx:if="{{loggedIn}}">
-  <view class="hero hero-compact">
-    <view class="row between">
-      <view>
-        <view class="hero-title" style="font-size:36rpx">{{greeting}}，{{user.name||'企业管理员'}}</view>
-        <view class="hero-sub">{{enterprise.name||'响帮帮无忧保'}}</view>
-      </view>
-    </view>
-    <view class="row" style="margin-top:20rpx;gap:36rpx">
-      <view class="hero-stat" data-url="/pages/employees/employees" bindtap="go"><text class="hero-stat-value">{{dashboard.active_people||0}}</text><text class="hero-stat-label">在保人数</text></view>
-      <view class="hero-stat" data-url="/pages/claims/claims" bindtap="go"><text class="hero-stat-value">{{dashboard.claims_open||0}}</text><text class="hero-stat-label">理赔处理中</text></view>
-      <view class="hero-stat" data-url="/pages/billing/billing" bindtap="go"><text class="hero-stat-value">¥{{dashboard.usage_available||0}}</text><text class="hero-stat-label">服务费余额</text></view>
+  <view class="hero">
+    <view class="hero-sub">{{today}}</view>
+    <view class="hero-title">{{greeting}}，{{user.name||'企业管理员'}} 👋</view>
+    <view class="hero-sub">{{enterprise.name||'响帮帮无忧保'}}｜今日业务运行正常</view>
+  </view>
+
+  <view class="grid-2 section">
+    <view class="stat stat-tappable" data-url="/pages/employees/employees" bindtap="go"><text class="stat-label">参保员工 <text class="stat-go">查看 ›</text></text><text class="stat-value">{{dashboard.active_people||0}}<text class="stat-unit">人</text></text></view>
+    <view class="stat stat-tappable" data-url="/pages/employees/employees?status=pending" bindtap="go"><text class="stat-label">待生效 <text class="stat-go">查看 ›</text></text><text class="stat-value">{{dashboard.pending_people||0}}<text class="stat-unit">人</text></text></view>
+    <view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">保费可用余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.premium_balance_total||0}}</text><text class="stat-sub">充值 ¥{{dashboard.premium_recharged_total||0}} · 销售保费 ¥{{dashboard.premium_consumed_total||0}}</text></view>
+    <view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">服务费可用余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.usage_available||0}}</text><text class="stat-sub">充值 ¥{{dashboard.usage_recharged||0}} · 已用 ¥{{dashboard.usage_consumed||0}}</text></view>
+    <view class="stat stat-tappable" data-url="/pages/claims/claims" bindtap="go"><text class="stat-label">理赔处理中 <text class="stat-go">查看 ›</text></text><text class="stat-value">{{dashboard.claims_open||0}}<text class="stat-unit">件</text></text></view>
+  </view>
+
+  <view wx:if="{{dashboard.balance_alerts.length}}" class="section">
+    <view wx:for="{{dashboard.balance_alerts}}" wx:key="account" class="card notice notice-danger" data-url="/pages/billing/billing" bindtap="go">
+      <view class="row between"><text class="strong">账户余额预警</text><text class="tag tag-danger">{{item.days_left}} 天</text></view>
+      <view class="list-meta">{{item.account==='premium'?'保费账户':'平台使用费账户'}}余额 ¥{{item.balance}}，请及时充值</view>
     </view>
   </view>
 
   <view class="section">
-    <view class="grid-4">
-      <view class="quick" data-url="/pages/policies/policies" bindtap="go"><view class="quick-icon">保</view><view class="quick-text">保单记录</view></view>
-      <view class="quick" data-url="/pages/employees/employees" bindtap="go"><view class="quick-icon">员</view><view class="quick-text">员工管理</view></view>
+    <view class="section-head"><text class="section-title">快捷办理</text></view>
+    <view class="grid-3">
+      <view class="quick" data-url="/pages/employee-edit/employee-edit" bindtap="go"><view class="quick-icon">+</view><view class="quick-text">新增员工</view></view>
+      <view class="quick" data-url="/pages/import/import" bindtap="go"><view class="quick-icon">⇧</view><view class="quick-text">批量导入</view></view>
+      <view class="quick" data-url="/pages/batches/batches" bindtap="go"><view class="quick-icon">⇄</view><view class="quick-text">参停保</view></view>
+      <view class="quick" data-url="/pages/positions/positions" bindtap="go"><view class="quick-icon">岗</view><view class="quick-text">岗位管理</view></view>
+      <view class="quick" data-url="/pages/policies/policies" bindtap="go"><view class="quick-icon">保</view><view class="quick-text">保单</view></view>
       <view class="quick" data-url="/pages/billing/billing" bindtap="go"><view class="quick-icon">¥</view><view class="quick-text">资金账户</view></view>
-      <view class="quick" data-url="/pages/messages/messages" bindtap="go"><view class="quick-icon">息</view><view class="quick-text">消息待办</view></view>
     </view>
   </view>
 
   <view class="section">
-    <input class="input" placeholder="搜索方案名称/人员姓名" value="{{search}}" bindinput="onSearch" />
-  </view>
-
-  <view class="section">
-    <view class="section-head"><text class="section-title">方案管理（{{filtered.length}}）</text></view>
-    <view wx:if="{{loading}}" class="loading">正在加载…</view>
-    <view wx:for="{{filtered}}" wx:key="id" class="card">
-      <view class="row between">
-        <text class="list-title">{{item.name}}</text>
-        <text class="tag {{item.has_active_people?'tag-success':'tag-gray'}}">{{item.status_label}}</text>
-      </view>
-      <view class="list-meta">{{item.actual_employer_name}} · {{item.occupation_class||'待定'}}</view>
-      <view wx:if="{{item.plan_name}}" class="list-meta">{{item.plan_name}}</view>
-      <view class="row between" style="margin-top:20rpx">
-        <button class="secondary" style="flex:1" data-id="{{item.id}}" bindtap="goInsure">去投保</button>
-        <block wx:if="{{!item.has_active_people}}">
-          <button class="ghost" style="margin-left:16rpx" data-id="{{item.id}}" bindtap="editPosition">修改</button>
-          <button class="ghost" style="margin-left:16rpx" data-id="{{item.id}}" bindtap="removePosition">删除</button>
-        </block>
-      </view>
+    <view class="section-head"><text class="section-title">消息与待办</text><text class="section-link" data-url="/pages/messages/messages" bindtap="go">全部 →</text></view>
+    <view wx:for="{{messages}}" wx:key="id" class="card" data-path="{{item.path}}" bindtap="openMessage">
+      <view class="row between"><text class="strong">{{item.title}}</text><text class="tag {{item.type==='danger'?'tag-danger':item.type==='warning'?'tag-warning':'tag-success'}}">{{item.type==='todo'?'待办':'通知'}}</text></view>
+      <view class="list-meta">{{item.content}}</view>
     </view>
-    <view wx:if="{{!loading&&!filtered.length}}" class="empty"><view class="empty-icon">方</view><view>暂无参保方案</view></view>
+    <view wx:if="{{!messages.length&&!loading}}" class="card empty">暂无消息</view>
   </view>
-  <view wx:if="{{loggedIn}}" class="fab" bindtap="addPosition">+</view>
   </block>
 </view>
