@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getDashboard } from '@/api/dashboard'
-import type { DashboardData } from '@/api/types'
+import { getDashboard, getScreenProducts } from '@/api/dashboard'
+import type { DashboardData, ScreenProduct } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { money } from '@/utils/format'
 import StatTile from '@/components/StatTile.vue'
@@ -13,16 +13,39 @@ const auth = useAuthStore()
 const router = useRouter()
 const loading = ref(true)
 const data = ref<DashboardData | null>(null)
+const products = ref<ScreenProduct[]>([])
 
 async function load() {
   loading.value = true
   try {
-    data.value = await getDashboard()
+    const [d, p] = await Promise.all([getDashboard(), getScreenProducts()])
+    data.value = d
+    products.value = p
   } finally {
     loading.value = false
   }
 }
 onMounted(load)
+
+// 原「经营大屏」的产品维度图表，合并进首页（仪表盘）后沿用同一套数据/配色，只是换成浅色卡片风格
+const sortedByPremium = computed(() => [...products.value].sort((a, b) => b.premium_total - a.premium_total).slice(0, 8))
+const premiumBarOption = computed(() => ({
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+  grid: { left: 12, right: 20, top: 20, bottom: 60, containLabel: true },
+  xAxis: { type: 'category', data: sortedByPremium.value.map((p) => p.product), axisLabel: { rotate: 30, fontSize: 11 } },
+  yAxis: { type: 'value' },
+  series: [{ type: 'bar', data: sortedByPremium.value.map((p) => p.premium_total), itemStyle: { color: '#2563eb', borderRadius: [4, 4, 0, 0] }, barMaxWidth: 32 }],
+}))
+const insurerDonutOption = computed(() => {
+  const byInsurer = new Map<string, number>()
+  for (const p of products.value) byInsurer.set(p.insurer, (byInsurer.get(p.insurer) || 0) + p.insured_count)
+  return {
+    tooltip: { trigger: 'item' },
+    legend: { orient: 'vertical', right: 10, top: 'center', textStyle: { fontSize: 11 } },
+    color: ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2'],
+    series: [{ type: 'pie', radius: ['50%', '72%'], center: ['38%', '50%'], label: { show: false }, data: Array.from(byInsurer.entries()).map(([name, value]) => ({ name, value })) }],
+  }
+})
 
 const isAdmin = computed(() => auth.isAdmin())
 
@@ -95,39 +118,72 @@ const alertBarOption = computed(() => {
         style="cursor: pointer"
         @click="data && data.pending_terminations_count > 0 && router.push({ name: 'pendingTerminations' })"
       />
-      <StatTile
-        label="服务费可用余额"
-        :value="data ? money(data.usage_available) : '—'"
-        :hint="data ? `充值 ${money(data.usage_recharged)} · 已用 ${money(data.usage_consumed)}` : '点击去充值'"
-        hint-type="info"
-        icon="Wallet"
-        accent="success"
-        style="cursor: pointer"
-        @click="router.push({ name: 'recharge', query: { account_type: 'usage' } })"
-      />
     </div>
 
-    <PageCard title="保费账户余额" :hint="isAdmin ? '按收款账户汇总' : ''">
-      <el-table :data="data?.premium_accounts ?? []" size="small" style="width: 100%">
+    <!-- 保费账户和服务费账户原来分开展示（服务费只在上面的统计卡片里），合并到同一张表，
+         一眼看全部账户余额，不用来回找。 -->
+    <PageCard title="账户余额" :hint="isAdmin ? '按收款账户汇总' : ''">
+      <el-table :data="data ? [{ kind: 'usage', ...data }, ...data.premium_accounts] : []" size="small" style="width: 100%">
         <el-table-column label="账户/保司" min-width="200">
           <template #default="{ row }">
-            <div>{{ row.label || '未命名账户' }}</div>
-            <small class="muted">{{ row.insurers.join('、') }}</small>
+            <template v-if="row.kind === 'usage'">
+              <div>平台服务费账户</div>
+              <small class="muted">单价 ¥{{ row.daily_rate ?? 0 }}/人/天</small>
+            </template>
+            <template v-else>
+              <div>{{ row.label || '未命名账户' }}</div>
+              <small class="muted">{{ row.insurers.join('、') }}</small>
+            </template>
           </template>
         </el-table-column>
         <el-table-column label="可用余额" width="160">
           <template #default="{ row }">
-            <div>{{ money(row.available ?? row.balance) }}</div>
-            <small class="muted">充值 {{ money(row.recharged ?? row.balance) }} · 销售保费 {{ money(row.consumed ?? 0) }}</small>
+            <template v-if="row.kind === 'usage'">
+              <div>{{ money(row.usage_available) }}</div>
+              <small class="muted">充值 {{ money(row.usage_recharged) }} · 已用 {{ money(row.usage_consumed) }}</small>
+            </template>
+            <template v-else>
+              <div>{{ money(row.available ?? row.balance) }}</div>
+              <small class="muted">充值 {{ money(row.recharged ?? row.balance) }} · 销售保费 {{ money(row.consumed ?? 0) }}</small>
+            </template>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="100">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="router.push({ name: 'recharge', query: { account_type: 'premium', insurer: row.insurers?.[0] } })">去充值</el-button>
+            <el-button v-if="row.kind === 'usage'" link type="primary" size="small" @click="router.push({ name: 'recharge', query: { account_type: 'usage' } })">去充值</el-button>
+            <el-button v-else link type="primary" size="small" @click="router.push({ name: 'recharge', query: { account_type: 'premium', insurer: row.insurers?.[0] } })">去充值</el-button>
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="data && !data.premium_accounts.length" description="暂无保费账户" :image-size="60" />
+    </PageCard>
+
+    <div class="chart-grid">
+      <PageCard title="保费规模 Top 8 产品">
+        <div class="chart-box">
+          <VChart v-if="products.length" :option="premiumBarOption" autoresize style="height: 280px" />
+          <el-empty v-else description="暂无数据" :image-size="60" />
+        </div>
+      </PageCard>
+      <PageCard title="在保人次 · 按保司分布">
+        <div class="chart-box">
+          <VChart v-if="products.length" :option="insurerDonutOption" autoresize style="height: 280px" />
+          <el-empty v-else description="暂无数据" :image-size="60" />
+        </div>
+      </PageCard>
+    </div>
+
+    <PageCard title="产品明细" :count="products.length">
+      <el-table :data="products" size="small" style="width: 100%">
+        <el-table-column prop="insurer" label="保司" min-width="120" />
+        <el-table-column prop="product" label="产品" min-width="150" />
+        <el-table-column prop="enterprise_count" label="在保单位" width="100" />
+        <el-table-column prop="insured_count" label="在保人数" width="100" />
+        <el-table-column prop="policy_count" label="保单数" width="100" />
+        <el-table-column label="保费规模" width="120">
+          <template #default="{ row }">{{ money(row.premium_total) }}</template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!products.length" description="暂无产品数据" :image-size="60" />
     </PageCard>
 
     <div class="chart-grid">

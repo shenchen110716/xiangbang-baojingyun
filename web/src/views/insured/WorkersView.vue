@@ -18,6 +18,7 @@ const list = ref<InsuredPerson[]>([])
 const search = ref('')
 const searchField = ref<'all' | 'name' | 'id_number' | 'actual_employer_name'>('all')
 const statusFilter = ref('')
+const planFilter = ref<number | null>(null)
 const selected = ref<InsuredPerson[]>([])
 const bulkAction = ref('')
 
@@ -40,6 +41,7 @@ const filtered = computed(() => {
   if (statusFilter.value === 'active-pending') rows = rows.filter(isPendingEffective)
   else if (statusFilter.value === 'active') rows = rows.filter((x) => x.status === 'active' && !isPendingEffective(x))
   else if (statusFilter.value) rows = rows.filter((x) => x.status === statusFilter.value)
+  if (planFilter.value) rows = rows.filter((x) => x.plan_id === planFilter.value)
   if (search.value) {
     const q = search.value.toLowerCase()
     const fields = searchField.value === 'all' ? (['name', 'id_number', 'phone', 'enterprise_name', 'position_name'] as const) : ([searchField.value] as const)
@@ -48,6 +50,12 @@ const filtered = computed(() => {
   return rows
 })
 const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
+
+const planOptions = computed(() => {
+  const seen = new Map<number, string>()
+  for (const x of list.value) if (x.plan_id && !seen.has(x.plan_id)) seen.set(x.plan_id, x.plan_name || `方案 #${x.plan_id}`)
+  return Array.from(seen, ([id, name]) => ({ id, name }))
+})
 
 const totalCount = computed(() => list.value.length)
 // 在保 = 已生效的 active；待生效 = 待审核(pending) + 已通过但未来才生效(active-pending)。
@@ -187,6 +195,9 @@ function exportCsv() {
             <el-option label="待生效(倒计时)" value="active-pending" />
             <el-option label="在保" value="active" />
             <el-option label="已停保" value="stopped" />
+          </el-select>
+          <el-select v-model="planFilter" placeholder="按参保方案筛选" clearable filterable style="width: 180px">
+            <el-option v-for="p in planOptions" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </FilterBar>
         <div class="bulk-row">

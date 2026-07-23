@@ -12,6 +12,7 @@ import DetailModal from '@/components/DetailModal.vue'
 import TablePagination from '@/components/TablePagination.vue'
 import { usePagedList } from '@/composables/usePagedList'
 import { formatDateTime } from '@/utils/format'
+import WorkUnitsPanel from '@/views/enterprises/WorkUnitsPanel.vue'
 
 const auth = useAuthStore()
 const isEnterprise = computed(() => auth.isEnterprise())
@@ -21,6 +22,10 @@ const list = ref<WorkPosition[]>([])
 const employers = ref<ActualEmployer[]>([])
 const plans = ref<InsurancePlan[]>([])
 const search = ref('')
+const employerFilter = ref<number | null>(null)
+const classFilter = ref('')
+const OCCUPATION_CLASSES = ['1-3类', '4类', '5类', '超5类']
+const workUnitsVisible = ref(false)
 
 async function load() {
   loading.value = true
@@ -40,9 +45,14 @@ async function load() {
 onMounted(load)
 
 const filtered = computed(() => {
-  if (!search.value) return list.value
-  const q = search.value.toLowerCase()
-  return list.value.filter((x) => [x.name, x.actual_employer_name || x.actual_employer, x.occupation_class].some((v) => (v || '').toLowerCase().includes(q)))
+  let rows = list.value
+  if (search.value) {
+    const q = search.value.toLowerCase()
+    rows = rows.filter((x) => [x.name, x.actual_employer_name || x.actual_employer, x.occupation_class].some((v) => (v || '').toLowerCase().includes(q)))
+  }
+  if (employerFilter.value) rows = rows.filter((x) => x.actual_employer_id === employerFilter.value)
+  if (classFilter.value) rows = rows.filter((x) => x.occupation_class === classFilter.value)
+  return rows
 })
 const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
 const pendingCount = computed(() => list.value.filter((x) => x.status === 'pending').length)
@@ -182,11 +192,21 @@ async function submitReview() {
       <StatTile label="已定类" :value="approvedCount" hint-type="success" />
     </div>
 
-    <PageCard :title="isEnterprise ? '岗位管理' : '岗位审核与定类'" :count="filtered.length">
+    <PageCard :title="isEnterprise ? '岗位参保方案' : '岗位审核与定类'" :count="filtered.length">
       <template #actions>
+        <el-button v-if="isEnterprise" @click="workUnitsVisible = true">实际用工单位管理</el-button>
         <el-button v-if="isEnterprise" type="primary" @click="openCreate">＋ 新增岗位并上传视频</el-button>
       </template>
-      <div class="filter-row"><FilterBar v-model:search="search" /></div>
+      <div class="filter-row">
+        <FilterBar v-model:search="search" placeholder="按岗位名称/实际用工单位/类别搜索">
+          <el-select v-model="employerFilter" placeholder="按参保单位筛选" clearable style="width: 170px">
+            <el-option v-for="e in employers" :key="e.id" :label="e.name" :value="e.id" />
+          </el-select>
+          <el-select v-model="classFilter" placeholder="按类别筛选" clearable style="width: 130px">
+            <el-option v-for="c in OCCUPATION_CLASSES" :key="c" :label="c" :value="c" />
+          </el-select>
+        </FilterBar>
+      </div>
       <el-table :data="paged" size="small" max-height="560">
         <el-table-column prop="name" label="岗位名称" min-width="140" />
         <el-table-column label="实际工作单位" min-width="150">
@@ -219,8 +239,11 @@ async function submitReview() {
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <template v-if="isEnterprise">
-              <el-button link type="primary" size="small" @click="openEdit(row)">编辑/上传视频</el-button>
-              <el-button link type="danger" size="small" @click="removePosition(row)">删除</el-button>
+              <template v-if="row.status !== 'approved'">
+                <el-button link type="primary" size="small" @click="openEdit(row)">编辑/上传视频</el-button>
+                <el-button link type="danger" size="small" @click="removePosition(row)">删除</el-button>
+              </template>
+              <span v-else class="muted">已定类，不可编辑/删除</span>
             </template>
             <el-button v-else link type="primary" size="small" @click="openReview(row)">审核定类</el-button>
           </template>
@@ -296,6 +319,10 @@ async function submitReview() {
         <el-button @click="reviewVisible = false">取消</el-button>
         <el-button type="primary" @click="submitReview">提交审核</el-button>
       </template>
+    </el-dialog>
+
+    <el-dialog v-model="workUnitsVisible" title="实际用工单位管理" width="800px" append-to-body destroy-on-close>
+      <WorkUnitsPanel />
     </el-dialog>
   </div>
 </template>

@@ -223,6 +223,9 @@ def update_position(item_id:int,data:PositionIn,user:User=Depends(current_user),
     item=session.get(WorkPosition,item_id)
     if not item: raise HTTPException(404,"岗位不存在")
     _position_employer_access(session,user,item)
+    # 已定类的岗位企业端不能再改，否则会被下面的逻辑静默清空职业类别/保险方案、打回待定类，
+    # 参保记录和保司对接都可能被打乱；如需变更须走平台后台。
+    if user.role=='enterprise' and item.status=='approved': raise HTTPException(400,"已定类的岗位不能修改，如需变更请联系平台")
     employer=session.get(ActualEmployer,data.actual_employer_id) if data.actual_employer_id else None
     if not employer or employer.enterprise_id!=item.enterprise_id: raise HTTPException(400,"请选择本企业添加的有效实际工作单位")
     assert_employer_access(session,user,employer.id)
@@ -238,6 +241,7 @@ def delete_position(item_id:int,user:User=Depends(current_user),session:Session=
     item=session.get(WorkPosition,item_id)
     if not item: raise HTTPException(404,"岗位不存在")
     _position_employer_access(session,user,item)
+    if user.role=='enterprise' and item.status=='approved': raise HTTPException(400,"已定类的岗位不能删除，如需变更请联系平台")
     if session.scalar(select(InsuredPerson.id).where(InsuredPerson.position_id==item_id).limit(1)): raise HTTPException(409,'该岗位已关联参保员工，不能删除')
     for video in session.scalars(select(PositionVideo).where(PositionVideo.position_id==item_id)):
         session.delete(video)
