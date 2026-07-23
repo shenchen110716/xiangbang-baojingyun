@@ -68,7 +68,7 @@ async function submit() {
     <aside class="auth-side">
       <a class="side-brand" href="/xbbzp.html">
         <span class="brand-mark">响</span>
-        <span class="brand-text">响帮帮<span class="brand-sub">XIANGBANGBANG · 保经云</span></span>
+        <span class="brand-text">响帮帮<span class="brand-sub">XIANGBANGBANG · 无忧保</span></span>
       </a>
 
       <div class="side-body">
