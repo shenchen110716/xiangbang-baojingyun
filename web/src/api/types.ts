@@ -48,6 +48,19 @@ export interface ActualEmployer {
   created_at: string
 }
 
+export interface Insurer {
+  id: number
+  name: string
+  contact: string
+  phone: string
+  status: string
+  pending_name: string | null
+  pending_contact: string | null
+  pending_phone: string | null
+  pending_submitted_at: string | null
+  created_at: string
+}
+
 export interface WorkPosition {
   id: number
   enterprise_id: number

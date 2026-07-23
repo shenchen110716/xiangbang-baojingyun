@@ -29,6 +29,7 @@ export const routes: Array<RouteRecordRaw & { meta: NavMeta }> = [
   { path: '/policy', name: 'policy', component: () => import('@/views/policies/PolicyListView.vue'), meta: { title: '保单管理', group: '产品与保司' } },
   { path: '/claims', name: 'claims', component: () => import('@/views/claims/ClaimsView.vue'), meta: { title: '工伤理赔', group: '产品与保司' } },
   { path: '/insurers', name: 'insurers', component: () => import('@/views/plans/PlansAdminView.vue'), meta: { title: '保险公司', group: '产品与保司', adminOnly: true } },
+  { path: '/insurer-management', name: 'insurerManagement', component: () => import('@/views/insurers/InsurerManagementView.vue'), meta: { title: '保司主体管理', group: '产品与保司', adminOnly: true } },
   // 「参停保中心」已并入「参保员工管理」页面的第二个 Tab（见 /workers），
   // 这里只保留一个跳转，避免旧收藏夹/书签链接直接 404。
   { path: '/exports', redirect: '/workers', meta: { title: '参停保中心' } },
