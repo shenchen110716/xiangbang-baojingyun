@@ -3,9 +3,9 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { getInsurerProfile, getInsurerSettlement, listInsurerPolicies, listInsurerPositions, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
+import { getInsurerProfile, getInsurerSettlement, listInsurerInvoices, listInsurerPolicies, listInsurerPositions, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
 import type { InsurerSettlement } from '@/api/insurerPortal'
-import type { Insurer, Policy, WorkPosition } from '@/api/types'
+import type { Insurer, Invoice, Policy, WorkPosition } from '@/api/types'
 import PageCard from '@/components/PageCard.vue'
 import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
 
@@ -52,6 +52,11 @@ async function loadSettlement() {
   settlement.value = await getInsurerSettlement()
 }
 
+const invoices = ref<Invoice[]>([])
+async function loadInvoices() {
+  invoices.value = await listInsurerInvoices()
+}
+
 async function load() {
   loading.value = true
   try {
@@ -64,6 +69,7 @@ async function load() {
     await loadPositions()
     await loadPolicies()
     await loadSettlement()
+    await loadInvoices()
   } catch (e) {
     ElMessage.error((e as Error).message)
   } finally {
@@ -194,6 +200,20 @@ function logout() {
               <el-table-column prop="status" label="状态" width="90" />
             </el-table>
             <el-empty v-if="!settlement?.rows.length" description="暂无结算数据" :image-size="60" />
+          </PageCard>
+        </el-tab-pane>
+
+        <el-tab-pane label="发票管理" name="invoices">
+          <PageCard title="名下投保单位发票申请" :count="invoices.length">
+            <el-table :data="invoices" size="small">
+              <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
+              <el-table-column prop="account" label="费用类型" width="100">
+                <template #default="{ row }">{{ row.account === 'premium' ? '保费' : '使用费' }}</template>
+              </el-table-column>
+              <el-table-column label="金额" width="100"><template #default="{ row }">{{ row.amount }}</template></el-table-column>
+              <el-table-column prop="status" label="状态" width="90" />
+            </el-table>
+            <el-empty v-if="!invoices.length" description="暂无发票申请" :image-size="60" />
           </PageCard>
         </el-tab-pane>
       </el-tabs>

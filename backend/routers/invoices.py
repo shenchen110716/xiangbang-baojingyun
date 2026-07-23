@@ -49,6 +49,12 @@ def invoice_monthly_summary(enterprise_id: int = Query(...), user: User = Depend
 def invoices(user:User=Depends(current_user),session:Session=Depends(db)):
     stmt=select(Invoice).order_by(Invoice.id.desc())
     if user.role=='enterprise' and user.enterprise_id: stmt=stmt.where(Invoice.enterprise_id==user.enterprise_id)
+    elif user.role=='insurer':
+        # Invoice 没有直接的 plan_id，通过该单位在本保司名下有保单来判定可见性——
+        # 与"财务管理"结算范围保持同一颗粒度（按投保单位，不按单张发票挂钩具体保单）。
+        plan_ids={x.id for x in session.scalars(select(InsurancePlan.id).where(InsurancePlan.insurer_id==user.insurer_id))}
+        enterprise_ids={x.enterprise_id for x in session.scalars(select(Policy).where(Policy.plan_id.in_(plan_ids)))} if plan_ids else set()
+        stmt=stmt.where(Invoice.enterprise_id.in_(enterprise_ids)) if enterprise_ids else stmt.where(Invoice.id.is_(None))
     elif user.role!='admin': raise HTTPException(403,'无权查看发票')
     result=[]
     for item in session.scalars(stmt):

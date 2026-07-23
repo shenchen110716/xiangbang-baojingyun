@@ -1,5 +1,5 @@
 import { client } from './client'
-import type { Insurer, Policy, WorkPosition } from './types'
+import type { Insurer, Invoice, Policy, WorkPosition } from './types'
 
 export function getInsurerProfile() {
   return client.get<Insurer>('/insurer-portal/profile').then((response) => response.data)
@@ -51,4 +51,8 @@ export interface InsurerSettlement {
 
 export function getInsurerSettlement() {
   return client.get<InsurerSettlement>('/insurer-portal/settlement').then((response) => response.data)
+}
+
+export function listInsurerInvoices() {
+  return client.get<Invoice[]>('/invoices').then((response) => response.data)
 }
