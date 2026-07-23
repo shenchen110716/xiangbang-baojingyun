@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: 编译
+        run: mvn -B -q compile
+
+      - name: 铁律 2 —— 模块边界校验
+        run: mvn -B -q test -Dtest=ModularityTests
+
+      - name: 铁律 1 —— schema 隔离校验
+        run: mvn -B -q test -Dtest=SchemaIsolationTests
+
+      - name: 全量测试
+        run: mvn -B test
