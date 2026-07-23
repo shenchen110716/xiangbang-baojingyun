@@ -16,7 +16,7 @@ export const routes: Array<RouteRecordRaw & { meta: NavMeta }> = [
   { path: '/screen', name: 'screen', component: () => import('@/views/dashboard/ScreenView.vue'), meta: { title: '经营大屏', group: '' } },
   { path: '/team', name: 'team', component: () => import('@/views/enterprises/TeamView.vue'), meta: { title: '投保单位管理', group: '业务管理' } },
   { path: '/dispatch', name: 'dispatch', component: () => import('@/views/positions/PositionsView.vue'), meta: { title: '岗位管理', group: '业务管理' } },
-  { path: '/workers', name: 'workers', component: () => import('@/views/insured/WorkersView.vue'), meta: { title: '参保员工管理', group: '业务管理' } },
+  { path: '/workers', name: 'workers', component: () => import('@/views/insured/WorkEnrollmentView.vue'), meta: { title: '参保员工管理', group: '业务管理' } },
   { path: '/work-relations', name: 'workRelations', component: () => import('@/views/insured/WorkRelationsView.vue'), meta: { title: '劳动关系管理', group: '业务管理' } },
   { path: '/timeliness', name: 'timeliness', component: () => import('@/views/timeliness/TimelinessView.vue'), meta: { title: '参停保及时率', group: '业务管理' } },
   { path: '/agents', name: 'agents', component: () => import('@/views/agents/AgentsView.vue'), meta: { title: '业务员管理', group: '业务管理', adminOnly: true } },
@@ -24,7 +24,9 @@ export const routes: Array<RouteRecordRaw & { meta: NavMeta }> = [
   { path: '/policy', name: 'policy', component: () => import('@/views/policies/PolicyListView.vue'), meta: { title: '保单管理', group: '产品与保司' } },
   { path: '/claims', name: 'claims', component: () => import('@/views/claims/ClaimsView.vue'), meta: { title: '工伤理赔', group: '产品与保司' } },
   { path: '/insurers', name: 'insurers', component: () => import('@/views/plans/PlansAdminView.vue'), meta: { title: '保险公司', group: '产品与保司', adminOnly: true } },
-  { path: '/exports', name: 'exports', component: () => import('@/views/enrollment/EnrollmentCenterView.vue'), meta: { title: '参停保中心', group: '产品与保司' } },
+  // 「参停保中心」已并入「参保员工管理」页面的第二个 Tab（见 /workers），
+  // 这里只保留一个跳转，避免旧收藏夹/书签链接直接 404。
+  { path: '/exports', redirect: '/workers', meta: { title: '参停保中心' } },
   { path: '/report', name: 'report', component: () => import('@/views/reports/ReportsView.vue'), meta: { title: '报表中心', group: '保障与结算' } },
   { path: '/billing', name: 'billing', component: () => import('@/views/billing/FinanceView.vue'), meta: { title: '资金与发票', group: '保障与结算' } },
   { path: '/recharge', name: 'recharge', component: () => import('@/views/recharge/RechargeCenterView.vue'), meta: { title: '账户充值', group: '保障与结算' } },
