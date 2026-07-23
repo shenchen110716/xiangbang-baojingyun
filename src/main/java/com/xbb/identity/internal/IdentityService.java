@@ -2,6 +2,7 @@ package com.xbb.identity.internal;
 
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.identity.api.UserRegistered;
+import com.xbb.identity.api.UserVerified;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +55,19 @@ class IdentityService implements IdentityApi {
     public Optional<UserView> findVerifiedUser(long userId) {
         return users.findById(userId)
                 .map(u -> new UserView(u.getId(), u.getPhone(), u.isVerified(), u.getInviteCode()));
+    }
+
+    @Override
+    @Transactional
+    public void verifyRealName(long userId, String realName, String idNumber) {
+        if (users.existsByIdNumber(idNumber)) {
+            throw new IllegalStateException("该身份证已被绑定");
+        }
+        User u = users.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        u.verify(realName, idNumber);
+        users.save(u);
+        events.publishEvent(new UserVerified(userId, realName, Instant.now()));
     }
 
     private String generateInviteCode() {

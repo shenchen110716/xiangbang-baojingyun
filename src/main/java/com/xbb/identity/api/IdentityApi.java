@@ -11,4 +11,6 @@ public interface IdentityApi {
     LoginResult loginByPhone(String phone, String code);
 
     Optional<UserView> findVerifiedUser(long userId);
+
+    void verifyRealName(long userId, String realName, String idNumber);
 }
