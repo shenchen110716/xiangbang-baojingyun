@@ -21,11 +21,17 @@ Page({
     if (!app.globalData.token) { wx.reLaunch({ url: '/pages/login/login' }); return; }
     // 首页的统计卡片/参保方案卡片跳这个 tab 时用 wx.switchTab（tabBar 页面
     // 不支持 wx.navigateTo，switchTab 又不支持带参数），筛选条件走全局变量
-    // 中转，这里读一次就清空，避免用户手动点 tab 切回来时残留上次的筛选。
+    // 中转，这里读一次就清空。没有待处理的中转数据说明是用户直接点了底部
+    // tab（不是从首页卡片跳进来的）——这时要把上一次可能残留的岗位筛选
+    // （positionId）清掉，不然用户从首页某个岗位卡片进来看过一次之后，
+    // 再直接点"员工" tab 会莫名其妙一直停留在那个岗位的筛选结果里。
+    // status 是页面自己的筛选 chip，属于用户在本页内的选择，不受这次影响。
     const pending = app.globalData.pendingEmployeesFilter;
     if (pending) {
       app.globalData.pendingEmployeesFilter = null;
       this.setData({ status: pending.status || '', positionId: pending.position_id || 0 });
+    } else if (this.data.positionId) {
+      this.setData({ positionId: 0, positionName: '' });
     }
     this.load();
   },
