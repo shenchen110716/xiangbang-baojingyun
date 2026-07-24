@@ -12,13 +12,8 @@
   </view>
 
   <block wx:if="{{loggedIn}}">
-  <view wx:if="{{!selectMode || positionId}}" class="header-bar row between">
-    <text wx:if="{{positionId}}" class="link-btn grow" bindtap="clearPositionFilter">{{positionName||'该岗位'}} · 查看全部员工 →</text>
-    <view wx:else class="grow"></view>
-    <view wx:if="{{!selectMode}}" class="row" style="flex:none">
-      <button class="mini-btn mini-btn-primary" style="margin-right:12rpx" bindtap="add">参保</button>
-      <button class="mini-btn" data-mode="stopped" bindtap="startSelect">停保</button>
-    </view>
+  <view wx:if="{{positionId}}" class="header-bar row between">
+    <text class="link-btn grow" bindtap="clearPositionFilter">{{positionName||'该岗位'}} · 查看全部员工 →</text>
   </view>
   <view class="search"><input class="input" placeholder="姓名、身份证、手机号或岗位" bindinput="search" /></view>
   <scroll-view class="chips" scroll-x enhanced show-scrollbar="{{false}}">
@@ -45,9 +40,15 @@
     </view>
   </view>
   <view wx:if="{{!loading&&!filtered.length}}" class="empty"><view class="empty-icon">☷</view><view>暂无符合条件的员工</view><view class="small link-btn" bindtap="importFile">可以手工新增或批量导入</view></view>
-  <!-- select-bar 是 position:fixed 悬浮在底部的，不占文档流空间，不留个
-       占位高度的话它会挡住列表最后几条，还可能因为页面内容"看起来"刚好
-       撑满一屏而滚不动。 -->
+  <!-- 参保/停保悬浮按钮和批量停保操作栏都是 position:fixed，不占文档流
+       空间，不留个占位高度的话会挡住列表最后几条，还可能因为页面内容
+       "看起来"刚好撑满一屏而滚不动。两者互斥（进勾选模式后悬浮按钮就
+       让位给底部的批量操作栏），占位高度按各自实际高度留。 -->
+  <view wx:if="{{!selectMode}}" style="height:200rpx"></view>
+  <view wx:if="{{!selectMode}}" class="float-actions">
+    <button class="float-btn float-btn-primary" bindtap="add">参保</button>
+    <button class="float-btn float-btn-secondary" data-mode="stopped" bindtap="startSelect">停保</button>
+  </view>
   <view wx:if="{{selectMode}}" style="height:220rpx"></view>
   <view wx:if="{{selectMode}}" class="select-bar">
     <view class="row between select-bar-date" style="margin-bottom:14rpx">
