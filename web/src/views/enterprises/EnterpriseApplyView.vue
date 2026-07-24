@@ -9,6 +9,7 @@ const form = reactive({
   phone: '',
   username: '',
   password: '',
+  website: '', // 蜜罐字段，真人看不到也不会填；见下方 .hp-field 样式和后端 routers/enterprises.py
 })
 const loading = ref(false)
 const errorText = ref('')
@@ -44,6 +45,10 @@ async function submit() {
       <p class="apply-lede">填写单位信息和登录账号，提交后由平台审核，通过后即可用下方账号登录企业后台。</p>
 
       <el-form label-position="top" @submit.prevent>
+        <div class="hp-field" aria-hidden="true">
+          <label for="apply-website">Website</label>
+          <input id="apply-website" v-model="form.website" type="text" tabindex="-1" autocomplete="off" />
+        </div>
         <el-form-item label="单位名称" required>
           <el-input v-model="form.enterprise_name" placeholder="请输入单位全称" />
         </el-form-item>
@@ -124,6 +129,7 @@ async function submit() {
 .apply-card h1 { font-size: 22px; margin-bottom: 8px; }
 .apply-lede { font-size: 13.5px; color: var(--el-text-color-secondary); margin-bottom: 24px; }
 .apply-error { color: var(--el-color-danger); font-size: 13px; margin-bottom: 12px; }
+.hp-field { position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; overflow: hidden; }
 .apply-back { display: block; text-align: center; margin-top: 16px; font-size: 13px; color: var(--el-text-color-secondary); text-decoration: none; }
 .apply-success { text-align: center; }
 </style>

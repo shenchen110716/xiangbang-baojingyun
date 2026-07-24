@@ -11,11 +11,10 @@ Page({
     statuses: [{ value: '', label: '全部' }, { value: 'pending', label: '待生效' }, { value: 'active', label: '在保' }, { value: 'stopped', label: '已停保' }],
     statusChips: [],
     loading: false,
-    // 参保/停保批量操作：不选具体人直接点标题栏"参保"/"停保"进入勾选模式，
-    // 和网页端 WorkersView 的"批量参保/批量停保"同一套接口，只是把网页表格
-    // 多选换成这里逐条 checkbox。停保必须先选停保时间，不能像参保那样直接
-    // 一键提交——和网页端同一条限制（不能一键立即停保）。
-    selectMode: '', // '' | 'active' | 'stopped'
+    // 批量停保：点悬浮"－"按钮进入勾选模式，和网页端 WorkersView 的"批量停保"
+    // 同一套接口，只是把网页表格多选换成这里逐条 checkbox。必须先选停保时间，
+    // 不能一键立即停保——和网页端同一条限制。
+    selectMode: '', // '' | 'stopped'
     selectedIds: [],
     stopDate: '',
     minStopDate: '',
@@ -118,18 +117,15 @@ Page({
     if (!this.requireLogin()) return;
     wx.navigateTo({ url: '/pages/import/import' });
   },
-  // 参保/停保批量操作：标题栏"参保"/"停保"进入勾选模式（不用先点进详情页
-  // 逐个操作），和网页端 WorkersView 的批量参保/批量停保同一套接口——参保
-  // 直接改状态，停保必须先选停保时间。
-  startSelect(e) {
+  // 批量停保：悬浮"－"按钮进入勾选模式（不用先点进详情页逐个操作），和
+  // 网页端 WorkersView 的批量停保同一套接口。
+  startSelect() {
     if (!this.requireLogin()) return;
-    const mode = e.currentTarget.dataset.mode;
     const stopDate = new Date(); stopDate.setDate(stopDate.getDate() + 1);
     const minStopDate = stopDate.toISOString().slice(0, 10);
     // 停保只对"在保"的人有意义，进勾选模式时把状态筛选默认切到"在保"，
     // 列表直接收窄成可选范围，不用用户自己再点一次筛选 chip。
-    const status = mode === 'stopped' ? 'active' : this.data.status;
-    this.setData({ selectMode: mode, selectedIds: [], stopDate: minStopDate, minStopDate, status });
+    this.setData({ selectMode: 'stopped', selectedIds: [], stopDate: minStopDate, minStopDate, status: 'active' });
     this.applyFilter();
   },
   cancelSelect() { this.setData({ selectMode: '', selectedIds: [] }); },
@@ -143,25 +139,15 @@ Page({
     if (this.data.bulkSubmitting) return;
     const ids = this.data.selectedIds;
     if (!ids.length) { wx.showToast({ title: '请先勾选员工', icon: 'none' }); return; }
-    if (this.data.selectMode === 'stopped') {
-      if (!this.data.stopDate) { wx.showToast({ title: '请选择停保时间', icon: 'none' }); return; }
-      wx.showModal({
-        title: '批量停保确认', content: `将对选中的 ${ids.length} 名员工统一在 ${this.data.stopDate} 停保`,
-        success: (res) => { if (res.confirm) this.runBulk(ids); }
-      });
-      return;
-    }
+    if (!this.data.stopDate) { wx.showToast({ title: '请选择停保时间', icon: 'none' }); return; }
     wx.showModal({
-      title: '批量参保确认', content: `确定对选中的 ${ids.length} 名员工执行参保吗？`,
+      title: '批量停保确认', content: `将对选中的 ${ids.length} 名员工统一在 ${this.data.stopDate} 停保`,
       success: (res) => { if (res.confirm) this.runBulk(ids); }
     });
   },
   runBulk(ids) {
     this.setData({ bulkSubmitting: true });
-    const mode = this.data.selectMode;
-    const requests = ids.map((id) => mode === 'stopped'
-      ? app.request(`/insured/${id}`, { method: 'PATCH', data: { terminated_at: this.data.stopDate }, silent: true })
-      : app.request(`/insured/${id}/status?status=active`, { method: 'PATCH', silent: true }));
+    const requests = ids.map((id) => app.request(`/insured/${id}`, { method: 'PATCH', data: { terminated_at: this.data.stopDate }, silent: true }));
     Promise.allSettled(requests).then((results) => {
       const failed = results.filter((r) => r.status === 'rejected');
       const successCount = results.length - failed.length;
@@ -171,7 +157,7 @@ Page({
       // 次日 00:00），带上第一条失败的具体原因，比"失败 N 人"有用得多。
       const firstError = failed.length ? (failed[0].reason && failed[0].reason.message) : '';
       const suffix = failed.length ? `，失败 ${failed.length} 人${firstError ? '（' + firstError + '）' : ''}` : '';
-      wx.showToast({ title: `${mode === 'stopped' ? '停保' : '参保'}完成：成功 ${successCount} 人${suffix}`, icon: 'none', duration: failed.length ? 4500 : 3000 });
+      wx.showToast({ title: `停保完成：成功 ${successCount} 人${suffix}`, icon: 'none', duration: failed.length ? 4500 : 3000 });
       this.load();
     });
   },

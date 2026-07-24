@@ -1,6 +1,8 @@
+import time
+from collections import defaultdict
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -15,9 +17,36 @@ from ..services import amount, ledger_dict, post_ledger_entry, premium_account_v
 
 router = APIRouter(prefix="/api", tags=["enterprises"])
 
+# /enterprises/apply 是公开未鉴权接口，现在挂在营销官网首页 CTA 上，不再只是内部/演示
+# 场景——按来源 IP 做进程内滑动窗口限流，防脚本刷申请堆积审核队列。单实例够用；
+# 多实例部署要换成共享存储（Redis 等）。
+_APPLY_WINDOW_SECONDS = 3600
+_APPLY_MAX_PER_WINDOW = 5
+_apply_attempts: dict[str, list[float]] = defaultdict(list)
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_apply_rate_limit(ip: str) -> None:
+    now = time.time()
+    attempts = _apply_attempts[ip]
+    attempts[:] = [t for t in attempts if now - t < _APPLY_WINDOW_SECONDS]
+    if len(attempts) >= _APPLY_MAX_PER_WINDOW:
+        raise HTTPException(429, "提交过于频繁，请稍后再试")
+    attempts.append(now)
+
 
 @router.post("/enterprises/apply")
-def apply_enterprise(data: EnterpriseApplyIn, session: Session = Depends(db)):
+def apply_enterprise(data: EnterpriseApplyIn, request: Request, session: Session = Depends(db)):
+    if data.website.strip():
+        # 蜜罐字段被填了：判定为机器人，假装成功但什么都不落库，不给它反馈用来调整策略。
+        return {"message": "提交成功，请等待审核"}
+    _check_apply_rate_limit(_client_ip(request))
     if not data.enterprise_name.strip() or not data.contact.strip() or not data.phone.strip() or not data.username.strip() or not data.password.strip():
         raise HTTPException(400, "请填写单位名称、联系人、联系电话、登录账号和密码")
     if session.scalar(select(User).where(User.username == data.username)):
