@@ -3,7 +3,7 @@
    本页（小程序 wxss 按页面自动作用域，不会串到其它页面）。 */
 .page{padding-top:14rpx}
 .safe-bottom{padding-bottom:calc(16rpx + env(safe-area-inset-bottom))}
-.search{margin:16rpx 0}
+.search{margin:16rpx 0;align-items:center}
 .chips{margin:12rpx 0 16rpx}
 .card{padding:22rpx 24rpx;margin-bottom:16rpx}
 .list-meta{margin-top:6rpx}

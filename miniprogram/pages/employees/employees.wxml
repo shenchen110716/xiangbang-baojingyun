@@ -4,7 +4,7 @@
   </view>
   <view class="search">
     <input class="input" placeholder="姓名、身份证、手机号或岗位" bindinput="search" />
-    <text class="link-btn" style="white-space:nowrap" bindtap="exportList">导出 {{filtered.length}} 条 ⇩</text>
+    <text class="mini-btn" style="white-space:nowrap;flex:none" bindtap="exportList">导出 {{filtered.length}} 条 ⇩</text>
   </view>
   <scroll-view class="chips" scroll-x enhanced show-scrollbar="{{false}}">
     <view wx:for="{{statusChips}}" wx:key="value" class="chip {{status===item.value?'active':''}}" data-value="{{item.value}}" bindtap="chooseStatus">{{item.label}}({{item.count}})</view>
