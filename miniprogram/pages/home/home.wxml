@@ -19,12 +19,12 @@
   </view>
 
   <view class="grid-2 section">
-    <view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">保费可用余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.premium_balance_total||0}}</text><text class="stat-sub">充值 ¥{{dashboard.premium_recharged_total||0}} · 销售保费 ¥{{dashboard.premium_consumed_total||0}}</text></view>
-    <view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">服务费可用余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.usage_available||0}}</text><text class="stat-sub">充值 ¥{{dashboard.usage_recharged||0}} · 已用 ¥{{dashboard.usage_consumed||0}}</text></view>
+    <view class="stat stat-tappable" data-account="premium" bindtap="goRecharge"><text class="stat-label">保费可用余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.premium_balance_total||0}}</text><text class="stat-sub">充值 ¥{{dashboard.premium_recharged_total||0}} · 销售保费 ¥{{dashboard.premium_consumed_total||0}}</text></view>
+    <view class="stat stat-tappable" data-account="usage" bindtap="goRecharge"><text class="stat-label">服务费可用余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.usage_available||0}}</text><text class="stat-sub">充值 ¥{{dashboard.usage_recharged||0}} · 已用 ¥{{dashboard.usage_consumed||0}}</text></view>
   </view>
 
   <view wx:if="{{dashboard.balance_alerts.length}}" class="section">
-    <view wx:for="{{dashboard.balance_alerts}}" wx:key="account" class="card notice notice-danger" data-url="/pages/billing/billing" bindtap="go">
+    <view wx:for="{{dashboard.balance_alerts}}" wx:key="account" class="card notice notice-danger" data-account="{{item.account}}" bindtap="goRecharge">
       <view class="row between"><text class="strong">账户余额预警</text><text class="tag tag-danger">{{item.days_left}} 天</text></view>
       <view class="list-meta">{{item.account==='premium'?'保费账户':'平台使用费账户'}}余额 ¥{{item.balance}}，请及时充值</view>
     </view>

@@ -121,6 +121,25 @@ Page({
     this.applyPositionSearch();
   },
   go(e) { wx.navigateTo({ url: e.currentTarget.dataset.url }); },
+  // 之前点"去充值"只会跳到资金账户总览页（/pages/billing/billing），还要
+  // 再点一次才进真正的充值页——直接跳 recharge-request，和 billing.js 里
+  // recharge() 的跳转参数保持一致。服务费账户是企业级唯一账户，不用带保司；
+  // 保费账户如果这家企业只挂了一个收款账户、且这个账户只对应一个保司名称，
+  // 顺手带上，充值页就不用用户自己再选一次；有多个账户/多个保司名称的情况
+  // 就不猜，交给充值页自己的保司选择器（recharge-request.js 已经支持不传
+  // insurer 时自己加载可选项）。
+  goRecharge(e) {
+    const accountType = e.currentTarget.dataset.account === 'premium' ? 'premium' : 'usage';
+    const enterpriseId = (this.data.enterprise && this.data.enterprise.id) || (app.globalData.user && app.globalData.user.enterprise_id) || 0;
+    let insurerParam = '';
+    if (accountType === 'premium') {
+      const accounts = this.data.dashboard.premium_accounts || [];
+      if (accounts.length === 1 && accounts[0].insurers && accounts[0].insurers.length === 1) {
+        insurerParam = `&insurer=${encodeURIComponent(accounts[0].insurers[0])}`;
+      }
+    }
+    wx.navigateTo({ url: `/pages/recharge-request/recharge-request?enterpriseId=${enterpriseId}&accountType=${accountType}${insurerParam}` });
+  },
   goPosition(e) {
     app.globalData.pendingEmployeesFilter = { status: '', position_id: Number(e.currentTarget.dataset.id) };
     wx.switchTab({ url: '/pages/employees/employees' });
