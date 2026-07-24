@@ -12,7 +12,9 @@ Page({
   onShow() {
     if (!app.globalData.token) { this.setData({ loading: false }); return; }
     Promise.all([app.loadProfile(), app.request('/dashboard', { silent: true }), app.request('/messages', { silent: true })]).then(([user, dashboard, messages]) => {
-      dashboard.premium_balance_total = (dashboard.premium_accounts || []).reduce((sum, item) => sum + (item.balance || 0), 0);
+      // 跟首页 home.js 同一份"可用余额"口径（充值 − 已消耗），不是原始充值总额
+      // balance——两处之前算法不一样，会看到两个页面数字对不上。
+      dashboard.premium_balance_total = (dashboard.premium_accounts || []).reduce((sum, item) => sum + (item.available != null ? item.available : (item.balance || 0)), 0);
       this.setData({ user, userInitial: String(user.name || '响').slice(0, 1), enterprise: app.globalData.enterprise || {}, dashboard, messageCount: messages.filter((item) => item.type !== 'success').length, loading: false });
       this.loadLinkedAccounts();
     }).catch(() => this.setData({ loading: false }));

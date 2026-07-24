@@ -41,6 +41,6 @@ export function getEnterpriseLedger(id: number) {
   return client.get<LedgerResponse>(`/enterprises/${id}/ledger`).then((r) => r.data)
 }
 
-export function applyEnterprise(data: { enterprise_name: string; credit_code?: string; contact: string; phone: string; username: string; password: string }) {
+export function applyEnterprise(data: { enterprise_name: string; credit_code?: string; contact: string; phone: string; username: string; password: string; website?: string }) {
   return client.post<{ message: string }>('/enterprises/apply', data).then((r) => r.data)
 }

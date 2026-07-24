@@ -9,9 +9,10 @@ from ..core.business_time import business_today
 from ..core.db import db
 from ..core.rbac import assert_enterprise_scope, require_role
 from ..core.security import current_user
-from ..models import Enterprise, InsurancePlan, Invoice, Policy, User
+from ..models import Enterprise, Invoice, Policy, User
 from ..schemas import InvoiceIn, InvoiceUpdate
 from ..services import amount, policy_dict, serialize, usage_person_days
+from ..services.insurer_scope import insurer_plan_ids
 
 router = APIRouter(prefix="/api", tags=["invoices"])
 
@@ -52,7 +53,7 @@ def invoices(user:User=Depends(current_user),session:Session=Depends(db)):
     elif user.role=='insurer':
         # Invoice 没有直接的 plan_id，通过该单位在本保司名下有保单来判定可见性——
         # 与"财务管理"结算范围保持同一颗粒度（按投保单位，不按单张发票挂钩具体保单）。
-        plan_ids=set(session.scalars(select(InsurancePlan.id).where(InsurancePlan.insurer_id==user.insurer_id)))
+        plan_ids=insurer_plan_ids(session,user.insurer_id)
         enterprise_ids={x.enterprise_id for x in session.scalars(select(Policy).where(Policy.plan_id.in_(plan_ids)))} if plan_ids else set()
         stmt=stmt.where(Invoice.enterprise_id.in_(enterprise_ids)) if enterprise_ids else stmt.where(Invoice.id.is_(None))
     elif user.role!='admin': raise HTTPException(403,'无权查看发票')

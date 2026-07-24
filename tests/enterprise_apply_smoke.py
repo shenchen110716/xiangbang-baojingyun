@@ -4,7 +4,10 @@ Covers the new POST /enterprises/apply flow end to end: a pending
 Enterprise + inactive owner User get created together, duplicate
 credit_code submissions are rejected, and approving the application
 (PATCH /enterprises/{id}/status?status=approved) activates the owner
-account so it can log in — while rejecting leaves it inactive.
+account so it can log in — while rejecting leaves it inactive. Also
+covers the anti-abuse additions: honeypot field and per-IP rate limit,
+since this endpoint is public/unauthenticated and now linked from the
+public marketing site.
 """
 import os
 import sys
@@ -12,6 +15,13 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
+class _FakeRequest:
+    """Minimal stand-in for fastapi.Request — only what apply_enterprise reads."""
+    def __init__(self, ip="127.0.0.1"):
+        self.headers = {}
+        self.client = type("Client", (), {"host": ip})()
 
 
 def run():
@@ -41,6 +51,7 @@ def run():
                     contact="王申请", phone="13700000001",
                     username="apply_owner", password="pass1234",
                 ),
+                _FakeRequest("10.0.0.1"),
                 session,
             )
             enterprise = session.scalar(select(Enterprise).where(Enterprise.name == "自助入驻测试单位"))
@@ -58,6 +69,7 @@ def run():
                         contact="李重复", phone="13700000002",
                         username="apply_owner_dup", password="pass1234",
                     ),
+                    _FakeRequest("10.0.0.2"),
                     session,
                 )
                 raise AssertionError("重复统一社会信用代码应该被拒绝，但没有抛出异常")
@@ -71,6 +83,7 @@ def run():
                         contact="", phone="13700000004",
                         username="apply_owner_missing", password="pass1234",
                     ),
+                    _FakeRequest("10.0.0.3"),
                     session,
                 )
                 raise AssertionError("联系人为空应该被拒绝，但没有抛出异常")
@@ -84,6 +97,7 @@ def run():
                         contact="孙重复账号", phone="13700000005",
                         username="apply_owner", password="pass1234",
                     ),
+                    _FakeRequest("10.0.0.4"),
                     session,
                 )
                 raise AssertionError("重复账号名应该被拒绝，但没有抛出异常")
@@ -109,6 +123,7 @@ def run():
                     contact="赵拒绝", phone="13700000003",
                     username="apply_owner_rejected", password="pass1234",
                 ),
+                _FakeRequest("10.0.0.5"),
                 session,
             )
             rejected_enterprise = session.scalar(select(Enterprise).where(Enterprise.name == "被拒单位"))
@@ -135,6 +150,59 @@ def run():
                 raise AssertionError("过短密码应该被 Pydantic 拒绝，但没有抛出异常")
             except ValidationError:
                 pass
+
+            # 蜜罐字段被填：假装成功，但不落库——机器人拿不到"被拒绝"的反馈信号。
+            before_count = len(list(session.scalars(select(Enterprise))))
+            result = apply_enterprise(
+                EnterpriseApplyIn(
+                    enterprise_name="蜜罐机器人单位", credit_code="91XBBZPHONEY",
+                    contact="机器人", phone="13700000099",
+                    username="honeypot_bot", password="pass1234",
+                    website="http://spam.example",
+                ),
+                _FakeRequest("10.0.0.6"),
+                session,
+            )
+            assert result == {"message": "提交成功，请等待审核"}, "蜜罐触发时应返回和正常成功一样的响应"
+            after_count = len(list(session.scalars(select(Enterprise))))
+            assert after_count == before_count, "蜜罐触发时不应该真的创建 Enterprise 记录"
+            assert session.scalar(select(User).where(User.username == "honeypot_bot")) is None, "蜜罐触发时不应该真的创建账号"
+
+            # 同一 IP 短时间内超过限流阈值应该被拒绝，不同 IP 之间互不影响。
+            rate_limit_ip = "10.0.0.200"
+            for i in range(5):
+                apply_enterprise(
+                    EnterpriseApplyIn(
+                        enterprise_name=f"限流测试单位{i}", credit_code=f"91XBBZPRATE{i}",
+                        contact="限流测试", phone="13700000100",
+                        username=f"rate_owner_{i}", password="pass1234",
+                    ),
+                    _FakeRequest(rate_limit_ip),
+                    session,
+                )
+            try:
+                apply_enterprise(
+                    EnterpriseApplyIn(
+                        enterprise_name="限流测试单位超限", credit_code="91XBBZPRATEX",
+                        contact="限流测试", phone="13700000101",
+                        username="rate_owner_over", password="pass1234",
+                    ),
+                    _FakeRequest(rate_limit_ip),
+                    session,
+                )
+                raise AssertionError("超过限流阈值应该被拒绝，但没有抛出异常")
+            except HTTPException as e:
+                assert e.status_code == 429, f"超过限流阈值应返回 429，实际 {e.status_code}"
+            # 换一个 IP 立刻可以正常提交，证明限流是按 IP 隔离的，不是全局共享一个计数器。
+            apply_enterprise(
+                EnterpriseApplyIn(
+                    enterprise_name="换IP不受限单位", credit_code="91XBBZPRATEY",
+                    contact="限流测试", phone="13700000102",
+                    username="rate_owner_other_ip", password="pass1234",
+                ),
+                _FakeRequest("10.0.0.201"),
+                session,
+            )
 
     print("enterprise apply smoke test: PASS")
 

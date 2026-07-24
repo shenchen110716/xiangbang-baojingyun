@@ -35,7 +35,7 @@
   <view wx:if="{{!selectMode}}" style="height:300rpx"></view>
   <view wx:if="{{!selectMode}}" class="float-actions">
     <button class="float-btn float-btn-primary" bindtap="add">＋</button>
-    <button class="float-btn float-btn-secondary" data-mode="stopped" bindtap="startSelect">－</button>
+    <button class="float-btn float-btn-secondary" bindtap="startSelect">－</button>
   </view>
   <view wx:if="{{selectMode}}" style="height:220rpx"></view>
   <view wx:if="{{selectMode}}" class="select-bar">
