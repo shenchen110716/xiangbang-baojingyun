@@ -39,7 +39,7 @@ class OrgService implements OrgApi {
         Organization org = orgs.findById(orgId).orElseThrow(() -> new IllegalArgumentException("组织不存在"));
         org.approve();
         orgs.save(org);
-        events.publishEvent(new OrganizationApproved(orgId, Instant.now()));
+        events.publishEvent(new OrganizationApproved(orgId, org.getLegalRepUserId(), Instant.now()));
     }
 
     @Override
