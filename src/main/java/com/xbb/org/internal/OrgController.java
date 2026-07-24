@@ -48,13 +48,5 @@ class OrgController {
         return ResponseEntity.noContent().build();
     }
 
-    @ExceptionHandler(IllegalStateException.class)
-    ResponseEntity<Map<String, String>> conflict(IllegalStateException e) {
-        return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
-    }
-
-    @ExceptionHandler(IllegalArgumentException.class)
-    ResponseEntity<Map<String, String>> badRequest(IllegalArgumentException e) {
-        return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-    }
+    // 400/409/乐观锁冲突等错误映射统一收在 com.xbb.web.GlobalExceptionHandler
 }

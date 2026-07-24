@@ -34,6 +34,11 @@ public class Organization {
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
+    // 乐观锁:并发 approve/reject 撞同一行时,后提交的会抛 OptimisticLockException
+    // 而不是静默覆盖并各自发布矛盾的事件(见审计报告 TOCTOU 发现)。
+    @Version
+    private long version;
+
     protected Organization() { }
 
     public Organization(Type type, String name, String creditCode, long legalRepUserId) {

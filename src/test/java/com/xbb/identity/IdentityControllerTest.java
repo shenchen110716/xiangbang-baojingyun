@@ -13,6 +13,12 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -77,6 +83,59 @@ class IdentityControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"realName\":\"张三\",\"idNumber\":\"110101199001017777\"}"))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void 并发绑定同一身份证只有一个成功另一个不是裸500() throws Exception {
+        String tokenA = tokenFor("13700000004");
+        String tokenB = tokenFor("13700000005");
+        String sharedIdNumber = "110101199001018888";
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch go = new CountDownLatch(1);
+        List<Integer> statuses = Collections.synchronizedList(new ArrayList<>());
+
+        Runnable taskA = () -> verifyRealNameAsync(tokenA, "甲", sharedIdNumber, ready, go, statuses);
+        Runnable taskB = () -> verifyRealNameAsync(tokenB, "乙", sharedIdNumber, ready, go, statuses);
+
+        Thread t1 = new Thread(taskA);
+        Thread t2 = new Thread(taskB);
+        t1.start();
+        t2.start();
+        ready.await();
+        go.countDown();
+        t1.join();
+        t2.join();
+
+        // 铁律:不能出现"两个都绑上了"或者"任何一个是裸 500(即不在 {204,409} 里)"
+        assertThat(statuses).hasSize(2);
+        assertThat(statuses).allMatch(s -> s == 204 || s == 409);
+        assertThat(statuses).filteredOn(s -> s == 204).hasSize(1);
+    }
+
+    private void verifyRealNameAsync(String token, String realName, String idNumber,
+                                      CountDownLatch ready, CountDownLatch go, List<Integer> statuses) {
+        ready.countDown();
+        try {
+            go.await();
+            int status = mvc.perform(put("/api/identity/real-name")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"realName\":\"%s\",\"idNumber\":\"%s\"}".formatted(realName, idNumber)))
+                    .andReturn().getResponse().getStatus();
+            statuses.add(status);
+        } catch (Exception e) {
+            statuses.add(-1);
+        }
+    }
+
+    private String tokenFor(String phone) throws Exception {
+        String code = codeFor(phone);
+        String loginBody = mvc.perform(post("/api/identity/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"%s\",\"code\":\"%s\"}".formatted(phone, code)))
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(loginBody).get("token").asText();
     }
 
     private String codeFor(String phone) throws Exception {

@@ -24,14 +24,20 @@ public class VerificationCodeService {
     }
 
     public boolean verify(String phone, String code) {
-        Entry e = store.get(phone);
-        if (e == null || Instant.now().isAfter(e.expiresAt())) {
-            return false;
-        }
-        boolean ok = e.code().equals(code);
-        if (ok) {
-            store.remove(phone);
-        }
-        return ok;
+        // compute() 对同一个 key 是原子的(ConcurrentHashMap 内部按桶加锁)——
+        // 用一次原子操作把"读取+判断+消费"合成一步,避免两个并发请求都读到
+        // 同一个未消费的验证码、都通过校验(审计报告发现的竞态)。
+        boolean[] matched = { false };
+        store.compute(phone, (key, e) -> {
+            if (e == null || Instant.now().isAfter(e.expiresAt())) {
+                return e;
+            }
+            if (e.code().equals(code)) {
+                matched[0] = true;
+                return null; // 消费掉,后来者(哪怕验证码字符串相同)拿到的都是 null
+            }
+            return e;
+        });
+        return matched[0];
     }
 }
