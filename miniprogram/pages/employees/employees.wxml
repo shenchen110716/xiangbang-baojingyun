@@ -1,5 +1,5 @@
 <view class="page safe-bottom">
-  <view class="header-bar row between">
+  <view wx:if="{{!selectMode || positionId}}" class="header-bar row between">
     <text wx:if="{{positionId}}" class="link-btn grow" bindtap="clearPositionFilter">{{positionName||'该岗位'}} · 查看全部员工 →</text>
     <view wx:else class="grow"></view>
     <view wx:if="{{!selectMode}}" class="row" style="flex:none">
@@ -26,6 +26,10 @@
     </view>
   </view>
   <view wx:if="{{!loading&&!filtered.length}}" class="empty"><view class="empty-icon">☷</view><view>暂无符合条件的员工</view><view class="small link-btn" bindtap="importFile">可以手工新增或批量导入</view></view>
+  <!-- select-bar 是 position:fixed 悬浮在底部的，不占文档流空间，不留个
+       占位高度的话它会挡住列表最后几条，还可能因为页面内容"看起来"刚好
+       撑满一屏而滚不动。 -->
+  <view wx:if="{{selectMode}}" style="height:320rpx"></view>
   <view wx:if="{{selectMode}}" class="select-bar">
     <view class="row between" style="margin-bottom:20rpx">
       <text class="strong">批量停保</text>
