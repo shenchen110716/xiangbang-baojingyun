@@ -3,6 +3,7 @@
     <text class="link-btn grow" bindtap="clearPositionFilter">{{positionName||'该岗位'}} · 查看全部员工 →</text>
   </view>
   <view class="search"><input class="input" placeholder="姓名、身份证、手机号或岗位" bindinput="search" /></view>
+  <view class="row" style="justify-content:flex-end;margin:-8rpx 0 12rpx"><text class="link-btn" bindtap="exportList">导出 {{filtered.length}} 条 ⇩</text></view>
   <scroll-view class="chips" scroll-x enhanced show-scrollbar="{{false}}">
     <view wx:for="{{statusChips}}" wx:key="value" class="chip {{status===item.value?'active':''}}" data-value="{{item.value}}" bindtap="chooseStatus">{{item.label}}({{item.count}})</view>
   </scroll-view>

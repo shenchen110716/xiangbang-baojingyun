@@ -101,6 +101,15 @@ Page({
     this.setData({ filtered, statusChips: this.buildStatusChips() });
   },
   clearPositionFilter() { this.setData({ positionId: 0, positionName: '' }); this.applyFilter(); },
+  // 导出的是当前筛选结果（搜索关键字 + 状态 chip + 岗位范围都已经在
+  // filtered 里体现），把这批人的 id 传给后端，导出内容就和屏幕上看到的
+  // 保持一致，不用在后端重新实现一遍这几个筛选条件。
+  exportList() {
+    if (!this.requireLogin()) return;
+    if (!this.data.filtered.length) { wx.showToast({ title: '没有可导出的记录', icon: 'none' }); return; }
+    const ids = this.data.filtered.map((item) => item.id).join(',');
+    app.downloadAndOpen(`/insured/export?ids=${ids}`, { filename: '参保员工导出.xlsx', fileType: 'xlsx', loadingTitle: '正在导出' }).catch(() => {});
+  },
   add() {
     if (!this.requireLogin()) return;
     const url = this.data.positionId ? `/pages/employee-edit/employee-edit?positionId=${this.data.positionId}` : '/pages/employee-edit/employee-edit';

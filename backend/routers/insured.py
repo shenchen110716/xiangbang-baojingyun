@@ -10,7 +10,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..core.audit import audit
-from ..core.business_time import as_business_time
+from ..core.business_time import as_business_time, business_now
 from ..core.db import db
 from ..core.business_time import business_today
 from ..core.id_number import age_on, birth_date_from_id, is_valid_id_number
@@ -101,6 +101,47 @@ def insured(q: str = "", user: User = Depends(current_user), session: Session = 
         item.update(enterprise_name=enterprise.name if enterprise else '',position_name=position.name if position else x.occupation,actual_employer_name=employer.name if employer else (position.actual_employer if position else ''),policy_id=policy_id,plan_id=plan.id if plan else None,plan_name=plan.name if plan else '',insurer=plan.insurer if plan else '',policy_no=policy.policy_no if policy else '',policy_status=policy.status if policy else '',effective_mode=plan.effective_mode if plan else '',billing_mode=plan.billing_mode if plan else '',**(pricing_snapshot(plan,relation,plan_price_for_class(session,plan,x.occupation_class)) if plan else {}))
         result.append(strip_internal_pricing(item,user))
     return result
+
+@router.get("/insured/export")
+def insured_export(ids: str = Query(..., description="逗号分隔的参保员工 id"), user: User = Depends(current_user), session: Session = Depends(db)):
+    # 小程序/网页端筛选（搜索关键字 + 状态 chip + 岗位）都是在已经拿到的
+    # /insured 全量列表上本地过滤的，不是每次筛选都单独打接口——所以导出
+    # 直接收当前筛选结果的 id 列表，而不是重新收 q/status/position_id 在
+    # 后端再筛一遍一份。这样导出内容和屏幕上看到的永远一致，不用在两处
+    # 分别维护"待生效 = pending 状态 + 已通过但 effective_at 还没到"这类
+    # 判断逻辑，也不会因为两边筛选口径漂移而导出和列表对不上。
+    id_list = sorted({int(x) for x in ids.split(',') if x.strip().isdigit()})
+    if not id_list: raise HTTPException(400, "请提供要导出的员工 id")
+    stmt = select(InsuredPerson).where(InsuredPerson.id.in_(id_list)).order_by(InsuredPerson.id.asc())
+    if user.role=='enterprise' and user.enterprise_id:
+        stmt=stmt.where(InsuredPerson.enterprise_id==user.enterprise_id)
+        allowed=allowed_employer_ids(session,user)
+        if allowed is not None:
+            stmt=stmt.join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(WorkPosition.actual_employer_id.in_(allowed))
+    elif user.role!='admin': raise HTTPException(403,'无权导出参保员工')
+    book=openpyxl.Workbook();sheet=book.active;sheet.title='参保员工'
+    sheet.append(['姓名','身份证号','手机号','状态','投保单位','实际用工单位','岗位','保险公司','保险方案','生效时间','停保时间'])
+    status_label={'pending':'待生效','active':'在保','stopped':'已停保'}
+    for x in session.scalars(stmt):
+        item=_person_payload(session,x)
+        # 和小程序 employees.js 的 isPendingEffective() 同一条判断：已通过
+        # （active）但 effective_at 还没到的人也算"待生效"，不能只看
+        # status==='pending'，不然导出的状态列会和列表页面对不上。
+        pending_bucket = item['status']=='pending' or (item['status']=='active' and item['effective_at'] and as_business_time(item['effective_at']) > business_now())
+        status_display = 'pending' if pending_bucket else item['status']
+        position=session.get(WorkPosition,x.position_id) if x.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None;enterprise=session.get(Enterprise,x.enterprise_id);plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None
+        sheet.append([
+            x.name, x.id_number, x.phone or '', status_label.get(status_display, status_display),
+            enterprise.name if enterprise else '', employer.name if employer else (position.actual_employer if position else ''), position.name if position else x.occupation,
+            plan.insurer if plan else '', plan.name if plan else '',
+            item['effective_at'].strftime('%Y-%m-%d %H:%M') if item['effective_at'] else '',
+            item['terminated_at'].strftime('%Y-%m-%d %H:%M') if item['terminated_at'] else '',
+        ])
+    for row_number in range(2, sheet.max_row+1): sheet.cell(row_number, 2).number_format='@'
+    for column in sheet.columns: sheet.column_dimensions[column[0].column_letter].width=min(32,max(10,max(len(str(cell.value or '')) for cell in column)+2))
+    output=io.BytesIO();book.save(output);output.seek(0)
+    audit(session, user, "export", "insured_person", ",".join(str(i) for i in id_list))
+    return StreamingResponse(output,media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':'attachment; filename=insured-export.xlsx'})
 
 @router.post("/insured")
 def add_person(data: PersonIn, user: User = Depends(current_user), session: Session = Depends(db)):
