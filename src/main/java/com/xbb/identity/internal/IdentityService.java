@@ -3,6 +3,7 @@ package com.xbb.identity.internal;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.identity.api.UserRegistered;
 import com.xbb.identity.api.UserVerified;
+import com.xbb.security.JwtService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -65,6 +66,9 @@ class IdentityService implements IdentityApi {
         }
         User u = users.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        if (u.isVerified()) {
+            throw new IllegalStateException("用户已完成实名认证,不可重复认证");
+        }
         u.verify(realName, idNumber);
         users.save(u);
         events.publishEvent(new UserVerified(userId, realName, Instant.now()));

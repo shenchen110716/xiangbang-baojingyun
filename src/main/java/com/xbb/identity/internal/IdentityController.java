@@ -1,8 +1,10 @@
 package com.xbb.identity.internal;
 
 import com.xbb.identity.api.IdentityApi;
+import com.xbb.security.AuthenticatedUser;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -21,7 +23,7 @@ class IdentityController {
 
     record PhoneRequest(@NotBlank String phone) { }
     record LoginRequest(@NotBlank String phone, @NotBlank String code) { }
-    record RealNameRequest(long userId, @NotBlank String realName, @NotBlank String idNumber) { }
+    record RealNameRequest(@NotBlank String realName, @NotBlank String idNumber) { }
 
     @PostMapping("/code")
     ResponseEntity<Map<String, String>> requestCode(@RequestBody PhoneRequest req) {
@@ -35,8 +37,9 @@ class IdentityController {
     }
 
     @PutMapping("/real-name")
-    ResponseEntity<Void> verify(@RequestBody RealNameRequest req) {
-        identityApi.verifyRealName(req.userId(), req.realName(), req.idNumber());
+    ResponseEntity<Void> verify(@AuthenticationPrincipal AuthenticatedUser caller, @RequestBody RealNameRequest req) {
+        // userId 来自校验过的 JWT,不信任请求体——否则任何人都能实名认证别人的账号(IDOR)
+        identityApi.verifyRealName(caller.userId(), req.realName(), req.idNumber());
         return ResponseEntity.noContent().build();
     }
 

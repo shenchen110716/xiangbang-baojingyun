@@ -1,6 +1,7 @@
 package com.xbb.identity.internal;
 
 import com.xbb.FlywayProps;
+import com.zaxxer.hikari.HikariDataSource;
 import org.flywaydb.core.Flyway;
 import org.springframework.boot.autoconfigure.flyway.FlywayMigrationInitializer;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
@@ -32,7 +33,14 @@ public class IdentityJpaConfig {
 
     @Bean
     DataSource identityDataSource() {
-        return identityDataSourceProperties().initializeDataSourceBuilder().build();
+        // 池子调小:测试里每个不同 @Import 组合的 @SpringBootTest 类都会被 Spring
+        // 测试上下文缓存成独立的 ApplicationContext,各自常驻一份连接池;默认
+        // 10 个连接 × 2 个域 × 好几个缓存的上下文,很容易把 Testcontainers 里
+        // postgres:16-alpine 的 max_connections 打满(实测触发过)。
+        HikariDataSource ds = identityDataSourceProperties()
+                .initializeDataSourceBuilder().type(HikariDataSource.class).build();
+        ds.setMaximumPoolSize(3);
+        return ds;
     }
 
     @Bean

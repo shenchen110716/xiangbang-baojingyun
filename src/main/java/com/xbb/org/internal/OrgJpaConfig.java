@@ -1,6 +1,7 @@
 package com.xbb.org.internal;
 
 import com.xbb.FlywayProps;
+import com.zaxxer.hikari.HikariDataSource;
 import org.flywaydb.core.Flyway;
 import org.springframework.boot.autoconfigure.flyway.FlywayMigrationInitializer;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
@@ -32,7 +33,10 @@ public class OrgJpaConfig {
 
     @Bean
     DataSource orgDataSource() {
-        return orgDataSourceProperties().initializeDataSourceBuilder().build();
+        HikariDataSource ds = orgDataSourceProperties()
+                .initializeDataSourceBuilder().type(HikariDataSource.class).build();
+        ds.setMaximumPoolSize(3);
+        return ds;
     }
 
     @Bean

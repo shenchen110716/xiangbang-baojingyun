@@ -1,9 +1,11 @@
 package com.xbb.org.internal;
 
 import com.xbb.org.api.OrgApi;
+import com.xbb.security.AuthenticatedUser;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -19,11 +21,13 @@ class OrgController {
     }
 
     record SubmitRequest(@NotNull Organization.Type type, @NotBlank String name,
-                          @NotBlank String creditCode, long legalRepUserId) { }
+                          @NotBlank String creditCode) { }
 
     @PostMapping
-    ResponseEntity<Map<String, Long>> submit(@RequestBody SubmitRequest req) {
-        long id = orgApi.submit(req.type(), req.name(), req.creditCode(), req.legalRepUserId());
+    ResponseEntity<Map<String, Long>> submit(@AuthenticationPrincipal AuthenticatedUser caller,
+                                              @RequestBody SubmitRequest req) {
+        // 法人代表 = 调用者本人(来自 JWT),不信任请求体——否则任何人都能代别人提交入驻
+        long id = orgApi.submit(req.type(), req.name(), req.creditCode(), caller.userId());
         return ResponseEntity.ok(Map.of("id", id));
     }
 

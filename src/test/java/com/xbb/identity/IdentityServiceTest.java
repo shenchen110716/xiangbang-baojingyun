@@ -4,15 +4,21 @@ import com.xbb.TestcontainersConfig;
 import com.xbb.identity.api.IdentityApi;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.modulith.test.ApplicationModuleTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@ApplicationModuleTest
+/**
+ * 用普通 @SpringBootTest 而不是 @ApplicationModuleTest——identity 服务现在
+ * 依赖 com.xbb.security 模块的 JwtService,STANDALONE 模式的模块切片不会把
+ * 依赖模块的 bean 扫进来(同 Plan2 里 ALL_DEPENDENCIES 不扫 identity.internal
+ * 的坑是一回事),整个项目已经统一改用全量上下文启动的测试方式。
+ */
+@SpringBootTest
 @Import({TestcontainersConfig.class, TestCodeAccessor.class})
 class IdentityServiceTest {
 
