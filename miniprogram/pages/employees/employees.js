@@ -100,7 +100,11 @@ Page({
   startSelect(e) {
     const mode = e.currentTarget.dataset.mode;
     const stopDate = new Date(); stopDate.setDate(stopDate.getDate() + 1);
-    this.setData({ selectMode: mode, selectedIds: [], stopDate: stopDate.toISOString().slice(0, 10) });
+    // 停保只对"在保"的人有意义，进勾选模式时把状态筛选默认切到"在保"，
+    // 列表直接收窄成可选范围，不用用户自己再点一次筛选 chip。
+    const status = mode === 'stopped' ? 'active' : this.data.status;
+    this.setData({ selectMode: mode, selectedIds: [], stopDate: stopDate.toISOString().slice(0, 10), status });
+    this.applyFilter();
   },
   cancelSelect() { this.setData({ selectMode: '', selectedIds: [] }); },
   toggleSelect(e) {
