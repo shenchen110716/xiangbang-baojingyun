@@ -23,7 +23,6 @@
     <view class="stat stat-tappable" data-status="pending" bindtap="goEmployees"><text class="stat-label">待生效 <text class="stat-go">查看 ›</text></text><text class="stat-value">{{dashboard.pending_people||0}}<text class="stat-unit">人</text></text></view>
     <view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">保费可用余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.premium_balance_total||0}}</text><text class="stat-sub">充值 ¥{{dashboard.premium_recharged_total||0}} · 销售保费 ¥{{dashboard.premium_consumed_total||0}}</text></view>
     <view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">服务费可用余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.usage_available||0}}</text><text class="stat-sub">充值 ¥{{dashboard.usage_recharged||0}} · 已用 ¥{{dashboard.usage_consumed||0}}</text></view>
-    <view class="stat stat-tappable" bindtap="goClaims"><text class="stat-label">理赔处理中 <text class="stat-go">查看 ›</text></text><text class="stat-value">{{dashboard.claims_open||0}}<text class="stat-unit">件</text></text></view>
   </view>
 
   <view wx:if="{{dashboard.balance_alerts.length}}" class="section">

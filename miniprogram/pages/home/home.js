@@ -81,9 +81,6 @@ Page({
     app.globalData.pendingEmployeesFilter = { status, position_id: 0 };
     wx.switchTab({ url: '/pages/employees/employees' });
   },
-  goClaims() {
-    wx.switchTab({ url: '/pages/claims/claims' });
-  },
   goPosition(e) {
     app.globalData.pendingEmployeesFilter = { status: '', position_id: Number(e.currentTarget.dataset.id) };
     wx.switchTab({ url: '/pages/employees/employees' });
