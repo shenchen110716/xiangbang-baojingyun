@@ -21,15 +21,18 @@ Page({
     positionIndex: 0,
     selectedPosition: null,
     saving: false,
-    ocrLoading: false,
     idNumberInvalid: false,
     loading: true,
     // 连续添加：第一次新增成功后归属信息（投保单位/实际用工单位/岗位）锁定，
     // 不返回列表页，可以连续手工填写或连续拍照 OCR 添加，直到点"完成"。
     locked: false,
     addedCount: 0,
-    // 批量添加：一次选多张身份证照片，逐张 OCR 后堆到这个待确认列表里，人工
-    // 核对/改错后一次性批量提交，比一张一张拍-核对-提交（连续添加那套）快。
+    // 新增模式只在 !id 时出现三个入口：手工添加/拍照添加/批量导入。批量导入
+    // 是完全独立的另一个页面（自己管投保单位/岗位选择，不依赖这里的 form），
+    // 点它直接跳转，不算这里的一种"模式"；手工/拍照才是本页内切换显示区域。
+    addMode: 'manual',
+    // 拍照添加：一次选多张身份证照片（最多 9 张），逐张 OCR 后堆到这个待确认
+    // 列表里，人工核对/改错后一次性批量提交，取代了之前的单张拍照识别。
     batchItems: [],
     batchScanning: false,
     batchSubmitting: false,
@@ -108,34 +111,13 @@ Page({
     for (let i = 0; i < 17; i++) total += Number(v[i]) * weights[i];
     return checkCodes[total % 11] === v[17];
   },
-  // 7.18-4：拍身份证正面照 → 后端 OCR → 自动填充姓名/身份证号（识别结果需人工核对）。
-  scanIdCard() {
-    if (this.data.ocrLoading) return;
-    wx.chooseMedia({
-      count: 1, mediaType: ['image'], sourceType: ['camera', 'album'], sizeType: ['compressed'],
-      success: (res) => {
-        const filePath = res.tempFiles[0].tempFilePath;
-        this.setData({ ocrLoading: true });
-        wx.uploadFile({
-          url: `${app.globalData.apiBase}/ocr/id-card`,
-          filePath, name: 'file',
-          header: { Authorization: `Bearer ${app.globalData.token}` },
-          success: (up) => {
-            let data = {};
-            try { data = JSON.parse(up.data || '{}'); } catch (e) { data = {}; }
-            if (up.statusCode !== 200) {
-              wx.showToast({ title: data.detail || '识别失败', icon: 'none' });
-              return;
-            }
-            const idNumber = data.id_number || this.data.form.id_number;
-            this.setData({ 'form.name': data.name || this.data.form.name, 'form.id_number': idNumber, idNumberInvalid: !!idNumber && !this.isValidIdNumber(idNumber) });
-            wx.showToast({ title: data.mock ? '模拟识别，请核对' : '识别成功，请核对', icon: 'none', duration: 2200 });
-          },
-          fail: () => wx.showToast({ title: '上传失败，请重试', icon: 'none' }),
-          complete: () => this.setData({ ocrLoading: false })
-        });
-      }
-    });
+  // 三个新增入口的切换：手工/拍照是本页内两块区域的显示切换；批量导入是完全
+  // 独立的另一个页面，直接跳转，不停留在这个 tab 上（不然用户会以为点错了，
+  // 页面看起来没反应）。
+  setAddMode(e) {
+    const mode = e.currentTarget.dataset.mode;
+    if (mode === 'import') { wx.navigateTo({ url: '/pages/import/import' }); return; }
+    this.setData({ addMode: mode });
   },
   // 一次选多张身份证照片，逐张调用同一个 OCR 接口，识别结果堆进 batchItems
   // 待人工核对/改错，不直接写进 form/提交——姓名或身份证号识别错了，先在这

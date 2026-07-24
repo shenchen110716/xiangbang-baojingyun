@@ -7,56 +7,65 @@
     <label class="field"><view class="field-label required">实际用工单位</view><picker disabled="{{locked}}" range="{{employers}}" range-key="name" value="{{employerIndex}}" bindchange="employerChange"><view class="picker">{{employers[employerIndex].name||'请先选择投保单位'}}</view></picker></label>
     <label class="field"><view class="field-label required">已审核岗位</view><picker disabled="{{locked}}" range="{{positions}}" range-key="name" value="{{positionIndex}}" bindchange="positionChange"><view class="picker">{{positions[positionIndex].name||'该用工单位暂无可用岗位'}}</view></picker></label>
     <view wx:if="{{locked}}" class="card-plain" style="background:#fff8ec;margin-top:16rpx">
-      <text class="small">归属信息已锁定（本次共添加 {{addedCount}} 人），继续填写或拍照识别添加下一人，或点下方"完成"结束</text>
+      <text class="small">归属信息已锁定（本次共添加 {{addedCount}} 人），继续手工填写或拍照添加下一人，或点下方"完成"结束</text>
     </view>
     <view wx:if="{{selectedPosition}}" class="card-plain" style="background:#f4f7ff">
       <view class="row between"><text class="strong">{{selectedPosition.actual_employer_name}}</text><text class="tag tag-success">{{selectedPosition.occupation_class}}</text></view>
       <view class="list-meta">岗位：{{selectedPosition.name}}｜审核状态：已通过</view>
     </view>
-    <button class="secondary ocr-btn" style="margin-top:24rpx" bindtap="scanIdCard" loading="{{ocrLoading}}" disabled="{{ocrLoading}}">
-      📷 拍身份证自动识别
-    </button>
-    <view class="ocr-hint">拍摄或选择身份证正面照，自动填充姓名与身份证号，请核对后再提交</view>
-    <button wx:if="{{!id}}" class="secondary ocr-btn" style="margin-top:16rpx" bindtap="batchScan" loading="{{batchScanning}}" disabled="{{batchScanning}}">
-      🗂 批量添加（一次拍多张身份证）
-    </button>
-    <view wx:if="{{!id && batchItems.length}}" class="card-plain" style="background:#f4f7ff;margin-top:16rpx">
-      <view class="row between"><text class="strong">待确认 {{batchItems.length}} 人</text><text class="link-btn" bindtap="batchClear">清空</text></view>
-      <view wx:for="{{batchItems}}" wx:for-item="row" wx:key="key" class="card" style="margin-top:16rpx;padding:20rpx">
-        <view class="row between">
-          <input class="input" style="margin-right:12rpx" value="{{row.name}}" placeholder="姓名" data-index="{{index}}" data-key="name" bindinput="batchInput" />
-          <text class="link-btn" data-index="{{index}}" bindtap="batchRemove">删除</text>
+
+    <view wx:if="{{!id}}" class="row" style="gap:16rpx;margin-top:24rpx">
+      <view class="chip {{addMode==='manual'?'active':''}}" data-mode="manual" bindtap="setAddMode">手工添加</view>
+      <view class="chip {{addMode==='photo'?'active':''}}" data-mode="photo" bindtap="setAddMode">拍照添加</view>
+      <view class="chip" data-mode="import" bindtap="setAddMode">批量导入</view>
+    </view>
+
+    <view wx:if="{{!id && addMode==='photo'}}" style="margin-top:16rpx">
+      <button class="secondary ocr-btn" bindtap="batchScan" loading="{{batchScanning}}" disabled="{{batchScanning}}">
+        📷 拍身份证照片（最多 9 张）
+      </button>
+      <view class="ocr-hint">拍摄或选择身份证正面照，自动填充姓名与身份证号，请核对后再提交</view>
+      <view wx:if="{{batchItems.length}}" class="card-plain" style="background:#f4f7ff;margin-top:16rpx">
+        <view class="row between"><text class="strong">待确认 {{batchItems.length}} 人</text><text class="link-btn" bindtap="batchClear">清空</text></view>
+        <view wx:for="{{batchItems}}" wx:for-item="row" wx:key="key" class="card" style="margin-top:16rpx;padding:20rpx">
+          <view class="row between">
+            <input class="input" style="margin-right:12rpx" value="{{row.name}}" placeholder="姓名" data-index="{{index}}" data-key="name" bindinput="batchInput" />
+            <text class="link-btn" data-index="{{index}}" bindtap="batchRemove">删除</text>
+          </view>
+          <input class="input {{row.invalid?'input-invalid':''}}" style="margin-top:12rpx" value="{{row.id_number}}" placeholder="身份证号" data-index="{{index}}" data-key="id_number" bindinput="batchInput" />
+          <view wx:if="{{row.invalid}}" class="small" style="color:#dc2626;margin-top:8rpx">身份证号校验位不正确，可能识别错了，请核对</view>
         </view>
-        <input class="input {{row.invalid?'input-invalid':''}}" style="margin-top:12rpx" value="{{row.id_number}}" placeholder="身份证号" data-index="{{index}}" data-key="id_number" bindinput="batchInput" />
-        <view wx:if="{{row.invalid}}" class="small" style="color:#dc2626;margin-top:8rpx">身份证号校验位不正确，可能识别错了，请核对</view>
+        <button class="primary" style="margin-top:20rpx" loading="{{batchSubmitting}}" disabled="{{batchSubmitting}}" bindtap="submitBatch">确认提交 {{batchItems.length}} 人</button>
       </view>
-      <button class="primary" style="margin-top:20rpx" loading="{{batchSubmitting}}" disabled="{{batchSubmitting}}" bindtap="submitBatch">确认提交 {{batchItems.length}} 人</button>
     </view>
-    <label class="field"><view class="field-label required">被保险人姓名</view><input class="input" value="{{form.name}}" placeholder="请输入真实姓名" data-key="name" bindinput="input" /></label>
-    <label class="field"><view class="field-label required">身份证号</view><input class="input {{idNumberInvalid?'input-invalid':''}}" value="{{form.id_number}}" placeholder="请输入身份证号" data-key="id_number" bindinput="input" /><view wx:if="{{idNumberInvalid}}" class="small" style="color:#dc2626;margin-top:8rpx">身份证号校验位不正确，可能拍错/打错了，请核对</view></label>
-    <label class="field"><view class="field-label">手机号</view><input class="input" type="number" maxlength="11" value="{{form.phone}}" placeholder="用于保单和理赔通知" data-key="phone" bindinput="input" /></label>
-    <view wx:if="{{!id && isDailyBilling}}" class="field">
-      <view class="field-label">日结方式</view>
-      <view class="row" style="gap:20rpx">
-        <view class="chip {{dailyMode==='temporary'?'active':''}}" data-value="temporary" bindtap="dailyModeChange">临时日结（即时生效）</view>
-        <view class="chip {{dailyMode==='custom'?'active':''}}" data-value="custom" bindtap="dailyModeChange">自定义日结</view>
+
+    <view wx:if="{{id || addMode==='manual'}}">
+      <label class="field" style="margin-top:16rpx"><view class="field-label required">被保险人姓名</view><input class="input" value="{{form.name}}" placeholder="请输入真实姓名" data-key="name" bindinput="input" /></label>
+      <label class="field"><view class="field-label required">身份证号</view><input class="input {{idNumberInvalid?'input-invalid':''}}" value="{{form.id_number}}" placeholder="请输入身份证号" data-key="id_number" bindinput="input" /><view wx:if="{{idNumberInvalid}}" class="small" style="color:#dc2626;margin-top:8rpx">身份证号校验位不正确，请核对</view></label>
+      <label class="field"><view class="field-label">手机号</view><input class="input" type="number" maxlength="11" value="{{form.phone}}" placeholder="用于保单和理赔通知" data-key="phone" bindinput="input" /></label>
+      <view wx:if="{{!id && isDailyBilling}}" class="field">
+        <view class="field-label">日结方式</view>
+        <view class="row" style="gap:20rpx">
+          <view class="chip {{dailyMode==='temporary'?'active':''}}" data-value="temporary" bindtap="dailyModeChange">临时日结（即时生效）</view>
+          <view class="chip {{dailyMode==='custom'?'active':''}}" data-value="custom" bindtap="dailyModeChange">自定义日结</view>
+        </view>
+        <view class="list-meta">临时日结 24 小时后自动到期，无需再手动停保</view>
       </view>
-      <view class="list-meta">临时日结 24 小时后自动到期，无需再手动停保</view>
+      <label wx:if="{{id || !isDailyBilling || dailyMode==='custom'}}" class="field">
+        <view class="field-label">生效时间</view>
+        <picker mode="date" value="{{form.effective_at}}" data-key="effective_at" bindchange="dateChange"><view class="picker">{{form.effective_at||'不填则不修改'}}</view></picker>
+        <picker wx:if="{{form.effective_at}}" mode="time" value="{{effectiveTime}}" data-key="effectiveTime" bindchange="timeChange"><view class="picker" style="margin-top:12rpx">时间 {{effectiveTime}}</view></picker>
+        <view class="list-meta">{{effectiveRuleText}}；系统会自动校验</view>
+      </label>
+      <view wx:elif="{{!id && isDailyBilling && dailyMode==='temporary'}}" class="list-meta" style="margin-top:8rpx">临时日结不支持自定义生效时间，参保后立即生效，24 小时后自动停保</view>
+      <label wx:if="{{id || !isDailyBilling || dailyMode==='custom'}}" class="field">
+        <view class="field-label">停保时间</view>
+        <picker mode="date" value="{{form.terminated_at}}" data-key="terminated_at" bindchange="dateChange"><view class="picker">{{form.terminated_at||'不填则不修改'}}</view></picker>
+        <picker wx:if="{{form.terminated_at}}" mode="time" value="{{terminatedTime}}" data-key="terminatedTime" bindchange="timeChange"><view class="picker" style="margin-top:12rpx">时间 {{terminatedTime}}</view></picker>
+        <view class="list-meta">最早为操作日次日 00:00，且必须晚于生效时间</view>
+      </label>
+      <button class="primary" style="margin-top:28rpx" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{id?'保存员工信息':(locked?'保存并继续添加下一人':'提交参保审核')}}</button>
     </view>
-    <label wx:if="{{id || !isDailyBilling || dailyMode==='custom'}}" class="field">
-      <view class="field-label">生效时间</view>
-      <picker mode="date" value="{{form.effective_at}}" data-key="effective_at" bindchange="dateChange"><view class="picker">{{form.effective_at||'不填则不修改'}}</view></picker>
-      <picker wx:if="{{form.effective_at}}" mode="time" value="{{effectiveTime}}" data-key="effectiveTime" bindchange="timeChange"><view class="picker" style="margin-top:12rpx">时间 {{effectiveTime}}</view></picker>
-      <view class="list-meta">{{effectiveRuleText}}；系统会自动校验</view>
-    </label>
-    <view wx:elif="{{!id && isDailyBilling && dailyMode==='temporary'}}" class="list-meta" style="margin-top:8rpx">临时日结不支持自定义生效时间，参保后立即生效，24 小时后自动停保</view>
-    <label wx:if="{{id || !isDailyBilling || dailyMode==='custom'}}" class="field">
-      <view class="field-label">停保时间</view>
-      <picker mode="date" value="{{form.terminated_at}}" data-key="terminated_at" bindchange="dateChange"><view class="picker">{{form.terminated_at||'不填则不修改'}}</view></picker>
-      <picker wx:if="{{form.terminated_at}}" mode="time" value="{{terminatedTime}}" data-key="terminatedTime" bindchange="timeChange"><view class="picker" style="margin-top:12rpx">时间 {{terminatedTime}}</view></picker>
-      <view class="list-meta">最早为操作日次日 00:00，且必须晚于生效时间</view>
-    </label>
-    <button class="primary" style="margin-top:28rpx" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{id?'保存员工信息':(locked?'保存并继续添加下一人':'提交参保审核')}}</button>
     <button wx:if="{{locked}}" class="secondary" style="margin-top:16rpx" bindtap="finish">完成，返回列表</button>
   </view>
 </view>
