@@ -27,7 +27,13 @@ Page({
     // 连续添加：第一次新增成功后归属信息（投保单位/实际用工单位/岗位）锁定，
     // 不返回列表页，可以连续手工填写或连续拍照 OCR 添加，直到点"完成"。
     locked: false,
-    addedCount: 0
+    addedCount: 0,
+    // 批量添加：一次选多张身份证照片，逐张 OCR 后堆到这个待确认列表里，人工
+    // 核对/改错后一次性批量提交，比一张一张拍-核对-提交（连续添加那套）快。
+    batchItems: [],
+    batchScanning: false,
+    batchSubmitting: false,
+    batchKeySeq: 0
   },
   // 7.15-3：先选实际用工单位，再选岗位（岗位名会跨单位重复）。按投保单位下的
   // 已审核岗位聚合出实际用工单位列表，再按所选单位过滤岗位。
@@ -130,6 +136,81 @@ Page({
         });
       }
     });
+  },
+  // 一次选多张身份证照片，逐张调用同一个 OCR 接口，识别结果堆进 batchItems
+  // 待人工核对/改错，不直接写进 form/提交——姓名或身份证号识别错了，先在这
+  // 个列表里改，避免脏数据直接进参保申请。
+  batchScan() {
+    if (this.data.batchScanning) return;
+    wx.chooseMedia({
+      count: 9, mediaType: ['image'], sourceType: ['camera', 'album'], sizeType: ['compressed'],
+      success: (res) => {
+        this.setData({ batchScanning: true });
+        const uploadOne = (filePath) => new Promise((resolve) => {
+          wx.uploadFile({
+            url: `${app.globalData.apiBase}/ocr/id-card`,
+            filePath, name: 'file',
+            header: { Authorization: `Bearer ${app.globalData.token}` },
+            success: (up) => {
+              let data = {};
+              try { data = JSON.parse(up.data || '{}'); } catch (e) { data = {}; }
+              resolve(up.statusCode === 200 ? { name: data.name || '', id_number: data.id_number || '' } : { name: '', id_number: '' });
+            },
+            fail: () => resolve({ name: '', id_number: '' })
+          });
+        });
+        Promise.all(res.tempFiles.map((file) => uploadOne(file.tempFilePath))).then((results) => {
+          let keySeq = this.data.batchKeySeq;
+          const items = results.map((r) => {
+            keySeq += 1;
+            return { key: keySeq, name: r.name, id_number: r.id_number, invalid: !!r.id_number && !this.isValidIdNumber(r.id_number) };
+          });
+          this.setData({ batchItems: this.data.batchItems.concat(items), batchKeySeq: keySeq, batchScanning: false });
+          wx.showToast({ title: `已识别 ${items.length} 张，请核对后提交`, icon: 'none', duration: 2200 });
+        });
+      },
+      fail: () => {}
+    });
+  },
+  batchInput(e) {
+    const index = Number(e.currentTarget.dataset.index), key = e.currentTarget.dataset.key, value = e.detail.value;
+    const items = this.data.batchItems.slice();
+    items[index] = { ...items[index], [key]: value };
+    if (key === 'id_number') items[index].invalid = !!value && !this.isValidIdNumber(value);
+    this.setData({ batchItems: items });
+  },
+  batchRemove(e) {
+    const index = Number(e.currentTarget.dataset.index);
+    const items = this.data.batchItems.slice();
+    items.splice(index, 1);
+    this.setData({ batchItems: items });
+  },
+  batchClear() { this.setData({ batchItems: [] }); },
+  // 批量提交复用当前已锁定/已选好的投保单位+岗位（和单人新增同一份 form.
+  // enterprise_id/position_id），不支持临时日结/自定义生效停保时间——那两个
+  // 是单人添加里的细粒度选项，OCR 批量场景默认走最简单的"直接参保"路径。
+  submitBatch() {
+    if (this.data.batchSubmitting) return;
+    if (!this.data.form.position_id) { wx.showToast({ title: '暂无审核通过的可投保岗位', icon: 'none' }); return; }
+    const items = this.data.batchItems;
+    if (!items.length) return;
+    const badIndex = items.findIndex((item) => !item.name.trim() || !item.id_number.trim() || item.invalid);
+    if (badIndex !== -1) { wx.showToast({ title: `第 ${badIndex + 1} 行姓名/身份证号有问题，请先修正`, icon: 'none' }); return; }
+    this.setData({ batchSubmitting: true });
+    const enterpriseId = this.data.form.enterprise_id, positionId = this.data.form.position_id;
+    let successCount = 0, failCount = 0;
+    const submitNext = (index) => {
+      if (index >= items.length) {
+        this.setData({ batchSubmitting: false, batchItems: [], locked: true, addedCount: this.data.addedCount + successCount });
+        wx.showToast({ title: `批量添加完成：成功 ${successCount} 人${failCount ? '，失败 ' + failCount + ' 人' : ''}`, icon: 'none', duration: 3000 });
+        return;
+      }
+      const item = items[index];
+      app.request('/insured', { method: 'POST', silent: true, data: { name: item.name.trim(), id_number: item.id_number.trim(), phone: '', enterprise_id: enterpriseId, position_id: positionId } })
+        .then(() => { successCount += 1; submitNext(index + 1); })
+        .catch(() => { failCount += 1; submitNext(index + 1); });
+    };
+    submitNext(0);
   },
   dateChange(e) { this.setData({ [`form.${e.currentTarget.dataset.key}`]: e.detail.value }); },
   timeChange(e) { this.setData({ [e.currentTarget.dataset.key]: e.detail.value }); },
