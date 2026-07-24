@@ -376,8 +376,9 @@ function logout() {
               <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
               <el-table-column prop="plan_name" label="产品方案" min-width="140" />
               <el-table-column prop="policy_no" label="保单号" min-width="140" />
-              <el-table-column label="保费" width="100"><template #default="{ row }">{{ row.premium }}</template></el-table-column>
-              <el-table-column label="结算价" width="100"><template #default="{ row }">{{ row.policy_floor_price ?? '—' }}</template></el-table-column>
+              <el-table-column label="在保人数" width="90"><template #default="{ row }">{{ row.insured_count }}</template></el-table-column>
+              <el-table-column label="结算价（单价）" width="120"><template #default="{ row }">{{ row.policy_floor_price ?? '—' }}</template></el-table-column>
+              <el-table-column label="保费合计" width="100"><template #default="{ row }">{{ row.premium }}</template></el-table-column>
               <el-table-column prop="status" label="状态" width="90" />
             </el-table>
             <el-empty v-if="!settlement?.rows.length" description="暂无结算数据" :image-size="60" />

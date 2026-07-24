@@ -18,6 +18,26 @@ from .pricing import plan_price_for_class, pricing_snapshot, strip_internal_pric
 from .serialization import amount
 
 
+def _policy_active_premium(session: Session, policy: Policy, plan: InsurancePlan | None) -> tuple[float, int]:
+    """当前在保人数 × 各自结算价（policy_floor_price，按人的职业类别分档定价），
+    不是 Policy.premium 那个静态列——那一列在真实数据里经常没有被填过（新建保单
+    时不强制录入，实际保费按人动态算），直接拿它当"在保保费合计"会一直显示 0。
+    这里按 policy_dict() 同一套"当前在保人 × 结算价"口径重算一次。"""
+    if not plan:
+        return 0.0, 0
+    members = session.scalars(select(PolicyMember).where(PolicyMember.policy_id == policy.id, PolicyMember.status == "active"))
+    total = 0.0
+    count = 0
+    for member in members:
+        person = session.get(InsuredPerson, member.person_id)
+        if not person:
+            continue
+        snapshot = pricing_snapshot(plan, base_price=plan_price_for_class(session, plan, person.occupation_class))
+        total += float(snapshot.get("policy_floor_price") or 0)
+        count += 1
+    return total, count
+
+
 def insurer_settlement_summary(session: Session, insurer_id: int, user) -> dict:
     plan_ids = set(session.scalars(select(InsurancePlan.id).where(InsurancePlan.insurer_id == insurer_id)))
     if not plan_ids:
@@ -30,18 +50,20 @@ def insurer_settlement_summary(session: Session, insurer_id: int, user) -> dict:
         plan = session.get(InsurancePlan, policy.plan_id)
         enterprise = session.get(Enterprise, policy.enterprise_id)
         snapshot = pricing_snapshot(plan) if plan else {}
+        policy_premium, insured_count = _policy_active_premium(session, policy, plan)
         row = strip_internal_pricing({
             "policy_id": policy.id,
             "policy_no": policy.policy_no,
             "enterprise_name": enterprise.name if enterprise else "",
             "plan_name": plan.name if plan else "",
             "status": policy.status,
-            "premium": amount(policy.premium),
+            "insured_count": insured_count,
+            "premium": amount(policy_premium),
             **snapshot,
         }, user)
         rows.append(row)
         if policy.status == "active":
-            total_active_premium += float(policy.premium or 0)
+            total_active_premium += policy_premium
 
     return {"insurer_id": insurer_id, "total_active_premium": amount(total_active_premium), "rows": rows}
 

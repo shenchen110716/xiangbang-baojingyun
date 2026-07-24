@@ -39,6 +39,7 @@ export interface InsurerSettlementRow {
   enterprise_name: string
   plan_name: string
   status: string
+  insured_count: number
   premium: number
   insurance_base_price?: number
   policy_floor_price?: number

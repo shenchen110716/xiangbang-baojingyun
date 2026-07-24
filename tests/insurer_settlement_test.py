@@ -49,6 +49,37 @@ def test_insurer_settlement_scoped_and_hides_profit():
         assert "agent_commission_amount" not in row
 
 
+def test_settlement_total_active_premium_reflects_real_headcount():
+    """回归用例：之前 total_active_premium 直接加总 Policy.premium 这个静态列，
+    而真实数据里这一列经常没被填过（新建保单不强制录入，实际保费按人动态算），
+    导致"在保保费合计"页面上一直显示 0。修复后应该按当前在保 PolicyMember
+    数量 × 结算价重新算，哪怕 Policy.premium 本身就是 0 也要得出非零合计。"""
+    with SessionLocal() as s:
+        insurer = Insurer(name="在保保费回归测试保司"); s.add(insurer); s.flush()
+        plan = InsurancePlan(insurer="在保保费回归测试保司", name="方案", price=100, commission_rate=0.1, insurer_id=insurer.id)
+        s.add(plan); s.flush()
+        enterprise = Enterprise(name="在保保费回归测试企业"); s.add(enterprise); s.flush()
+        # Policy.premium 故意留 0，模拟真实数据里这一列没被填过的情况。
+        policy = Policy(policy_no="POL-ZERO-PREMIUM", enterprise_id=enterprise.id, plan_id=plan.id, premium=0, status="active")
+        s.add(policy); s.flush()
+        person = InsuredPerson(enterprise_id=enterprise.id, name="非零保费甲", id_number="340123199001019993", status="active", policy_id=policy.id)
+        s.add(person); s.flush()
+        s.add(PolicyMember(policy_id=policy.id, person_id=person.id, status="active"))
+        user = User(username="zero_premium_insurer", password_hash=pwd.hash("test1234"), name="保司账号", role="insurer", insurer_id=insurer.id)
+        s.add(user); s.commit()
+
+    login = client.post("/api/auth/login", json={"username": "zero_premium_insurer", "password": "test1234", "portal": "insurer"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    resp = client.get("/api/insurer-portal/settlement", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_active_premium"] > 0
+    row = next(r for r in body["rows"] if r["policy_no"] == "POL-ZERO-PREMIUM")
+    assert row["insured_count"] == 1
+    assert row["premium"] > 0
+    assert row["premium"] == body["total_active_premium"]
+
+
 def test_monthly_premium_summary_detail_export_scoped():
     from datetime import datetime, timezone
     from backend.core.business_time import business_today
@@ -120,6 +151,8 @@ def test_monthly_premium_summary_detail_export_scoped():
 def run():
     test_insurer_settlement_scoped_and_hides_profit()
     print("test_insurer_settlement_scoped_and_hides_profit: OK")
+    test_settlement_total_active_premium_reflects_real_headcount()
+    print("test_settlement_total_active_premium_reflects_real_headcount: OK")
     test_monthly_premium_summary_detail_export_scoped()
     print("test_monthly_premium_summary_detail_export_scoped: OK")
     print("\nAll insurer settlement tests: PASS")
