@@ -2,6 +2,10 @@ const app = getApp();
 const { payWithWeChat } = require('../../utils/wechatPay.js');
 
 const STATUS_TEXT = { pending: '待确认', confirmed: '已到账', rejected: '已驳回' };
+// PaymentRecord（微信支付）状态与 RechargeRequest（银行转账审核）状态是两套不同的词表，
+// 合并展示时分别映射到同一套 pending/success/danger 视觉态，见 recharge-request.wxml 的 status_kind。
+const PAYMENT_STATUS_TEXT = { pending: '支付处理中', paid: '已到账', failed: '支付失败' };
+const STATUS_KIND = { pending: 'warning', confirmed: 'success', paid: 'success', rejected: 'danger', failed: 'danger' };
 
 Page({
   data: {
@@ -117,11 +121,31 @@ Page({
   },
   loadRecords() {
     this.setData({ recordsLoading: true });
-    app.request('/recharge-requests', { silent: true })
-      .then((rows) => this.setData({
-        records: (rows || []).map((row) => ({ ...row, amount_text: Number(row.amount || 0).toFixed(2), status_text: STATUS_TEXT[row.status] || row.status, account_text: row.account_type === 'premium' ? '保费' : '系统服务费' })),
-        recordsLoading: false
-      }))
-      .catch(() => this.setData({ recordsLoading: false }));
+    Promise.all([
+      app.request('/recharge-requests', { silent: true }).catch(() => []),
+      // 微信支付走 PaymentRecord 表，跟银行转账审核的 RechargeRequest 是两条独立记录，
+      // 之前只查后者，导致微信支付成功后用户在"充值记录"里完全看不到这笔单。
+      app.request('/payments?channel=jsapi', { silent: true }).catch(() => [])
+    ]).then(([requests, payments]) => {
+      const bankRows = (requests || []).map((row) => ({
+        ...row,
+        id: `req-${row.id}`,
+        amount_text: Number(row.amount || 0).toFixed(2),
+        status_text: STATUS_TEXT[row.status] || row.status,
+        status_kind: STATUS_KIND[row.status] || 'warning',
+        account_text: row.account_type === 'premium' ? '保费' : '系统服务费'
+      }));
+      const wechatRows = (payments || []).map((row) => ({
+        ...row,
+        id: `pay-${row.order_no}`,
+        amount_text: Number(row.amount || 0).toFixed(2),
+        status_text: PAYMENT_STATUS_TEXT[row.status] || row.status,
+        status_kind: STATUS_KIND[row.status] || 'warning',
+        account_text: '系统服务费（微信支付）'
+      }));
+      const records = bankRows.concat(wechatRows)
+        .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+      this.setData({ records, recordsLoading: false });
+    }).catch(() => this.setData({ recordsLoading: false }));
   }
 });

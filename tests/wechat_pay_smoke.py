@@ -159,8 +159,23 @@ def run():
             admin_view_of_order = get_payment(native_order_no, admin, session)
             assert admin_view_of_order["status"] == "paid"
 
-            admin_list = list_payments(None, "", "", session)
+            admin_list = list_payments(None, "", "", admin, session)
             assert any(row["order_no"] == native_order_no for row in admin_list)
+
+            # 企业角色现在也能查自己的微信支付记录（此前 /payments 是纯管理员端点，
+            # 企业微信支付成功后在小程序"充值记录"里完全看不到这笔单）；
+            # 且不能靠传别家企业的 enterprise_id 越权查看。
+            enterprise_list = list_payments(None, "", "", enterprise_user, session)
+            assert any(row["order_no"] == native_order_no for row in enterprise_list)
+            assert all(row["enterprise_id"] == enterprise.id for row in enterprise_list)
+
+            spoofed_list = list_payments(other_enterprise.id, "", "", enterprise_user, session)
+            assert all(row["enterprise_id"] == enterprise.id for row in spoofed_list), \
+                "企业角色传别家 enterprise_id 不应绕过范围限制"
+
+            other_user_list = list_payments(None, "", "", other_user, session)
+            assert not any(row["order_no"] == native_order_no for row in other_user_list), \
+                "无关企业不应在自己的支付记录里看到别家的订单"
 
             # Step I: 使用费默认收款方式对外可读，管理员可改
             from backend.routers.recharge_requests import recharge_payment_account

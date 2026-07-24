@@ -10,7 +10,7 @@ from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import AgentCommission, InsurancePlan, PlanTier, Policy, User, WorkPosition
 from ..schemas import PlanIn, PlanTierIn, PlanUpdate
-from ..services import plan_dict, serialize, strip_internal_pricing
+from ..services import plan_dict, pricing_snapshot, serialize, strip_internal_pricing
 
 router = APIRouter(prefix="/api", tags=["plans"])
 
@@ -41,11 +41,22 @@ def add_plan(data: PlanIn, user: User = Depends(current_user), session: Session 
 @router.get("/plan-tiers")
 def plan_tiers(plan_id: Optional[int] = None, user: User = Depends(current_user), session: Session = Depends(db)):
     stmt=select(PlanTier).order_by(PlanTier.id.desc())
+    relations = {}
     if user.role=='enterprise' and user.enterprise_id:
         allowed=select(AgentCommission.plan_id).where(AgentCommission.enterprise_id==user.enterprise_id)
-        stmt=stmt.where(PlanTier.plan_id.in_(allowed))
+        position_plans=select(WorkPosition.plan_id).where(WorkPosition.enterprise_id==user.enterprise_id,WorkPosition.plan_id.is_not(None))
+        stmt=stmt.where(or_(PlanTier.plan_id.in_(allowed),PlanTier.plan_id.in_(position_plans)))
+        for r in session.scalars(select(AgentCommission).where(AgentCommission.enterprise_id == user.enterprise_id, AgentCommission.status == "active").order_by(AgentCommission.id.asc())):
+            relations[r.plan_id] = r
     if plan_id: stmt=stmt.where(PlanTier.plan_id==plan_id)
-    return [serialize(x) for x in session.scalars(stmt)]
+    items = session.scalars(stmt).all()
+    plans_by_id = {p.id: p for p in session.scalars(select(InsurancePlan).where(InsurancePlan.id.in_({x.plan_id for x in items})))} if items else {}
+    result = []
+    for tier in items:
+        plan = plans_by_id.get(tier.plan_id)
+        pricing = pricing_snapshot(plan, relations.get(tier.plan_id), float(tier.price or 0)) if plan else {}
+        result.append(strip_internal_pricing({**serialize(tier), **pricing}, user))
+    return result
 
 @router.post("/plan-tiers", dependencies=[Depends(require_role("admin", detail="仅总后台可维护类别价格"))])
 def add_plan_tier(data: PlanTierIn, user: User = Depends(current_user), session: Session = Depends(db)):
