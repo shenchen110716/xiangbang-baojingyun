@@ -55,14 +55,6 @@ App({
     });
   },
 
-  ensureLogin() {
-    if (!this.globalData.token) {
-      wx.reLaunch({ url: '/pages/login/login' });
-      return Promise.reject(new Error('请先登录'));
-    }
-    return Promise.resolve(this.globalData.user || this.loadProfile());
-  },
-
   rawRequest(path, options = {}) {
     const header = { 'Content-Type': 'application/json', ...(options.header || {}) };
     if (!options.skipAuth && this.globalData.token) header.Authorization = `Bearer ${this.globalData.token}`;

@@ -1,6 +1,6 @@
 const app = getApp();
 Page({
-  data: { person: null, loading: true, notFound: false, coveragePeriod: '', statusLabel: '' },
+  data: { person: null, loading: true, notFound: false, coveragePeriod: '', statusLabel: '', isActive: false },
   onLoad(options) {
     // 原生渲染在保证明，避免 web-view 业务域名限制（微信提示“不支持打开”）。
     const id = Number(options.id);
@@ -12,7 +12,7 @@ Page({
       const coveragePeriod = start
         ? `${start} 零时起至 ${end ? end + ' 二十四时止' : '长期'}`
         : '—';
-      this.setData({ person, loading: false, coveragePeriod, statusLabel: app.statusText(person.status) });
+      this.setData({ person, loading: false, coveragePeriod, statusLabel: app.statusText(person.status), isActive: person.status === 'active' });
     }).catch(() => this.setData({ loading: false, notFound: true }));
   },
   dateOnly(v) { return v ? String(v).slice(0, 10) : ''; },

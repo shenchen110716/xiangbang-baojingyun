@@ -7,7 +7,7 @@ Page({
     // 拦截跳登录页——未登录时首页照常渲染，只是展示品牌介绍 + 登录入口，
     // 不请求任何需要鉴权的数据。
     loggedIn: false,
-    dashboard: { enterprises: 0, people: 0, pending_people: 0, premium_balance_total: 0, usage_balance: 0, usage_available: 0, usage_recharged: 0, usage_consumed: 0, claims_open: 0, balance_alerts: [] },
+    dashboard: { active_people: 0, pending_people: 0, premium_balance_total: 0, usage_available: 0, usage_recharged: 0, usage_consumed: 0, claims_open: 0, balance_alerts: [] },
     messages: [],
     user: {},
     enterprise: {},

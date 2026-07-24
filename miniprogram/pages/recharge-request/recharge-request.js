@@ -28,8 +28,9 @@ Page({
   onLoad(options) {
     const enterpriseId = Number(options.enterpriseId || (app.globalData.user && app.globalData.user.enterprise_id) || 0);
     const accountType = options.accountType === 'premium' ? 'premium' : 'usage';
+    const presetInsurer = options.insurer ? decodeURIComponent(options.insurer) : '';
     this.setData({ enterpriseId, accountType, method: accountType === 'premium' ? 'bank' : 'wechat', tab: options.tab === 'records' ? 'records' : 'submit' });
-    if (accountType === 'premium') this.loadInsurerOptions();
+    if (accountType === 'premium') this.loadInsurerOptions(presetInsurer);
     this.refreshPaymentAccount();
     if (this.data.tab === 'records') this.loadRecords();
   },
@@ -38,9 +39,16 @@ Page({
     this.setData({ tab });
     if (tab === 'records' && !this.data.records.length) this.loadRecords();
   },
-  loadInsurerOptions() {
+  // presetInsurer：从资金账户页某张保司账户卡片点"立即充值"进来时，带上该卡片
+  // 关联的保司，直接定位到对应选项，避免用户在通用列表里盲选、充错账户。
+  loadInsurerOptions(presetInsurer) {
     app.request('/recharge/payment-accounts', { silent: true })
-      .then((options) => this.setData({ insurerOptions: options || [] }))
+      .then((options) => {
+        const insurerOptions = options || [];
+        const presetIndex = presetInsurer ? insurerOptions.findIndex((row) => row.insurer === presetInsurer) : -1;
+        this.setData({ insurerOptions, insurerIndex: presetIndex });
+        if (presetIndex > -1) this.refreshPaymentAccount();
+      })
       .catch(() => this.setData({ insurerOptions: [] }));
   },
   accountTypeChange(e) {

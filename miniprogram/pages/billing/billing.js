@@ -8,7 +8,13 @@ Page({
   recharge(e) {
     const id = e.currentTarget.dataset.id;
     const accountType = e.currentTarget.dataset.account === 'premium' ? 'premium' : 'usage';
-    wx.navigateTo({ url: `/pages/recharge-request/recharge-request?enterpriseId=${id}&accountType=${accountType}` });
+    // 一家企业可能有多个不共享余额的保司收款账户（EnterprisePremiumAccount 按
+    // enterprise+account 而非 enterprise+insurer 记余额），只传 accountType 用户
+    // 充值前还要在通用列表里盲选保司，很容易充到别的账户。这里把该卡片关联的保司
+    // 带过去，充值页据此预选，充值就一定落到用户点的这张卡对应的账户上。
+    const insurer = e.currentTarget.dataset.insurer || '';
+    const insurerParam = insurer ? `&insurer=${encodeURIComponent(insurer)}` : '';
+    wx.navigateTo({ url: `/pages/recharge-request/recharge-request?enterpriseId=${id}&accountType=${accountType}${insurerParam}` });
   },
   records() {
     const item = this.data.items[0];

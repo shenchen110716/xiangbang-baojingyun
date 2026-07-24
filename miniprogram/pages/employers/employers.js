@@ -1,11 +1,17 @@
 const app = getApp();
 
 Page({
-  data: { items: [], loading: true },
+  data: { items: [], loading: true, canManage: false },
   onShow() { this.load(); },
   onPullDownRefresh() { this.load().finally(() => wx.stopPullDownRefresh()); },
   load() {
-    return app.request('/actual-employers', { silent: true }).then((items) => this.setData({ items: items.map((item) => ({ ...item, status_label: item.status === 'active' ? '合作中' : '已暂停' })), loading: false })).catch(() => this.setData({ loading: false }));
+    return Promise.all([app.loadProfile(), app.request('/actual-employers', { silent: true })])
+      .then(([user, items]) => this.setData({
+        items: items.map((item) => ({ ...item, status_label: item.status === 'active' ? '合作中' : '已暂停' })),
+        canManage: user.role === 'admin' || user.is_owner,
+        loading: false
+      }))
+      .catch(() => this.setData({ loading: false }));
   },
   add() { wx.navigateTo({ url: '/pages/employer-edit/employer-edit' }); },
   edit(e) { wx.navigateTo({ url: `/pages/employer-edit/employer-edit?id=${e.currentTarget.dataset.id}` }); },

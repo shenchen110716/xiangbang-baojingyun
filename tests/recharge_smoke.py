@@ -119,6 +119,15 @@ def run():
             from backend.models import User
             admin = session.scalar(select(User).where(User.username == "admin"))
 
+            # /billing (GET) must forward each premium account's insurer list to the
+            # caller — the miniprogram/web recharge flow uses it to route a recharge
+            # to the exact account a user tapped, instead of a generic insurer picker
+            # that could land the money in the wrong (non-shared-balance) account.
+            from backend.routers.reports import billing
+            billing_rows = billing(admin, session)
+            premium_row = next(row for row in billing_rows if row["id"] == 1 and row["account_type"] == "premium")
+            assert set(premium_row["insurers"]) == {"测试保司", "第二保司"}, premium_row.get("insurers")
+
             new_account = add_insurer_account(InsurerAccountIn(label="新账户", bank_name="工商银行", account_no="9999", account_holder="测试收款方2"), admin, session)
             assert new_account["status"] == "active"
 
