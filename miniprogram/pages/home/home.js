@@ -96,6 +96,11 @@ Page({
         dashboard.premium_balance_total = premiumAccounts.reduce((sum, item) => sum + (item.available != null ? item.available : (item.balance || 0)), 0);
         dashboard.premium_recharged_total = premiumAccounts.reduce((sum, item) => sum + (item.recharged != null ? item.recharged : (item.balance || 0)), 0);
         dashboard.premium_consumed_total = premiumAccounts.reduce((sum, item) => sum + (item.consumed || 0), 0);
+        // 一个企业可能有多个保费账户（不同保司/收款账户）同时余额预警，
+        // 后端每条 alert 的 account 字段对премium账户全是同一个字符串
+        // 'premium'（区分靠 account_id），用它当 wx:key 会撞车，这里补一个
+        // 按位置生成的唯一 key。
+        dashboard.balance_alerts = (dashboard.balance_alerts || []).map((alert, index) => ({ ...alert, _key: `${alert.account}-${alert.account_id || 0}-${index}` }));
         const positionCards = this.buildPositionCards(positions || [], plans || [], people || []);
         this.setData({ dashboard, user, enterprise: app.globalData.enterprise || {}, positionCards, loading: false });
         this.applyPositionSearch();
@@ -120,7 +125,6 @@ Page({
     this.setData({ positionSearchQuery: e.detail.value });
     this.applyPositionSearch();
   },
-  go(e) { wx.navigateTo({ url: e.currentTarget.dataset.url }); },
   // 之前点"去充值"只会跳到资金账户总览页（/pages/billing/billing），还要
   // 再点一次才进真正的充值页——直接跳 recharge-request，和 billing.js 里
   // recharge() 的跳转参数保持一致。服务费账户是企业级唯一账户，不用带保司；

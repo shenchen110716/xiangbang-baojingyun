@@ -48,7 +48,14 @@ function payWithWeChat(app, enterpriseId, account, amount, { onSuccess, onCancel
             if (onSuccess) onSuccess();
           });
         },
-        fail: () => { wx.showToast({ title: '已取消支付', icon: 'none' }); if (onCancel) onCancel(); }
+        fail: (err) => {
+          // wx.requestPayment 的 fail 回调，用户主动取消和真实支付失败（签名
+          // 错误、网络问题等）都会触发，errMsg 里带 "cancel" 的才是真的取消，
+          // 否则会把支付真失败也误报成"已取消支付"，让用户以为是自己点了取消。
+          const cancelled = !!(err && err.errMsg && err.errMsg.indexOf('cancel') > -1);
+          wx.showToast({ title: cancelled ? '已取消支付' : '支付失败，请重试', icon: 'none' });
+          if (onCancel) onCancel();
+        }
       });
     })
     .catch((error) => {

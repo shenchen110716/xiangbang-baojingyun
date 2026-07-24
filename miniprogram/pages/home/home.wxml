@@ -24,7 +24,7 @@
   </view>
 
   <view wx:if="{{dashboard.balance_alerts.length}}" class="section">
-    <view wx:for="{{dashboard.balance_alerts}}" wx:key="account" class="card notice notice-danger" data-account="{{item.account}}" bindtap="goRecharge">
+    <view wx:for="{{dashboard.balance_alerts}}" wx:key="_key" class="card notice notice-danger" data-account="{{item.account}}" bindtap="goRecharge">
       <view class="row between"><text class="strong">账户余额预警</text><text class="tag tag-danger">{{item.days_left}} 天</text></view>
       <view class="list-meta">{{item.account==='premium'?'保费账户':'平台使用费账户'}}余额 ¥{{item.balance}}，请及时充值</view>
     </view>
