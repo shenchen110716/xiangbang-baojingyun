@@ -105,7 +105,7 @@ function logout() {
 <template>
   <div class="agent-portal">
     <header class="portal-header">
-      <div class="portal-brand">响帮帮保经云 · 业务员工作台</div>
+      <div class="portal-brand">响帮帮无忧保 · 业务员工作台</div>
       <div class="portal-actions">
         <span class="portal-user">{{ auth.user?.name }}</span>
         <el-button size="small" :icon="'QuestionFilled'" @click="helpVisible = true">帮助</el-button>

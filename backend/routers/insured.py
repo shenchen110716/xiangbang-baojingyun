@@ -23,9 +23,10 @@ def _assert_min_age(id_number: str) -> None:
     birth = birth_date_from_id(id_number)
     if birth is None or age_on(birth, business_today()) < MIN_INSURE_AGE:
         raise HTTPException(400, f"被保险人未满 {MIN_INSURE_AGE} 周岁，不可参保")
+from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
-from ..schemas import BulkPersonIn, PersonIn, PersonUpdate
+from ..schemas import BulkPersonIn, InsurerFlagIn, PersonIn, PersonUpdate
 from ..services import activate_person_policy, allowed_employer_ids, assert_employer_access, correct_person_policy_dates, effective_person_status, is_enterprise_owner, plan_price_for_class, pricing_snapshot, require_usage_funded, serialize, strip_internal_pricing, terminate_person_policy
 from ..services.spreadsheet import MAX_IMPORT_FILE_BYTES, read_import_rows
 from ..services.timeliness_recalc import record_operation
@@ -174,6 +175,22 @@ def insured_status(item_id:int,status_value:Literal["active","stopped","pending"
         record_operation(session, user=user, person=item, operation_type="termination")
     item.status=status_value
     session.commit();audit(session,user,"status_change","insured_person",str(item.id),status_value);return _person_payload(session,item)
+
+@router.patch("/insured/{item_id}/insurer-flag", dependencies=[Depends(require_role("insurer", detail="仅保司账号可标注参停保异常"))])
+def flag_insured_person(item_id:int,data:InsurerFlagIn,user:User=Depends(current_user),session:Session=Depends(db)):
+    """保司只能标注异常原因，不能触碰参保状态本身——见 2026-07-24 设计文档
+    "范围边界"：不是参停保的责任方，只是发现问题后标注、推动企业/平台处理。"""
+    item=session.get(InsuredPerson,item_id)
+    if not item: raise HTTPException(404,'参保员工不存在')
+    position=session.get(WorkPosition,item.position_id) if item.position_id else None
+    plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None
+    if not plan or plan.insurer_id!=user.insurer_id: raise HTTPException(403,'无权标注其他保险公司名下的参保员工')
+    reason=data.reason.strip()
+    item.insurer_flag_reason=reason
+    item.insurer_flagged_at=datetime.now() if reason else None
+    item.insurer_flagged_by=user.id if reason else None
+    session.commit();audit(session,user,'update','insured_person_flag',str(item.id),reason or 'cleared')
+    return _person_payload(session,item)
 
 @router.get("/insured/{item_id}/policy-members")
 def insured_policy_members(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):

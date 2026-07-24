@@ -18,6 +18,7 @@ const list = ref<InsuredPerson[]>([])
 const search = ref('')
 const searchField = ref<'all' | 'name' | 'id_number' | 'actual_employer_name'>('all')
 const statusFilter = ref('')
+const planFilter = ref<number | null>(null)
 const selected = ref<InsuredPerson[]>([])
 const bulkAction = ref('')
 
@@ -37,9 +38,13 @@ function isPendingEffective(x: InsuredPerson) {
 
 const filtered = computed(() => {
   let rows = list.value
-  if (statusFilter.value === 'active-pending') rows = rows.filter(isPendingEffective)
+  // “待生效”对外统一成一个筛选项：待审核(pending) + 已通过但未来才生效(active 但
+  // effective_at 还没到)。这两种状态在列表的状态标签上本来就显示同一个“待生效”文案
+  // （见 insuredStatusLabel），筛选下拉框以前拆成两个同名不同值的选项，看着像重复。
+  if (statusFilter.value === 'pending') rows = rows.filter((x) => x.status === 'pending' || isPendingEffective(x))
   else if (statusFilter.value === 'active') rows = rows.filter((x) => x.status === 'active' && !isPendingEffective(x))
   else if (statusFilter.value) rows = rows.filter((x) => x.status === statusFilter.value)
+  if (planFilter.value) rows = rows.filter((x) => x.plan_id === planFilter.value)
   if (search.value) {
     const q = search.value.toLowerCase()
     const fields = searchField.value === 'all' ? (['name', 'id_number', 'phone', 'enterprise_name', 'position_name'] as const) : ([searchField.value] as const)
@@ -48,6 +53,12 @@ const filtered = computed(() => {
   return rows
 })
 const { page, pageSize, total: pagedTotal, paged } = usePagedList(filtered)
+
+const planOptions = computed(() => {
+  const seen = new Map<number, string>()
+  for (const x of list.value) if (x.plan_id && !seen.has(x.plan_id)) seen.set(x.plan_id, x.plan_name || `方案 #${x.plan_id}`)
+  return Array.from(seen, ([id, name]) => ({ id, name }))
+})
 
 const totalCount = computed(() => list.value.length)
 // 在保 = 已生效的 active；待生效 = 待审核(pending) + 已通过但未来才生效(active-pending)。
@@ -156,7 +167,7 @@ function exportCsv() {
     p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, p.occupation_class, p.plan_name, p.policy_no, insuredStatusLabel(p).text,
     formatDateTime(p.created_at), formatCoverageDate(p.effective_at, p.effective_mode), formatCoverageDate(p.terminated_at, p.effective_mode),
   ])
-  downloadCsv([header, ...rows], `响帮帮保经云-员工-${Date.now()}.csv`)
+  downloadCsv([header, ...rows], `响帮帮无忧保-员工-${Date.now()}.csv`)
 }
 </script>
 
@@ -184,9 +195,11 @@ function exportCsv() {
           </el-select>
           <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 130px">
             <el-option label="待生效" value="pending" />
-            <el-option label="待生效(倒计时)" value="active-pending" />
             <el-option label="在保" value="active" />
             <el-option label="已停保" value="stopped" />
+          </el-select>
+          <el-select v-model="planFilter" placeholder="按参保方案筛选" clearable filterable style="width: 180px">
+            <el-option v-for="p in planOptions" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </FilterBar>
         <div class="bulk-row">
@@ -221,6 +234,11 @@ function exportCsv() {
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="insuredStatusLabel(row).type">{{ insuredStatusLabel(row).text }}</el-tag></template>
         </el-table-column>
+        <el-table-column label="保司标注" width="140">
+          <template #default="{ row }">
+            <el-tag v-if="row.insurer_flag_reason" type="danger" size="small">{{ row.insurer_flag_reason }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="添加时间" width="150">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
@@ -230,13 +248,15 @@ function exportCsv() {
         <el-table-column label="停保时间" width="150">
           <template #default="{ row }">{{ formatCoverageDate(row.terminated_at, row.effective_mode) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="330" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openDetail(row)">查看</el-button>
-            <el-button link type="primary" size="small" @click="openEditor(row)">编辑</el-button>
-            <el-button v-if="row.effective_at" link type="primary" size="small" @click="openCertificate(row)">参保证明</el-button>
-            <el-button v-if="row.status === 'active'" link type="danger" size="small" @click="openStopDialog(row)">停保</el-button>
-            <el-button v-else link type="success" size="small" @click="changeStatus(row, 'active')">参保</el-button>
+            <!-- 参保/停保是最常用的操作，用实心按钮加大字号突出显示，避免和查看/编辑等
+                 次要操作一样细小、难点中；查看/编辑/参保证明保留 link 样式，视觉上分层。 -->
+            <el-button v-if="row.status === 'active'" type="danger" class="primary-action-btn" @click="openStopDialog(row)">停保</el-button>
+            <el-button v-else type="success" class="primary-action-btn" @click="changeStatus(row, 'active')">参保</el-button>
+            <el-button link type="primary" @click="openDetail(row)">查看</el-button>
+            <el-button link type="primary" @click="openEditor(row)">编辑</el-button>
+            <el-button v-if="row.effective_at" link type="primary" @click="openCertificate(row)">参保证明</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -283,5 +303,11 @@ function exportCsv() {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+}
+.primary-action-btn {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 14px;
+  margin-right: 4px;
 }
 </style>

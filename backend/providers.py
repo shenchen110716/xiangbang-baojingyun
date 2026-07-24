@@ -11,6 +11,7 @@ import hmac
 import json
 import os
 import time
+import urllib.error
 import urllib.request
 import uuid
 from dataclasses import dataclass
@@ -141,6 +142,15 @@ class RealWeChatPayProvider(WeChatPayProvider):
             with urllib.request.urlopen(req, timeout=15) as res:
                 data = json.loads(res.read() or "{}")
             return ProviderResult(True, self.name, payload.get("out_trade_no", ""), data, "微信支付下单成功")
+        except urllib.error.HTTPError as exc:
+            # 微信支付 v3 出错时响应体是 {"code":"...","message":"..."}，比 Python 的
+            # "HTTP Error 400: Bad Request" 有用得多；不读 body 就没法诊断具体原因。
+            try:
+                detail = json.loads(exc.read().decode() or "{}")
+                reason = detail.get("message") or detail.get("code") or str(exc)
+            except Exception:
+                reason = str(exc)
+            return ProviderResult(False, self.name, payload.get("out_trade_no", ""), {}, f"微信支付下单失败：{reason}")
         except Exception as exc:
             return ProviderResult(False, self.name, payload.get("out_trade_no", ""), {}, f"微信支付下单失败：{exc}")
 

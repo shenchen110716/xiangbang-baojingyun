@@ -33,10 +33,12 @@ from . import settings
 # 模拟样例：真实校验位、可通过 is_valid_id_number（1990-05-21 生）。
 _MOCK_ID = {"name": "李明", "id_number": "340104199005213241", "gender": "男", "birth": "1990-05-21"}
 _MOCK_AMOUNT = 5000.0
+_MOCK_BUSINESS_LICENSE = {"name": "响帮帮无忧保测试企业有限公司", "credit_code": "91320100MA1XXXXX1X"}
 
 _TOKEN_URL = "https://aip.baidubce.com/oauth/2.0/token"
 _IDCARD_URL = "https://aip.baidubce.com/rest/2.0/ocr/v1/idcard"
 _RECEIPT_URL = "https://aip.baidubce.com/rest/2.0/ocr/v1/receipt"
+_BUSINESS_LICENSE_URL = "https://aip.baidubce.com/rest/2.0/ocr/v1/business_license"
 
 # 进程内缓存 access_token；{"token": str, "expires_at": float(epoch秒)}。
 _token_cache: dict[str, object] = {}
@@ -103,6 +105,18 @@ def _call_real_id_card(image: bytes) -> dict:
     return {"name": name, "id_number": id_number, "gender": gender, "birth": birth, "mock": False}
 
 
+def _call_real_business_license(image: bytes) -> dict:
+    data = _baidu_post(_BUSINESS_LICENSE_URL, {"image": base64.b64encode(image).decode()})
+    if "error_code" in data:
+        raise OcrError(f"百度营业执照识别失败：{data.get('error_msg', data['error_code'])}")
+    words = data.get("words_result", {})
+    name = words.get("单位名称", {}).get("words", "")
+    credit_code = words.get("社会信用代码", {}).get("words", "")
+    if not name:
+        raise OcrError("未能从营业执照识别出单位名称，请换清晰的照片或手动填写")
+    return {"name": name, "credit_code": credit_code, "mock": False}
+
+
 def _extract_amount(words_list: list[str]) -> Optional[str]:
     for text in words_list:
         if any(k in text for k in _AMOUNT_KEYWORDS):
@@ -145,6 +159,20 @@ def recognize_id_card(image: bytes) -> dict:
         result.setdefault("message", "")
         return result
     return {**_MOCK_ID, "mock": True, "message": "模拟识别结果，请核对后再提交（配置真实 OCR 后自动识别）"}
+
+
+def recognize_business_license(image: bytes) -> dict:
+    """识别营业执照，返回 {name, credit_code, mock, message}，用于新增投保单位时自动带出
+    单位全称和统一社会信用代码；识别值仅作预填，仍需人工核对后保存。"""
+    if not settings.get_bool("OCR_ENABLED"):
+        raise OcrError("营业执照识别未启用，请联系平台在「系统设置」中开启 OCR")
+    if not image:
+        raise OcrError("未收到图片")
+    if _baidu_configured():
+        result = _call_real_business_license(image)
+        result.setdefault("message", "")
+        return result
+    return {**_MOCK_BUSINESS_LICENSE, "mock": True, "message": "模拟识别结果，请核对后再提交（配置真实 OCR 后自动识别）"}
 
 
 def recognize_receipt_amount(image: bytes) -> dict:

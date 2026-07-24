@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'enterprise' | 'salesperson'
+export type Role = 'admin' | 'enterprise' | 'salesperson' | 'insurer'
 export type EnterpriseRole = 'owner' | 'project_manager'
 
 export interface User {
@@ -8,6 +8,7 @@ export interface User {
   role: Role
   enterprise_id: number | null
   enterprise_role: EnterpriseRole | null
+  insurer_id: number | null
   phone: string
   is_owner: boolean
   active: boolean
@@ -44,6 +45,26 @@ export interface ActualEmployer {
   contact: string
   phone: string
   status: 'active' | 'paused'
+  has_active_people?: boolean
+  created_at: string
+}
+
+export interface Insurer {
+  id: number
+  name: string
+  contact: string
+  phone: string
+  credit_code: string
+  email: string
+  address: string
+  status: string
+  pending_name: string | null
+  pending_contact: string | null
+  pending_phone: string | null
+  pending_credit_code: string | null
+  pending_email: string | null
+  pending_address: string | null
+  pending_submitted_at: string | null
   created_at: string
 }
 
@@ -62,6 +83,7 @@ export interface WorkPosition {
   video_count?: number
   latest_video_status?: string
   review_note?: string
+  has_active_people?: boolean
   created_at: string
 }
 
@@ -141,6 +163,9 @@ export interface InsuredPerson extends Partial<PricingSnapshot> {
   created_at: string
   effective_at?: string | null
   terminated_at?: string | null
+  insurer_flag_reason: string
+  insurer_flagged_at: string | null
+  insurer_flagged_by: number | null
 }
 
 export interface PolicyMemberHistory {
@@ -197,6 +222,7 @@ export interface Claim {
   id_number: string
   position_name: string
   actual_employer_name: string
+  policy_id: number | null
   policy_no: string
   plan_name: string
   insurer: string
@@ -207,6 +233,8 @@ export interface Claim {
   accident_at: string
   accident_place: string
   accident_type: string
+  injury_part: string
+  payee_type: string
   hospital: string
   diagnosis: string
   medical_cost: number

@@ -23,3 +23,9 @@ def require_operator_manager(user: User = Depends(current_user)) -> User:
     if user.role == "enterprise" and user.is_owner:
         return user
     raise HTTPException(status_code=403, detail="仅单位主管可管理操作员" if user.role == "enterprise" else "无权管理操作员")
+
+
+def require_insurer_scope(user: User = Depends(current_user)) -> User:
+    if user.role != "insurer" or not user.insurer_id:
+        raise HTTPException(status_code=403, detail="仅保司账号可访问")
+    return user

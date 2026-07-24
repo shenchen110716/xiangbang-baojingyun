@@ -103,8 +103,17 @@ def _wait_ready(key: str, project_id: str, branch_id: str) -> None:
 
 
 def _connection_uri(key: str, project_id: str, branch_id: str) -> str:
+    # "neondb"/"neondb_owner" are only the defaults Neon proposes on brand-new
+    # projects; a project can be (and here, is) set up with a different
+    # database/role name, so look up what the branch actually has instead of
+    # hardcoding the placeholder names.
+    databases = _call("GET", f"/projects/{project_id}/branches/{branch_id}/databases", key).get("databases", [])
+    if not databases:
+        raise SystemExit("临时分支上没有数据库")
+    database_name = databases[0]["name"]
+    role_name = databases[0]["owner_name"]
     data = _call("GET", f"/projects/{project_id}/connection_uri"
-                        f"?branch_id={branch_id}&database_name=neondb&role_name=neondb_owner",
+                        f"?branch_id={branch_id}&database_name={database_name}&role_name={role_name}",
                  key)
     uri = data.get("uri")
     if not uri:

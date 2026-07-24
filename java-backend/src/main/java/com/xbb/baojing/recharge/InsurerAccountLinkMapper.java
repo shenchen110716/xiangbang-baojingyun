@@ -6,7 +6,7 @@ import java.util.List;
 
 @Mapper
 public interface InsurerAccountLinkMapper {
-    String COLS = "id, insurer, account_id as accountId, created_at as createdAt";
+    String COLS = "id, insurer, insurer_id as insurerId, account_id as accountId, created_at as createdAt";
 
     @Select("SELECT " + COLS + " FROM insurer_account_links ORDER BY id DESC")
     List<InsurerAccountLink> findAll();
@@ -20,7 +20,7 @@ public interface InsurerAccountLinkMapper {
     @Select("SELECT insurer FROM insurer_account_links WHERE account_id = #{accountId}")
     List<String> findInsurersByAccount(Integer accountId);
 
-    @Insert("INSERT INTO insurer_account_links (insurer, account_id, created_at) VALUES (#{insurer}, #{accountId}, #{createdAt})")
+    @Insert("INSERT INTO insurer_account_links (insurer, insurer_id, account_id, created_at) VALUES (#{insurer}, #{insurerId}, #{accountId}, #{createdAt})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(InsurerAccountLink e);
 

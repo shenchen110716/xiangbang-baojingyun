@@ -192,7 +192,7 @@ App({
 
   share(path, query = '') {
     const suffix = query ? `?${query}` : '';
-    return { title: '响帮帮保经云｜企业员工保障服务', path: `${path}${suffix}` };
+    return { title: '响帮帮无忧保｜企业员工保障服务', path: `${path}${suffix}` };
   },
 
   statusText(value) {

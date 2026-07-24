@@ -7,11 +7,12 @@ from .position import (
     PositionVideoIn, PositionVideoReviewIn, PositionReviewIn,
 )
 from .plan import PlanTierIn, PlanIn, PlanUpdate
-from .insured import PersonIn, PersonUpdate, BulkPersonRow, BulkPersonIn
+from .insured import PersonIn, PersonUpdate, BulkPersonRow, BulkPersonIn, InsurerFlagIn
 from .claim import (
     ClaimIn, ClaimUpdate, ClaimStatusIn, ClaimDocumentIn, ClaimDocumentReviewIn,
 )
 from .finance import PaymentIn, PaymentCallbackIn, InvoiceIn, InvoiceUpdate, InsurerAccountIn, InsurerAccountUpdate, InsurerAccountLinkIn
+from .insurer import InsurerIn, InsurerUpdate, InsurerEditReviewIn, InsurerMergeIn, InsurerProfileIn
 from .wechat import WeChatBindOpenidIn
 from .notification import NotificationIn
 from .enrollment import EnrollmentReceiptIn
@@ -29,9 +30,10 @@ __all__ = [
     "PositionIn", "ActualEmployerIn", "ActualEmployerUpdate",
     "PositionVideoIn", "PositionVideoReviewIn", "PositionReviewIn",
     "PlanTierIn", "PlanIn", "PlanUpdate",
-    "PersonIn", "PersonUpdate", "BulkPersonRow", "BulkPersonIn",
+    "PersonIn", "PersonUpdate", "BulkPersonRow", "BulkPersonIn", "InsurerFlagIn",
     "ClaimIn", "ClaimUpdate", "ClaimStatusIn", "ClaimDocumentIn", "ClaimDocumentReviewIn",
     "PaymentIn", "PaymentCallbackIn", "InvoiceIn", "InvoiceUpdate", "InsurerAccountIn", "InsurerAccountUpdate", "InsurerAccountLinkIn",
+    "InsurerIn", "InsurerUpdate", "InsurerEditReviewIn", "InsurerMergeIn", "InsurerProfileIn",
     "WeChatBindOpenidIn",
     "NotificationIn",
     "EnrollmentReceiptIn",

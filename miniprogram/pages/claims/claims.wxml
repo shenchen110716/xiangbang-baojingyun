@@ -1,13 +1,29 @@
 <view class="page safe-bottom">
-  <view class="title">工伤理赔</view><view class="subtitle">报案、材料、补件、审核和赔付进度全流程跟踪</view>
-  <scroll-view class="chips" scroll-x enhanced show-scrollbar="{{false}}"><view wx:for="{{statuses}}" wx:key="value" class="chip {{status===item.value?'active':''}}" data-value="{{item.value}}" bindtap="chooseStatus">{{item.label}}</view></scroll-view>
-  <view wx:if="{{loading}}" class="loading">正在加载案件…</view>
-  <view wx:for="{{filtered}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="detail">
-    <view class="row between"><text class="list-title">{{item.claim_no}}</text><text class="tag {{item.status==='paid'||item.status==='closed'||item.status==='approved'?'tag-success':item.status==='supplement'||item.status==='rejected'||item.calculated_risk==='high'?'tag-danger':'tag-warning'}}">{{item.status_label}}</text></view>
-    <view class="list-meta">{{item.person_name}} · {{item.accident_type}}</view><view class="list-meta">{{item.accident_at}} · {{item.actual_employer_name}}</view>
-    <view class="divider"></view><view class="row between"><text class="muted">申请金额</text><text class="strong">¥{{item.amount}}</text></view>
-    <view class="row between" style="margin-top:18rpx"><text class="small">材料完整度 {{item.complete_percent}}%</text><text class="small {{item.missing_count?'danger':''}}">{{item.missing_count?'缺 '+item.missing_count+' 项':'已齐全'}}</text></view><view class="progress" style="margin-top:12rpx"><view class="progress-in" style="width:{{item.complete_percent}}%"></view></view>
-    <view class="row between" style="margin-top:18rpx"><text class="small">当前处理：{{item.current_handler}}</text><text class="small {{item.deadline_overdue?'danger':''}}">30日时限 {{item.deadline_text}}</text></view>
+  <view class="row" style="gap:48rpx">
+    <view class="chip {{tab==='open'?'active':''}}" data-value="open" bindtap="chooseTab">待理赔</view>
+    <view class="chip {{tab==='closed'?'active':''}}" data-value="closed" bindtap="chooseTab">结案中</view>
   </view>
-  <view wx:if="{{!loading&&!filtered.length}}" class="empty"><view class="empty-icon">+</view><view>暂无理赔案件</view></view><view class="fab" bindtap="create">+</view>
+  <view class="section" style="margin-top:20rpx">
+    <input class="input" placeholder="请输入人员姓名搜索" value="{{search}}" bindinput="onSearch" />
+  </view>
+  <view wx:if="{{loading}}" class="loading">正在加载案件…</view>
+  <view class="section">
+    <view wx:for="{{filtered}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="detail">
+      <view class="row between">
+        <text class="list-title">{{item.person_name}}({{item.id_number_masked}})</text>
+        <text class="tag {{item.status==='paid'||item.status==='closed'||item.status==='approved'?'tag-success':item.status==='supplement'||item.status==='rejected'||item.calculated_risk==='high'?'tag-danger':'tag-warning'}}">已报案{{item.reported_days}}天</text>
+      </view>
+      <view class="list-meta">保单号：{{item.policy_no||'—'}} · 报案号：{{item.claim_no}}</view>
+      <view class="list-meta">{{item.accident_at}} · {{item.actual_employer_name}}</view>
+      <view class="divider"></view>
+      <view class="row between"><text class="small">材料完整度 {{item.complete_percent}}%</text><text class="small {{item.missing_count?'danger':''}}">{{item.missing_count?'缺 '+item.missing_count+' 项':'已齐全'}}</text></view>
+      <view class="progress" style="margin-top:12rpx"><view class="progress-in" style="width:{{item.complete_percent}}%"></view></view>
+      <view class="row between" style="margin-top:20rpx">
+        <button class="secondary" style="flex:1" catchtap="detail" data-id="{{item.id}}">查看资料</button>
+        <button class="primary" style="flex:1;margin-left:16rpx" catchtap="detail" data-id="{{item.id}}">提交资料</button>
+      </view>
+    </view>
+  </view>
+  <view wx:if="{{!loading&&!filtered.length}}" class="empty"><view class="empty-icon">+</view><view>暂无理赔案件</view></view>
+  <view class="fab" bindtap="create">+</view>
 </view>

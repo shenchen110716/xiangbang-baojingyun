@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from ..core.security import current_user
 from ..models import User
-from ..services.ocr import OcrError, recognize_id_card, recognize_receipt_amount
+from ..services.ocr import OcrError, recognize_business_license, recognize_id_card, recognize_receipt_amount
 
 router = APIRouter(prefix="/api", tags=["ocr"])
 
@@ -19,6 +19,20 @@ async def ocr_id_card(file: UploadFile = File(...), user: User = Depends(current
         raise HTTPException(400, "图片不能超过 10MB")
     try:
         return recognize_id_card(content)
+    except OcrError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.post("/ocr/business-license")
+async def ocr_business_license(file: UploadFile = File(...), user: User = Depends(current_user)):
+    """上传营业执照照片，识别单位全称/统一社会信用代码，供新增投保单位自动填充。"""
+    if file.content_type and file.content_type.split(";", 1)[0].lower() not in _ALLOWED:
+        raise HTTPException(400, "仅支持 JPG/PNG 图片")
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(400, "图片不能超过 10MB")
+    try:
+        return recognize_business_license(content)
     except OcrError as exc:
         raise HTTPException(400, str(exc))
 

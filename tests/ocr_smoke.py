@@ -147,6 +147,47 @@ def run():
     assert mock_amt["mock"] is True and mock_amt["amount"] > 0
     print("mock mode receipt amount OK")
 
+    # ---- 营业执照识别（新增投保单位自动带出单位全称/统一社会信用代码） ----
+    mock_license = ocr.recognize_business_license(b"img")
+    assert mock_license["mock"] is True and mock_license["name"]
+    print("mock mode business license OK")
+
+    os.environ["INTEGRATION_MODE"] = "real"
+
+    def fake_license_post(url, form):
+        return {"words_result": {
+            "单位名称": {"words": "响帮帮无忧保测试企业有限公司"},
+            "社会信用代码": {"words": "91320100MA1XXXXX1X"},
+        }}
+    ocr._baidu_post = fake_license_post
+    real_license = ocr.recognize_business_license(b"img")
+    assert real_license["mock"] is False
+    assert real_license["name"] == "响帮帮无忧保测试企业有限公司"
+    assert real_license["credit_code"] == "91320100MA1XXXXX1X"
+    print("real business license field parsing OK")
+
+    def fake_license_error(url, form):
+        return {"error_code": 216201, "error_msg": "image format error"}
+    ocr._baidu_post = fake_license_error
+    try:
+        ocr.recognize_business_license(b"img")
+        assert False
+    except ocr.OcrError as e:
+        assert "image format error" in str(e)
+    print("real business license error_code -> OcrError OK")
+
+    def fake_license_no_name(url, form):
+        return {"words_result": {"社会信用代码": {"words": "91320100MA1XXXXX1X"}}}
+    ocr._baidu_post = fake_license_no_name
+    try:
+        ocr.recognize_business_license(b"img")
+        assert False
+    except ocr.OcrError:
+        pass
+    print("real business license missing name -> OcrError OK")
+
+    os.environ["INTEGRATION_MODE"] = "mock"
+
     print("ocr_smoke: ALL GREEN")
 
 

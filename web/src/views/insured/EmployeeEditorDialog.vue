@@ -6,6 +6,7 @@ import { listPlans } from '@/api/plans'
 import { listActualEmployers, listPositions } from '@/api/positions'
 import { createInsured, setInsuredStatus, updateInsured } from '@/api/insured'
 import { recognizeIdCard } from '@/api/ocr'
+import { isValidIdNumber } from '@/utils/idNumber'
 import type { ActualEmployer, Enterprise, InsurancePlan, InsuredPerson, WorkPosition } from '@/api/types'
 
 const props = defineProps<{ person: InsuredPerson | null }>()
@@ -34,6 +35,9 @@ const locked = ref(false)
 const addedCount = ref(0)
 const ocrLoading = ref(false)
 const ocrHint = ref('')
+// 身份证号校验位（与后端 is_valid_id_number 同一算法），手工输入和 OCR 识别都实时提示，
+// 不用等提交时才发现号码打错/拍错
+const idNumberInvalid = computed(() => !!form.id_number && !isValidIdNumber(form.id_number))
 
 watch(visible, async (isVisible) => {
   if (!isVisible) return
@@ -130,6 +134,7 @@ async function submit() {
   if (!props.person && !form.enterprise_id) { ElMessage.error('请选择投保单位'); return }
   if (!form.position_id) { ElMessage.error('请选择已审核岗位'); return }
   if (!form.name || !form.id_number) { ElMessage.error('请填写姓名和身份证号'); return }
+  if (idNumberInvalid.value) { ElMessage.error('身份证号校验位不正确，请核对后再提交'); return }
   saving.value = true
   try {
     if (props.person) {
@@ -200,7 +205,12 @@ async function submit() {
       </el-form-item>
 
       <el-form-item label="被保险人姓名" required><el-input v-model="form.name" /></el-form-item>
-      <el-form-item label="身份证号" required><el-input v-model="form.id_number" /></el-form-item>
+      <el-form-item label="身份证号" required>
+        <div style="width: 100%">
+          <el-input v-model="form.id_number" :class="{ 'is-invalid-id': idNumberInvalid }" />
+          <div v-if="idNumberInvalid" class="hint" style="color: var(--el-color-danger)">身份证号校验位不正确，可能拍错/打错了，请核对</div>
+        </div>
+      </el-form-item>
       <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
       <el-form-item v-if="showDailyModeToggle" label="日结方式">
         <el-radio-group v-model="dailyMode">
@@ -234,6 +244,9 @@ async function submit() {
   color: var(--el-text-color-placeholder);
   font-size: 11px;
   margin-top: 4px;
+}
+.is-invalid-id :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px var(--el-color-danger) inset;
 }
 .locked-banner {
   background: var(--el-fill-color-light);

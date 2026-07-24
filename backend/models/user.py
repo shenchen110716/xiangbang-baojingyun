@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Integer, String
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -22,6 +22,10 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(40), default="admin")
     enterprise_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     enterprise_role: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    # 仅 role='insurer' 账号使用。和 salesperson（账号本身就是业务员实体）不同，
+    # Insurer 已经是独立实体表，所以保司账号是"User 通过 insurer_id 关联到一个
+    # 已存在的 Insurer"，不是"User 本身就是保司记录"。
+    insurer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("insurers.id"), nullable=True)
     phone: Mapped[str] = mapped_column(String(30), default="")
     status: Mapped[str] = mapped_column(String(30), default="active")
     active: Mapped[bool] = mapped_column(Boolean, default=True)

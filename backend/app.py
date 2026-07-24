@@ -12,7 +12,7 @@ from .core.db import Base, engine, SessionLocal
 from .core.migrations import run_sqlite_bridge_migrations, migrate_premium_balances
 from .core.seed import seed_default_accounts
 
-app = FastAPI(title="响帮帮保经云 API", version="3.6.0")
+app = FastAPI(title="响帮帮无忧保 API", version="3.6.0")
 cors_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "*").split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -60,6 +60,8 @@ from .routers.timeliness import router as timeliness_router
 from .routers.agent_portal import router as agent_portal_router
 from .routers.settings_admin import router as settings_admin_router
 from .routers.ocr import router as ocr_router
+from .routers.insurers import router as insurers_router
+from .routers.insurer_portal import router as insurer_portal_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
@@ -89,6 +91,8 @@ app.include_router(timeliness_router)
 app.include_router(agent_portal_router)
 app.include_router(settings_admin_router)
 app.include_router(ocr_router)
+app.include_router(insurers_router)
+app.include_router(insurer_portal_router)
 
 # SYSTEM-DESIGN-V4.md Phase 0 stop-loss item #1: the project root (source
 # code, data.db, .env, requirements.txt, ...) must never be reachable over
@@ -106,10 +110,10 @@ _WEB_ROOT_FILES = {"favicon.svg", "icons.svg", "xbbzp.html"}
 
 _FRONTEND_ROUTES = {
     "/", "/home", "/screen", "/team", "/dispatch", "/workers", "/work-relations",
-    "/agents", "/insurance", "/policy", "/claims", "/insurers", "/exports",
+    "/agents", "/insurance", "/policy", "/claims", "/insurers", "/insurer-management", "/exports",
     "/report", "/billing", "/recharge", "/pending-terminations", "/promotion",
     "/operators", "/message", "/settings", "/login", "/agent-portal",
-    "/timeliness", "/system-settings",
+    "/timeliness", "/system-settings", "/insurer-portal",
 }
 
 

@@ -152,7 +152,10 @@ public class ClaimService {
         InsuredPerson person = personMapper.findById(item.getPersonId());
         WorkPosition position = person != null && person.getPositionId() != null ? positionMapper.findById(person.getPositionId()) : null;
         var employer = position != null && position.getActualEmployerId() != null ? actualEmployerMapper.findById(position.getActualEmployerId()) : null;
-        Policy policy = person != null && person.getPolicyId() != null ? policyMapper.findById(person.getPolicyId()) : null;
+        // 报案时可指定具体挂哪张保单（同一人可能有多段参保历史）；没指定的旧记录仍退回到
+        // 被保险人当前保单这个近似值，和 claim_payload() 的 Python 实现保持一致。
+        Policy policy = item.getPolicyId() != null ? policyMapper.findById(item.getPolicyId())
+                : (person != null && person.getPolicyId() != null ? policyMapper.findById(person.getPolicyId()) : null);
         InsurancePlan plan = policy != null ? planMapper.findById(policy.getPlanId()) : null;
 
         List<ClaimDocument> docs = documentMapper.findByClaim(item.getId());

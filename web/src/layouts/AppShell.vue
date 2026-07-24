@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { routes } from '@/router/routes'
 import * as miscApi from '@/api/misc'
 import { listLinkedAccounts, type LinkedAccount } from '@/api/auth'
+import { listEnterprises } from '@/api/enterprises'
 import GlobalSearch from '@/components/GlobalSearch.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
 
@@ -17,6 +18,7 @@ const messageCount = ref(0)
 const searchVisible = ref(false)
 const helpVisible = ref(false)
 const linkedAccounts = ref<LinkedAccount[]>([])
+const currentEnterpriseName = ref('')
 const switcherVisible = ref(false)
 const switcherSearch = ref('')
 const switching = ref(false)
@@ -64,7 +66,7 @@ async function doSwitch(account: LinkedAccount) {
 
 const navRoutes = routes.filter((r) => r.meta.group !== undefined && r.name !== 'login')
 const projectManagerRouteNames = new Set([
-  'home', 'screen', 'dispatch', 'workers', 'workRelations', 'claims', 'exports', 'settings',
+  'home', 'dispatch', 'workers', 'claims', 'settings',
 ])
 const navGroups = computed(() => {
   const groups: Record<string, typeof navRoutes> = {}
@@ -78,15 +80,26 @@ const navGroups = computed(() => {
   return groups
 })
 
-const teamLabel = computed(() => (auth.isEnterprise() ? '工作单位管理' : '投保单位管理'))
+// /team 现在只对平台管理员可见（企业端原来的「工作单位管理」内容已并入岗位参保方案页），
+// 不再需要按角色显示不同标题。
 function navLabel(r: (typeof navRoutes)[number]) {
-  if (r.name === 'team') return teamLabel.value
   return r.meta.title
 }
-const currentTitle = computed(() => (route.name === 'team' ? teamLabel.value : (route.meta.title as string)))
+const currentTitle = computed(() => route.meta.title as string)
+// 侧边栏顶部原来是固定文案「响帮帮无忧保 · 参保单位」，看不出是哪家单位登录的；
+// 改成显示当前登录的投保单位名称本身，管理端（平台）保持产品名。
+const brandSubtitle = computed(() => (auth.isEnterprise() ? currentEnterpriseName.value || '加载中…' : '响帮帮无忧保'))
+const siteName = '响帮帮无忧保'
 
-const brandSubtitle = computed(() => (auth.isEnterprise() ? '响帮帮保经云 · 参保单位' : '响帮帮保经云'))
-const accountSubtitle = computed(() => (auth.isEnterprise() ? '参保单位账户' : '平台运营账户'))
+async function loadCurrentEnterpriseName() {
+  if (!auth.isEnterprise()) return
+  try {
+    const list = await listEnterprises()
+    currentEnterpriseName.value = list[0]?.name || ''
+  } catch {
+    currentEnterpriseName.value = ''
+  }
+}
 
 async function loadMessageCount() {
   try {
@@ -105,8 +118,13 @@ onMounted(async () => {
     router.replace({ name: 'agent-portal' })
     return
   }
+  if (auth.user?.role === 'insurer') {
+    router.replace({ name: 'insurer-portal' })
+    return
+  }
   loadMessageCount()
   loadLinkedAccounts()
+  loadCurrentEnterpriseName()
 })
 
 function handleLogout() {
@@ -130,14 +148,6 @@ async function openPasswordChange() {
           <div class="brand-title">{{ brandSubtitle }}</div>
         </div>
       </div>
-      <div class="account-card" :class="{ clickable: linkedAccounts.length > 0 }" @click="openSwitcher">
-        <div class="avatar">{{ auth.user?.name?.slice(0, 1) || '?' }}</div>
-        <div class="account-info">
-          <b>{{ auth.user?.name || '加载中' }}</b>
-          <small>{{ accountSubtitle }}</small>
-        </div>
-        <span v-if="linkedAccounts.length > 0" class="switch-hint">切换 ⇄</span>
-      </div>
       <el-menu :default-active="route.name as string" router class="side-nav">
         <template v-for="(items, group) in navGroups" :key="group">
           <div v-if="group" class="nav-group-label">{{ group }}</div>
@@ -153,7 +163,7 @@ async function openPasswordChange() {
         <div class="topbar-title">
           <h1>{{ currentTitle }}</h1>
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item :to="{ name: 'home' }">首页</el-breadcrumb-item>
+            <el-breadcrumb-item :to="{ name: 'home' }">{{ siteName }}</el-breadcrumb-item>
             <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
@@ -170,6 +180,7 @@ async function openPasswordChange() {
             </span>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item v-if="linkedAccounts.length > 0" @click="openSwitcher">切换账户 ⇄</el-dropdown-item>
                 <el-dropdown-item @click="openPasswordChange">修改密码</el-dropdown-item>
                 <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
@@ -234,15 +245,6 @@ async function openPasswordChange() {
 .brand-title {
   font-size: 15px;
 }
-.account-card {
-  margin: 14px;
-  padding: 10px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
 .avatar {
   width: 30px;
   height: 30px;
@@ -259,25 +261,6 @@ async function openPasswordChange() {
   font-size: 10px;
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
-}
-.account-info {
-  display: grid;
-  font-size: 12px;
-  color: #e2e8f0;
-}
-.account-info small {
-  color: #94a3b8;
-}
-.account-card.clickable {
-  cursor: pointer;
-}
-.account-card.clickable:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-.switch-hint {
-  margin-left: auto;
-  font-size: 11px;
-  color: #93c5fd;
 }
 .switch-list {
   display: grid;

@@ -5,6 +5,10 @@ import java.time.LocalDateTime;
 public class InsurancePlan {
     private Integer id;
     private String insurer;
+    // Nullable FK to insurers.id, backfilled from `insurer` by name match
+    // (2026-07-24 insurer-portal migration). `insurer` string is kept as a
+    // display-layer transition, not removed — see backend/models/plan.py.
+    private Integer insurerId;
     private String insurerEmail = "";
     private String name;
     private String coverage = "";
@@ -22,6 +26,8 @@ public class InsurancePlan {
     public void setId(Integer id) { this.id = id; }
     public String getInsurer() { return insurer; }
     public void setInsurer(String v) { this.insurer = v; }
+    public Integer getInsurerId() { return insurerId; }
+    public void setInsurerId(Integer v) { this.insurerId = v; }
     public String getInsurerEmail() { return insurerEmail; }
     public void setInsurerEmail(String v) { this.insurerEmail = v; }
     public String getName() { return name; }

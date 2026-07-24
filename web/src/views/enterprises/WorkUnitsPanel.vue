@@ -108,11 +108,16 @@ async function removeItem(item: ActualEmployer) {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
+            <template v-if="row.has_active_people">
+              <span class="muted">已有参保员工，不可编辑/删除</span>
+            </template>
+            <template v-else>
+              <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
+              <el-button link type="danger" size="small" @click="removeItem(row)">删除</el-button>
+            </template>
             <el-button link type="primary" size="small" @click="toggleStatus(row)">{{ row.status === 'active' ? '暂停' : '恢复' }}</el-button>
-            <el-button link type="danger" size="small" @click="removeItem(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -143,6 +148,10 @@ async function removeItem(item: ActualEmployer) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
+}
+.muted {
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 .filter-row {
   padding: 0 20px 14px;

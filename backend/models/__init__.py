@@ -1,5 +1,6 @@
 from ..core.db import Base
 from .user import User
+from .insurer import Insurer
 from .enterprise import Enterprise, ActualEmployer, UserEmployerScope
 from .position import WorkPosition, PositionVideo
 from .plan import InsurancePlan, PlanTier
@@ -24,6 +25,7 @@ from .settings import SystemSetting
 __all__ = [
     "Base",
     "User",
+    "Insurer",
     "Enterprise",
     "ActualEmployer",
     "UserEmployerScope",

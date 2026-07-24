@@ -13,7 +13,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isEnterpriseOwner = () => isEnterprise() && user.value?.enterprise_role === 'owner'
   const isProjectManager = () => isEnterprise() && user.value?.enterprise_role === 'project_manager'
 
-  async function login(username: string, password: string, portal: 'admin' | 'enterprise' | 'salesperson') {
+  async function login(username: string, password: string, portal: 'admin' | 'enterprise' | 'salesperson' | 'insurer') {
     const result = await authApi.login(username, password, portal)
     token.value = result.access_token
     localStorage.setItem(TOKEN_KEY, result.access_token)

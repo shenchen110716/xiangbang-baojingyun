@@ -34,9 +34,9 @@ def create_payment(data:PaymentIn,user:User=Depends(current_user),session:Sessio
     order=f"PAY-{datetime.now().strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(3).upper()}"
     if data.channel == "jsapi":
         if not user.wx_openid: raise HTTPException(400, "请先在小程序内完成微信授权绑定")
-        result = wechat_pay_provider().create_jsapi_order(data.amount, order, user.wx_openid, "响帮帮保经云-平台服务费")
+        result = wechat_pay_provider().create_jsapi_order(data.amount, order, user.wx_openid, "响帮帮无忧保-平台服务费")
     else:
-        result = wechat_pay_provider().create_native_order(data.amount, order, "响帮帮保经云-平台服务费")
+        result = wechat_pay_provider().create_native_order(data.amount, order, "响帮帮无忧保-平台服务费")
     if not result.ok: raise HTTPException(502, result.message or "微信支付下单失败")
     row=PaymentRecord(order_no=order,enterprise_id=data.enterprise_id,account=data.account,amount=data.amount,status="pending",provider=result.provider,channel=data.channel,openid=user.wx_openid if data.channel=="jsapi" else None)
     session.add(row);session.commit()

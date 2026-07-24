@@ -14,7 +14,9 @@ const form = reactive({
     ? 'enterprise'
     : route.query.portal === 'salesperson'
       ? 'salesperson'
-      : 'admin') as 'admin' | 'enterprise' | 'salesperson',
+      : route.query.portal === 'insurer'
+        ? 'insurer'
+        : 'admin') as 'admin' | 'enterprise' | 'salesperson' | 'insurer',
   username: isLocal ? 'admin' : '',
   password: isLocal ? 'admin123' : '',
 })
@@ -40,6 +42,12 @@ const portals = [
     title: '业务员',
     desc: '查看本人绑定单位、产品与佣金明细',
   },
+  {
+    key: 'insurer' as const,
+    eyebrow: '04 · 保司端',
+    title: '保险公司',
+    desc: '岗位核保、保单、结算与理赔审核',
+  },
 ]
 
 const activeCopy = computed(() => portals.find((p) => p.key === form.portal)!)
@@ -51,6 +59,8 @@ async function submit() {
     await auth.login(form.username, form.password, form.portal)
     if (auth.user?.role === 'salesperson') {
       router.push('/agent-portal')
+    } else if (auth.user?.role === 'insurer') {
+      router.push('/insurer-portal')
     } else {
       const redirect = (route.query.redirect as string) || '/home'
       router.push(redirect)
@@ -68,11 +78,11 @@ async function submit() {
     <aside class="auth-side">
       <a class="side-brand" href="/xbbzp.html">
         <span class="brand-mark">响</span>
-        <span class="brand-text">响帮帮<span class="brand-sub">XIANGBANGBANG · 保经云</span></span>
+        <span class="brand-text">响帮帮<span class="brand-sub">XIANGBANGBANG · 无忧保</span></span>
       </a>
 
       <div class="side-body">
-        <div class="hero-eyebrow">AUTH · 响帮帮保经云</div>
+        <div class="hero-eyebrow">AUTH · 响帮帮无忧保</div>
         <h1>参保、理赔、结算，<br>三端实时同步。</h1>
         <p class="lede">{{ activeCopy.desc }}，登录后数据与移动端、总后台即时联动。</p>
       </div>
@@ -295,7 +305,7 @@ p {
 
 .portal-picker {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
   margin-bottom: 28px;
 }

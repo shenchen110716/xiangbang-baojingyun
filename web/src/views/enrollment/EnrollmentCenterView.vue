@@ -57,7 +57,7 @@ function isPendingEffective(x: InsuredPerson) {
 }
 const filteredPeople = computed(() => {
   let rows = people.value
-  if (peopleStatusFilter.value === 'active-pending') rows = rows.filter(isPendingEffective)
+  if (peopleStatusFilter.value === 'pending') rows = rows.filter((x) => x.status === 'pending' || isPendingEffective(x))
   else if (peopleStatusFilter.value === 'active') rows = rows.filter((x) => x.status === 'active' && !isPendingEffective(x))
   else if (peopleStatusFilter.value) rows = rows.filter((x) => x.status === peopleStatusFilter.value)
   if (peopleSearch.value) {
@@ -75,7 +75,7 @@ function exportPeopleCsv() {
     p.name, p.id_number, p.phone, p.enterprise_name, p.actual_employer_name, p.position_name, insuredStatusLabel(p).text,
     formatDateTime(p.created_at), formatCoverageDate(p.effective_at, p.effective_mode), formatCoverageDate(p.terminated_at, p.effective_mode),
   ])
-  downloadCsv([header, ...rows], `响帮帮保经云-参停保人员-${Date.now()}.csv`)
+  downloadCsv([header, ...rows], `响帮帮无忧保-参停保人员-${Date.now()}.csv`)
 }
 
 async function reloadSummary() {
@@ -228,7 +228,6 @@ async function markReceipt(row: { id: number }) {
           </el-select>
           <el-select v-model="peopleStatusFilter" placeholder="全部状态" clearable style="width: 130px">
             <el-option label="待生效" value="pending" />
-            <el-option label="待生效" value="active-pending" />
             <el-option label="在保" value="active" />
             <el-option label="已停保" value="stopped" />
           </el-select>

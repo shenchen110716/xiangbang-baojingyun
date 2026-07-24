@@ -2,9 +2,9 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listEnterprises } from '@/api/enterprises'
-import { listInsured } from '@/api/insured'
+import { listInsured, getPolicyMembers } from '@/api/insured'
 import { createClaim } from '@/api/claims'
-import type { Enterprise, InsuredPerson } from '@/api/types'
+import type { Enterprise, InsuredPerson, PolicyMemberHistory } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -13,14 +13,21 @@ const emit = defineEmits<{ created: [] }>()
 
 const enterprises = ref<Enterprise[]>([])
 const people = ref<InsuredPerson[]>([])
+const policyOptions = ref<PolicyMemberHistory[]>([])
+const policyOptionsLoading = ref(false)
 const saving = ref(false)
+
+const PAYEE_TYPES = ['本人', '近亲属', '单位代收']
 
 const form = reactive({
   enterprise_id: null as number | null,
   person_id: null as number | null,
+  policy_id: null as number | null,
   accident_at: '',
   accident_place: '',
   accident_type: '工伤事故',
+  injury_part: '',
+  payee_type: '',
   hospital: '',
   diagnosis: '',
   medical_cost: 0,
@@ -32,17 +39,39 @@ const form = reactive({
 
 watch(visible, async (isVisible) => {
   if (!isVisible) return
-  Object.assign(form, { enterprise_id: auth.isEnterprise() ? auth.user?.enterprise_id ?? null : null, person_id: null, accident_at: '', accident_place: '', accident_type: '工伤事故', hospital: '', diagnosis: '', medical_cost: 0, amount: 0, contact_name: '', contact_phone: '', description: '' })
+  Object.assign(form, { enterprise_id: auth.isEnterprise() ? auth.user?.enterprise_id ?? null : null, person_id: null, policy_id: null, accident_at: '', accident_place: '', accident_type: '工伤事故', injury_part: '', payee_type: '', hospital: '', diagnosis: '', medical_cost: 0, amount: 0, contact_name: '', contact_phone: '', description: '' })
+  policyOptions.value = []
   const [enterpriseList, personList] = await Promise.all([listEnterprises(), listInsured()])
   enterprises.value = enterpriseList
   people.value = personList
 })
 
 const activePeople = computed(() => people.value.filter((p) => p.status === 'active' && (!form.enterprise_id || p.enterprise_id === form.enterprise_id)))
+const selectedPerson = computed(() => people.value.find((p) => p.id === form.person_id) || null)
+
+// 选中被保险人后：自动带入联系人/联系电话（默认用本人信息，报案人可再改成其他联系人），
+// 并拉出这个人的参保历史，供下面选择这次事故具体挂在哪张保单下（同一人可能有多段参保记录）。
+watch(
+  () => form.person_id,
+  async (personId) => {
+    form.policy_id = null
+    policyOptions.value = []
+    const person = people.value.find((p) => p.id === personId)
+    if (!person) return
+    Object.assign(form, { contact_name: person.name, contact_phone: person.phone || '' })
+    policyOptionsLoading.value = true
+    try {
+      policyOptions.value = await getPolicyMembers(person.id)
+      if (policyOptions.value.length === 1) form.policy_id = policyOptions.value[0].policy_id
+    } finally {
+      policyOptionsLoading.value = false
+    }
+  },
+)
 
 async function submit() {
   if (!form.enterprise_id || !form.person_id) { ElMessage.error('请选择投保单位和被保险人'); return }
-  if (!form.accident_at || !form.accident_place || !form.description) { ElMessage.error('请填写事故时间、地点和案情描述'); return }
+  if (!form.accident_at || !form.accident_place || !form.description) { ElMessage.error('请填写事发时间、受伤地址和受伤描述'); return }
   saving.value = true
   try {
     await createClaim({ ...form, enterprise_id: form.enterprise_id, person_id: form.person_id })
@@ -65,23 +94,36 @@ async function submit() {
           <el-option v-for="e in enterprises" :key="e.id" :label="e.name" :value="e.id" />
         </el-select>
       </el-form-item>
-      <el-form-item label="被保险人" required>
-        <el-select v-model="form.person_id" style="width: 100%" placeholder="仅可选择当前在保员工">
+      <el-form-item label="被保人姓名" required>
+        <el-select v-model="form.person_id" filterable style="width: 100%" placeholder="输入姓名搜索当前在保员工">
           <el-option v-for="p in activePeople" :key="p.id" :label="`${p.name} · ${p.id_number}`" :value="p.id" />
         </el-select>
       </el-form-item>
-      <el-form-item label="事故时间" required>
+      <el-form-item v-if="selectedPerson" label="身份证号"><span>{{ selectedPerson.id_number }}</span></el-form-item>
+      <el-form-item v-if="selectedPerson" label="工作岗位"><span>{{ selectedPerson.position_name || selectedPerson.occupation || '—' }}</span></el-form-item>
+      <el-form-item label="保单号">
+        <el-select v-model="form.policy_id" clearable filterable :loading="policyOptionsLoading" style="width: 100%" :placeholder="form.person_id ? '不选则按被保险人当前保单归档' : '请先选择被保险人'">
+          <el-option v-for="pm in policyOptions" :key="pm.policy_id" :label="`${pm.policy_no} · ${pm.insurer} ${pm.plan_name}`" :value="pm.policy_id" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="事发时间" required>
         <el-date-picker v-model="form.accident_at" type="datetime" value-format="YYYY-MM-DD HH:mm" style="width: 100%" />
       </el-form-item>
-      <el-form-item label="事故地点" required><el-input v-model="form.accident_place" /></el-form-item>
+      <el-form-item label="受伤地址" required><el-input v-model="form.accident_place" /></el-form-item>
+      <el-form-item label="受伤部位"><el-input v-model="form.injury_part" placeholder="如：右手食指、腰部" /></el-form-item>
       <el-form-item label="事故类型"><el-input v-model="form.accident_type" /></el-form-item>
       <el-form-item label="就诊医院"><el-input v-model="form.hospital" /></el-form-item>
       <el-form-item label="诊断结果"><el-input v-model="form.diagnosis" /></el-form-item>
       <el-form-item label="医疗费用"><el-input-number v-model="form.medical_cost" :min="0" :step="100" /></el-form-item>
       <el-form-item label="预估理赔金额"><el-input-number v-model="form.amount" :min="0" :step="100" /></el-form-item>
+      <el-form-item label="收款人类型">
+        <el-select v-model="form.payee_type" clearable style="width: 100%" placeholder="请选择">
+          <el-option v-for="t in PAYEE_TYPES" :key="t" :label="t" :value="t" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="联系人"><el-input v-model="form.contact_name" /></el-form-item>
       <el-form-item label="联系电话"><el-input v-model="form.contact_phone" /></el-form-item>
-      <el-form-item label="案情描述" required><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item>
+      <el-form-item label="受伤描述" required><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="visible = false">取消</el-button>

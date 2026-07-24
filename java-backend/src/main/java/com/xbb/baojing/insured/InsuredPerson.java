@@ -16,6 +16,12 @@ public class InsuredPerson {
     private Integer positionId;
     private String status = "pending";
     private Integer policyId;
+    // 保司标注的异常原因/时间/操作人（2026-07-24 insurer-portal 员工参停保
+    // 异常标注功能，PATCH /insured/{id}/insurer-flag）。空字符串表示未标注。
+    // 只写这三个字段，参保状态本身不受影响——见 backend/models/insured.py。
+    private String insurerFlagReason = "";
+    private LocalDateTime insurerFlaggedAt;
+    private Integer insurerFlaggedBy;
     private LocalDateTime createdAt;
 
     // response-only, joined
@@ -56,6 +62,12 @@ public class InsuredPerson {
     public void setStatus(String v) { this.status = v; }
     public Integer getPolicyId() { return policyId; }
     public void setPolicyId(Integer v) { this.policyId = v; }
+    public String getInsurerFlagReason() { return insurerFlagReason; }
+    public void setInsurerFlagReason(String v) { this.insurerFlagReason = v; }
+    public LocalDateTime getInsurerFlaggedAt() { return insurerFlaggedAt; }
+    public void setInsurerFlaggedAt(LocalDateTime v) { this.insurerFlaggedAt = v; }
+    public Integer getInsurerFlaggedBy() { return insurerFlaggedBy; }
+    public void setInsurerFlaggedBy(Integer v) { this.insurerFlaggedBy = v; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime v) { this.createdAt = v; }
     public String getEnterpriseName() { return enterpriseName; }

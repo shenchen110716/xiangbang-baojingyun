@@ -9,6 +9,9 @@ import java.time.LocalDateTime;
 public class InsurerAccountLink {
     private Integer id;
     private String insurer;
+    // Nullable FK to insurers.id, backfilled from `insurer` by name match
+    // (2026-07-24 insurer-portal migration) — see plan.Insurer.
+    private Integer insurerId;
     private Integer accountId;
     private LocalDateTime createdAt;
 
@@ -16,6 +19,8 @@ public class InsurerAccountLink {
     public void setId(Integer id) { this.id = id; }
     public String getInsurer() { return insurer; }
     public void setInsurer(String v) { this.insurer = v; }
+    public Integer getInsurerId() { return insurerId; }
+    public void setInsurerId(Integer v) { this.insurerId = v; }
     public Integer getAccountId() { return accountId; }
     public void setAccountId(Integer v) { this.accountId = v; }
     public LocalDateTime getCreatedAt() { return createdAt; }

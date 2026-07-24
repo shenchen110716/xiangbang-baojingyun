@@ -1,4 +1,4 @@
 {
-  "desc": "响帮帮保经云用户端小程序",
+  "desc": "响帮帮无忧保用户端小程序",
   "rules": [{ "action": "disallow", "page": "*" }]
 }

@@ -7,7 +7,9 @@ import java.util.List;
 @Mapper
 public interface InsuredPersonMapper {
     String COLS = "id, enterprise_id as enterpriseId, name, phone, id_number as idNumber, occupation, " +
-            "occupation_class as occupationClass, position_id as positionId, status, policy_id as policyId, created_at as createdAt";
+            "occupation_class as occupationClass, position_id as positionId, status, policy_id as policyId, " +
+            "insurer_flag_reason as insurerFlagReason, insurer_flagged_at as insurerFlaggedAt, insurer_flagged_by as insurerFlaggedBy, " +
+            "created_at as createdAt";
 
     @Select("<script>SELECT " + COLS + " FROM insured_people WHERE 1=1 " +
             "<if test='enterpriseId != null'>AND enterprise_id = #{enterpriseId}</if> " +
@@ -41,4 +43,10 @@ public interface InsuredPersonMapper {
 
     @Select("SELECT COUNT(*) FROM insured_people WHERE enterprise_id = #{enterpriseId} AND status IN ('active','pending')")
     int countActiveOrPendingForEnterprise(Integer enterpriseId);
+
+    // Mirrors PATCH /insured/{id}/insurer-flag (backend/routers/insured.py) —
+    // the only insurer-facing write path onto this table; never touches status.
+    @Update("UPDATE insured_people SET insurer_flag_reason=#{insurerFlagReason}, insurer_flagged_at=#{insurerFlaggedAt}, " +
+            "insurer_flagged_by=#{insurerFlaggedBy} WHERE id=#{id}")
+    int updateInsurerFlag(InsuredPerson p);
 }

@@ -12,7 +12,7 @@
     <view class="row top">
       <view class="avatar">{{item.initial}}</view>
       <view class="grow">
-        <view class="row between"><text class="list-title">{{item.name}}</text><text class="tag {{item.status_display==='active-pending'?'tag-warning':item.status==='active'?'tag-success':item.status==='pending'?'tag-warning':'tag-gray'}}">{{item.status_label}}</text></view>
+        <view class="row between"><text class="list-title">{{item.name}}</text><text class="tag {{item.status_display==='pending'?'tag-warning':item.status_display==='active'?'tag-success':'tag-gray'}}">{{item.status_label}}</text></view>
         <view class="list-meta">{{item.id_masked}}<text wx:if="{{item.phone}}"> · {{item.phone}}</text></view>
         <view class="list-meta">{{item.actual_employer_name||'未关联用工单位'}} · {{item.position_name||'未关联岗位'}}</view>
         <view wx:if="{{item.plan_name}}" class="small" style="margin-top:10rpx">{{item.insurer}} · {{item.plan_name}}</view>
