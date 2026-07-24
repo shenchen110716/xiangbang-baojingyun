@@ -1,0 +1,10 @@
+CREATE SCHEMA IF NOT EXISTS broker;
+
+CREATE TABLE broker.verified_user (
+    user_id     BIGINT PRIMARY KEY,
+    verified_at TIMESTAMPTZ NOT NULL
+);
+
+GRANT USAGE ON SCHEMA broker TO broker_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA broker TO broker_user;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA broker TO broker_user;
