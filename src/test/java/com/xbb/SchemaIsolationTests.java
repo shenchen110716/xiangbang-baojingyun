@@ -3,6 +3,7 @@ package com.xbb;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -28,6 +29,7 @@ class SchemaIsolationTests {
 
     /** 应用真实使用的数据源(application.yml 配置的 identity_user)。 */
     @Autowired
+    @Qualifier("identityDataSource")
     DataSource appDataSource;
 
     @BeforeAll

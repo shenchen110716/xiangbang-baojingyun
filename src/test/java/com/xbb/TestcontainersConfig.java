@@ -24,14 +24,20 @@ public class TestcontainersConfig {
      * 方法调用本方法(见 SchemaIsolationTests 等)。
      */
     public static void registerProperties(DynamicPropertyRegistry registry) {
-        // 应用运行时:受限用户
-        registry.add("spring.datasource.url", PG::getJdbcUrl);
-        registry.add("spring.datasource.username", () -> "identity_user");
-        registry.add("spring.datasource.password", () -> "identity_pw");
-        // Flyway:管理员(需要 DDL 与 GRANT 权限)
-        registry.add("spring.flyway.url", PG::getJdbcUrl);
-        registry.add("spring.flyway.user", PG::getUsername);
-        registry.add("spring.flyway.password", PG::getPassword);
+        // identity 域:应用运行时用受限用户,Flyway 用管理员
+        registry.add("xbb.domains.identity.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.identity.datasource.username", () -> "identity_user");
+        registry.add("xbb.domains.identity.datasource.password", () -> "identity_pw");
+        registry.add("xbb.domains.identity.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.identity.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.identity.flyway.password", PG::getPassword);
+        // org 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.org.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.org.datasource.username", () -> "org_user");
+        registry.add("xbb.domains.org.datasource.password", () -> "org_pw");
+        registry.add("xbb.domains.org.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.org.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.org.flyway.password", PG::getPassword);
     }
 
     @Bean
