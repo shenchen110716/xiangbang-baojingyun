@@ -14,7 +14,7 @@
   <view wx:if="{{loading}}" class="loading">正在加载员工…</view>
   <view wx:for="{{filtered}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="rowTap">
     <view class="row top">
-      <view wx:if="{{selectMode}}" class="select-box {{selectedIds.indexOf(item.id)>-1?'checked':''}}">{{selectedIds.indexOf(item.id)>-1?'✓':''}}</view>
+      <view wx:if="{{selectMode}}" class="select-box {{selectedIds.indexOf(item.id)>-1?'checked':''}}" data-id="{{item.id}}" catchtap="toggleSelect">{{selectedIds.indexOf(item.id)>-1?'✓':''}}</view>
       <view class="avatar">{{item.initial}}</view>
       <view class="grow">
         <view class="row between"><text class="list-title">{{item.name}}</text><text class="tag {{item.status_display==='pending'?'tag-warning':item.status_display==='active'?'tag-success':'tag-gray'}}">{{item.status_label}}</text></view>
@@ -29,17 +29,19 @@
   <!-- select-bar 是 position:fixed 悬浮在底部的，不占文档流空间，不留个
        占位高度的话它会挡住列表最后几条，还可能因为页面内容"看起来"刚好
        撑满一屏而滚不动。 -->
-  <view wx:if="{{selectMode}}" style="height:320rpx"></view>
+  <view wx:if="{{selectMode}}" style="height:240rpx"></view>
   <view wx:if="{{selectMode}}" class="select-bar">
-    <view class="row between" style="margin-bottom:20rpx">
-      <text class="strong">批量停保</text>
-      <text class="tag tag-success">已选 {{selectedIds.length}} 人</text>
+    <view class="row between select-bar-date" style="margin-bottom:14rpx">
+      <view class="row">
+        <text class="strong" style="white-space:nowrap">批量停保</text>
+        <text class="tag tag-success" style="margin-left:12rpx">已选 {{selectedIds.length}} 人</text>
+      </view>
+      <view class="row" style="flex:none">
+        <text class="small" style="white-space:nowrap;margin-right:12rpx">停保时间</text>
+        <picker mode="date" value="{{stopDate}}" start="{{minStopDate}}" bindchange="stopDateChange"><view class="picker">{{stopDate}}</view></picker>
+      </view>
     </view>
-    <view class="select-bar-date row between">
-      <text class="small" style="white-space:nowrap">停保时间</text>
-      <picker mode="date" value="{{stopDate}}" start="{{minStopDate}}" bindchange="stopDateChange"><view class="picker" style="min-width:240rpx">{{stopDate}}</view></picker>
-    </view>
-    <view class="row" style="gap:16rpx;margin-top:20rpx">
+    <view class="row" style="gap:14rpx">
       <button class="secondary grow" bindtap="cancelSelect">取消</button>
       <button class="primary grow" loading="{{bulkSubmitting}}" disabled="{{bulkSubmitting}}" bindtap="confirmSelect">确定停保</button>
     </view>
