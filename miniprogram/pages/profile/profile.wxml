@@ -1,17 +1,4 @@
 <view class="page safe-bottom">
-  <view wx:if="{{!loggedIn}}" class="hero">
-    <view class="hero-title">响帮帮无忧保</view>
-    <view class="hero-sub">登录后可管理工作单位、参保员工、账户与理赔</view>
-  </view>
-  <view wx:if="{{!loggedIn}}" class="section">
-    <view class="card notice">
-      <view class="strong">还未登录</view>
-      <view class="list-meta">工作单位、保单、账户充值等功能需要登录后才能使用</view>
-    </view>
-    <button class="primary" style="margin-top:20rpx" bindtap="goLogin">登录 / 切换账号</button>
-  </view>
-
-  <block wx:if="{{loggedIn}}">
   <view class="hero">
     <view class="row">
       <view class="avatar" style="background:rgba(255,255,255,.16);color:#fff">{{userInitial}}</view>
@@ -20,7 +7,7 @@
         <view class="row"><text class="hero-sub">{{enterprise.name||'当前投保单位'}}</text><text wx:if="{{linkedAccounts.length}}" class="tag" style="margin-left:14rpx;background:rgba(255,255,255,.22);color:#fff" bindtap="switchIdentity">身份切换 ⇄</text></view>
       </view>
     </view>
-    <view class="row between" style="margin-top:30rpx"><text class="hero-sub">账号 {{user.username}}</text><text class="tag">企业用户</text></view>
+    <view class="row between" style="margin-top:30rpx"><text class="hero-sub">账号 {{user.username||'未登录'}}</text><text class="tag">企业用户</text></view>
   </view>
   <view class="grid-2 section"><view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">保费余额</text><text class="stat-value">¥{{dashboard.premium_balance_total||0}}</text></view><view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">使用费余额</text><text class="stat-value">¥{{dashboard.usage_balance||0}}</text></view></view>
   <view class="card section">
@@ -46,5 +33,4 @@
   <button class="secondary" bindtap="changePassword">修改登录密码</button>
   <button class="danger-btn" bindtap="logout">退出当前账号</button>
   <view class="small" style="text-align:center;margin-top:24rpx">响帮帮无忧保用户端 v3.5</view>
-  </block>
 </view>

@@ -19,20 +19,22 @@ Page({
     selectedIds: [],
     stopDate: '',
     minStopDate: '',
-    bulkSubmitting: false,
-    loggedIn: false
+    bulkSubmitting: false
   },
   onLoad(options) {
     if (options && options.status) this.setData({ status: options.status });
     if (options && options.position_id) this.setData({ positionId: Number(options.position_id) });
   },
-  goLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
-  // 未登录时不能强制跳登录页——底部 tabBar 一直可见，未登录也能点到这个
-  // tab，之前一进页面就 reLaunch 到登录页，等于逛都不让逛。改成和首页一样，
-  // 未登录只展示登录入口，不请求任何需要鉴权的数据。
+  // 未登录时不拦截浏览——页面正常渲染（搜索框、筛选栏、悬浮按钮都在），
+  // 只是列表是空的；只有真正点了会触发接口调用的操作（参保/停保/查看
+  // 详情/导入）才跳登录页。返回 false 时调用方要 return，不再往下执行。
+  requireLogin() {
+    if (app.globalData.token) return true;
+    wx.navigateTo({ url: '/pages/login/login' });
+    return false;
+  },
   onShow() {
-    if (!app.globalData.token) { this.setData({ loggedIn: false, loading: false }); return; }
-    this.setData({ loggedIn: true });
+    if (!app.globalData.token) { this.setData({ loading: false }); return; }
     // 首页的统计卡片/参保方案卡片跳这个 tab 时用 wx.switchTab（tabBar 页面
     // 不支持 wx.navigateTo，switchTab 又不支持带参数），筛选条件走全局变量
     // 中转，这里读一次就清空。没有待处理的中转数据说明是用户直接点了底部
@@ -100,19 +102,27 @@ Page({
   },
   clearPositionFilter() { this.setData({ positionId: 0, positionName: '' }); this.applyFilter(); },
   add() {
+    if (!this.requireLogin()) return;
     const url = this.data.positionId ? `/pages/employee-edit/employee-edit?positionId=${this.data.positionId}` : '/pages/employee-edit/employee-edit';
     wx.navigateTo({ url });
   },
-  detail(e) { wx.navigateTo({ url: `/pages/employee-detail/employee-detail?id=${e.currentTarget.dataset.id}` }); },
+  detail(e) {
+    if (!this.requireLogin()) return;
+    wx.navigateTo({ url: `/pages/employee-detail/employee-detail?id=${e.currentTarget.dataset.id}` });
+  },
   rowTap(e) {
     if (this.data.selectMode) { this.toggleSelect(e); return; }
     this.detail(e);
   },
-  importFile() { wx.navigateTo({ url: '/pages/import/import' }); },
+  importFile() {
+    if (!this.requireLogin()) return;
+    wx.navigateTo({ url: '/pages/import/import' });
+  },
   // 参保/停保批量操作：标题栏"参保"/"停保"进入勾选模式（不用先点进详情页
   // 逐个操作），和网页端 WorkersView 的批量参保/批量停保同一套接口——参保
   // 直接改状态，停保必须先选停保时间。
   startSelect(e) {
+    if (!this.requireLogin()) return;
     const mode = e.currentTarget.dataset.mode;
     const stopDate = new Date(); stopDate.setDate(stopDate.getDate() + 1);
     const minStopDate = stopDate.toISOString().slice(0, 10);

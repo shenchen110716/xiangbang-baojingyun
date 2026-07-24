@@ -1,17 +1,4 @@
 <view class="page safe-bottom">
-  <view wx:if="{{!loggedIn}}" class="hero">
-    <view class="hero-title">响帮帮无忧保</view>
-    <view class="hero-sub">登录后可查看和处理理赔案件</view>
-  </view>
-  <view wx:if="{{!loggedIn}}" class="section">
-    <view class="card notice">
-      <view class="strong">还未登录</view>
-      <view class="list-meta">登录后可查看理赔案件、报案、上传理赔材料</view>
-    </view>
-    <button class="primary" style="margin-top:20rpx" bindtap="goLogin">登录 / 切换账号</button>
-  </view>
-
-  <block wx:if="{{loggedIn}}">
   <view class="row" style="gap:48rpx">
     <view class="chip {{tab==='open'?'active':''}}" data-value="open" bindtap="chooseTab">待理赔</view>
     <view class="chip {{tab==='closed'?'active':''}}" data-value="closed" bindtap="chooseTab">结案中</view>
@@ -39,5 +26,4 @@
   </view>
   <view wx:if="{{!loading&&!filtered.length}}" class="empty"><view class="empty-icon">+</view><view>暂无理赔案件</view></view>
   <view class="fab" bindtap="create">+</view>
-  </block>
 </view>

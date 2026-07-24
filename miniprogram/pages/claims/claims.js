@@ -4,16 +4,19 @@ const CLOSED_STATUSES = ['approved', 'paid', 'rejected', 'closed'];
 
 Page({
   data: {
-    items: [], filtered: [], tab: 'open', search: '', loading: true, loggedIn: false,
+    items: [], filtered: [], tab: 'open', search: '', loading: true,
     labels: { reported: '已报案', collecting: '材料收集中', submitted: '已提交保司', insurer_review: '保司审核中', supplement: '待补充材料', approved: '核赔通过', paid: '已赔付', rejected: '拒赔', closed: '已结案' }
   },
-  goLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
-  // 未登录时不能强制跳登录页——底部 tabBar 一直可见，未登录也能点到这个
-  // tab，之前一进页面就 reLaunch 到登录页，等于逛都不让逛。改成和首页一样，
-  // 未登录只展示登录入口，不请求任何需要鉴权的数据。
+  // 未登录时不拦截浏览——页面正常渲染，只是列表是空的；只有真正点了会
+  // 触发接口调用的操作（报案、查看/提交资料）才跳登录页。返回 false
+  // 时调用方要 return，不再往下执行。
+  requireLogin() {
+    if (app.globalData.token) return true;
+    wx.navigateTo({ url: '/pages/login/login' });
+    return false;
+  },
   onShow() {
-    if (!app.globalData.token) { this.setData({ loggedIn: false, loading: false }); return; }
-    this.setData({ loggedIn: true });
+    if (!app.globalData.token) { this.setData({ loading: false }); return; }
     this.load();
   },
   onPullDownRefresh() { this.load().finally(() => wx.stopPullDownRefresh()); },
@@ -51,7 +54,13 @@ Page({
     const filtered = this.data.items.filter((item) => bucket.includes(item.status) && (!q || (item.person_name || '').toLowerCase().includes(q)));
     this.setData({ filtered });
   },
-  create() { wx.navigateTo({ url: '/pages/claim-create/claim-create' }); },
-  detail(e) { wx.navigateTo({ url: `/pages/claim-detail/claim-detail?id=${e.currentTarget.dataset.id}` }); },
+  create() {
+    if (!this.requireLogin()) return;
+    wx.navigateTo({ url: '/pages/claim-create/claim-create' });
+  },
+  detail(e) {
+    if (!this.requireLogin()) return;
+    wx.navigateTo({ url: `/pages/claim-detail/claim-detail?id=${e.currentTarget.dataset.id}` });
+  },
   onShareAppMessage() { return app.share('/pages/claims/claims', 'from=share'); }
 });
