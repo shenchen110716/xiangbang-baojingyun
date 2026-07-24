@@ -36,8 +36,10 @@
 
 - 不新建 `EnterpriseApplication` 之类的独立申请表——`Enterprise(status="pending")` 本身
   就是"未核验的申请"，转正只是改一个字段，不做额外的"申请→转换成正式企业"的搬迁逻辑。
-- 不做营业执照 OCR 自动识别（该接口要求登录，公开流程绕不过去）；上传的营业执照图片
-  仅作为人工审核的参考附件，走现有"不静态挂载、短时签名 URL"的文件模式（与理赔材料一致）。
+- 不做营业执照上传/OCR——OCR 接口要求登录，公开流程绕不过去；而存储上传文件的引用
+  需要给 `Enterprise` 加一个新字段（如 `license_url`），这会触发一次新迁移，与本设计
+  "不新增数据库迁移"的边界冲突。本版申请表单只收文本字段；审核时如需核验营业执照，
+  后台人工联系申请人索要即可，不在本设计范围内。
 - 不加验证码、不加短信验证、不加限流——现阶段是演示/内部环境；仅做服务端基础校验
   （必填项、用户名唯一性、统一社会信用代码去重）。若后续该页面要接真实公网流量招揽
   真实客户，验证码/限流需要单独立项加固，本设计不覆盖。
@@ -52,8 +54,7 @@
 ### 新增：`POST /api/enterprises/apply`（公开，无鉴权依赖）
 
 - 入参（新 Pydantic schema，独立于现有 `EnterpriseIn`，只暴露申请必需字段）：
-  `enterprise_name`、`credit_code`、`contact`、`phone`、`username`、`password`，
-  可选 `license_file`（营业执照图片，multipart）。
+  `enterprise_name`、`credit_code`、`contact`、`phone`、`username`、`password`。
 - 校验（服务端，均返回 4xx + 明确中文提示）：
   - 必填项非空（单位名称/联系人/联系电话/账号/密码）。
   - `username` 未被现有 `User` 占用。
@@ -67,8 +68,6 @@
      role="enterprise", enterprise_id=新企业id, is_owner=True,
      enterprise_role="owner", active=False)`——`active=False` 是关键，审核通过前
      不能登录。
-  3. 若有 `license_file`：复用现有文件存储 + `file_tokens` 短时签名 URL 机制落盘，
-     关联到该企业记录，供后台审核时人工查看（不做自动识别、不静态挂载）。
 - 响应：只返回极简确认体 `{"message": "提交成功，请等待审核"}`，**不**调用现有
   `serialize()` 返回完整企业对象——避免把内部字段结构暴露给未登录调用方（呼应
   `strip_internal_pricing` 在别处体现的"公开/低权限视图不暴露内部字段"原则）。
@@ -100,8 +99,6 @@
 - 表单字段与后端入参一一对应，复用 Element Plus 表单组件与现有
   `EnterprisesPanel.vue` 新增企业对话框类似的校验风格（必填项前端先挡一轮，
   服务端二次校验为准）。
-- 营业执照图片用 Element Plus `el-upload`（与现有其他上传组件一致的交互），
-  仅作为附件提交，不做前端 OCR 调用。
 - 提交成功后展示"提交成功，请等待审核"提示，并引导返回官网或前往登录页
   （审核通过后可用申请时的账号密码登录）。
 
