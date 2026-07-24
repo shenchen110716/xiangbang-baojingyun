@@ -34,24 +34,18 @@
   </view>
 
   <view class="section">
-    <view class="section-head"><text class="section-title">快捷办理</text></view>
-    <view class="grid-3">
-      <view class="quick" data-url="/pages/employee-edit/employee-edit" bindtap="go"><view class="quick-icon">+</view><view class="quick-text">新增员工</view></view>
-      <view class="quick" data-url="/pages/import/import" bindtap="go"><view class="quick-icon">⇧</view><view class="quick-text">批量导入</view></view>
-      <view class="quick" data-url="/pages/batches/batches" bindtap="go"><view class="quick-icon">⇄</view><view class="quick-text">参停保</view></view>
-      <view class="quick" data-url="/pages/positions/positions" bindtap="go"><view class="quick-icon">岗</view><view class="quick-text">岗位管理</view></view>
-      <view class="quick" data-url="/pages/policies/policies" bindtap="go"><view class="quick-icon">保</view><view class="quick-text">保单</view></view>
-      <view class="quick" data-url="/pages/billing/billing" bindtap="go"><view class="quick-icon">¥</view><view class="quick-text">资金账户</view></view>
+    <view class="section-head"><text class="section-title">参保方案</text><text class="section-link" bindtap="addPosition">+ 新增方案</text></view>
+    <view wx:for="{{positionCards}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="goPosition">
+      <view class="row between"><text class="list-title">{{item.name}}</text><text class="tag tag-success">在保 {{item.insured_count}} 人</text></view>
+      <view class="list-meta">{{item.actual_employer_name||'未关联用工单位'}} · {{item.occupation_class}}</view>
+      <view class="row between" style="margin-top:18rpx"><text class="small">{{item.plan_text}}</text><text class="link-btn">增/减保 →</text></view>
     </view>
-  </view>
-
-  <view class="section">
-    <view class="section-head"><text class="section-title">消息与待办</text><text class="section-link" data-url="/pages/messages/messages" bindtap="go">全部 →</text></view>
-    <view wx:for="{{messages}}" wx:key="id" class="card" data-path="{{item.path}}" bindtap="openMessage">
-      <view class="row between"><text class="strong">{{item.title}}</text><text class="tag {{item.type==='danger'?'tag-danger':item.type==='warning'?'tag-warning':'tag-success'}}">{{item.type==='todo'?'待办':'通知'}}</text></view>
-      <view class="list-meta">{{item.content}}</view>
+    <view wx:if="{{!loading&&!positionCards.length}}" class="empty">
+      <view class="empty-icon">案</view>
+      <view>暂无已审核通过的岗位</view>
+      <view class="small">新增岗位并上传视频，等待平台/保司定类后会出现在这里</view>
+      <button class="primary" style="margin-top:24rpx" bindtap="addPosition">+ 新增方案</button>
     </view>
-    <view wx:if="{{!messages.length&&!loading}}" class="card empty">暂无消息</view>
   </view>
   </block>
 </view>
