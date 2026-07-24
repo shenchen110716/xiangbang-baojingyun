@@ -26,18 +26,21 @@ Page({
   edit() { wx.navigateTo({ url: `/pages/employee-edit/employee-edit?id=${this.data.id}` }); },
   claim() { wx.navigateTo({ url: `/pages/claim-create/claim-create?personId=${this.data.id}` }); },
   cert() { wx.navigateTo({ url: `/pages/cert/cert?id=${this.data.id}` }); },
-  changeStatus() {
+  // 参保/停保拆成两个独立按钮（和员工列表页顶部的参保/停保样式保持一致），
+  // 不适用当前状态的那个按钮用原生 disabled 灰掉，不能点。
+  enrollStatus() {
     const item = this.data.item;
-    if (!item || item.status === 'pending') return;
-    if (item.status === 'active') {
-      // 停保需要选择停保时间，不能一键直接停保，跳转到编辑页选择日期
-      wx.navigateTo({ url: `/pages/employee-edit/employee-edit?id=${item.id}` });
-      return;
-    }
+    if (!item || item.status !== 'stopped') return;
     wx.showModal({ title: '申请恢复参保', content: '恢复后将重新进入人工审核。', confirmColor: '#1d4ed8', success: (res) => {
       if (!res.confirm) return; this.setData({ operating: true });
       app.request(`/insured/${item.id}/status?status=pending`, { method: 'PATCH' }).then(() => { wx.showToast({ title: '已提交审核' }); this.setData({ operating: false }); this.load(); }).catch(() => this.setData({ operating: false }));
     } });
+  },
+  stopStatus() {
+    const item = this.data.item;
+    if (!item || item.status !== 'active') return;
+    // 停保需要选择停保时间，不能一键直接停保，跳转到编辑页选择日期
+    wx.navigateTo({ url: `/pages/employee-edit/employee-edit?id=${item.id}` });
   },
   onShareAppMessage() { return app.share('/pages/employee-detail/employee-detail', `id=${this.data.id}`); }
 });

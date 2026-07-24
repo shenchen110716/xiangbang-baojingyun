@@ -1,5 +1,8 @@
 <script setup lang="ts">
-defineProps<{
+import type { RouteLocationRaw } from 'vue-router'
+import { useRouter } from 'vue-router'
+
+const props = defineProps<{
   label: string
   value: string | number
   hint?: string
@@ -8,11 +11,17 @@ defineProps<{
   icon?: string
   // 可选：图标片与强调条配色，默认主色蓝
   accent?: 'primary' | 'success' | 'warning' | 'danger' | 'info'
+  // 可选：传入后整张卡片可点击跳转，用于"看到数字直接进对应页面"的快捷操作
+  to?: RouteLocationRaw
 }>()
+const router = useRouter()
+function handleClick() {
+  if (props.to) router.push(props.to)
+}
 </script>
 
 <template>
-  <div class="stat-tile" :class="[`accent-${accent || hintType || 'primary'}`]">
+  <div class="stat-tile" :class="[`accent-${accent || hintType || 'primary'}`, { clickable: !!to }]" @click="handleClick">
     <div class="stat-top">
       <div class="stat-label">{{ label }}</div>
       <span v-if="icon" class="stat-icon">
@@ -23,6 +32,7 @@ defineProps<{
     <small v-if="hint" :class="['stat-hint', hintType]">
       <i class="dot" />{{ hint }}
     </small>
+    <el-icon v-if="to" class="stat-arrow"><ArrowRight /></el-icon>
   </div>
 </template>
 
@@ -55,6 +65,26 @@ defineProps<{
   transform: translateY(-2px);
   border-color: var(--el-border-color-light);
 }
+.stat-tile.clickable {
+  cursor: pointer;
+}
+.stat-tile.clickable:hover {
+  border-color: var(--accent-color);
+}
+.stat-arrow {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  font-size: 14px;
+  color: var(--accent-color);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.stat-tile.clickable:hover .stat-arrow {
+  opacity: 0.85;
+  transform: translateX(0);
+}
 .stat-top {
   display: flex;
   align-items: flex-start;
@@ -80,10 +110,10 @@ defineProps<{
 }
 .stat-value {
   display: block;
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 34px;
+  font-weight: 800;
   line-height: 1.1;
-  color: var(--el-text-color-primary);
+  color: var(--accent-color);
   margin: 12px 0 7px;
   letter-spacing: -0.02em;
 }

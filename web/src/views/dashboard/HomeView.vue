@@ -103,10 +103,10 @@ const alertBarOption = computed(() => {
 <template>
   <div v-loading="loading" class="home-view">
     <div class="stat-grid">
-      <StatTile v-if="isAdmin" label="参保单位" :value="data?.enterprises ?? '—'" :hint="data ? `待审核 ${data.pending_enterprises}` : ''" hint-type="warning" icon="OfficeBuilding" accent="primary" />
-      <StatTile label="在保人数" :value="data?.active_people ?? '—'" :hint="data ? `待处理 ${data.pending_people}` : ''" hint-type="info" icon="UserFilled" accent="primary" />
-      <StatTile label="生效保单" :value="data?.active_policies ?? '—'" icon="Document" accent="success" />
-      <StatTile label="待处理理赔" :value="data?.claims_open ?? '—'" hint-type="danger" :hint="data && data.claims_open > 0 ? '需跟进' : ''" icon="Warning" accent="danger" />
+      <StatTile v-if="isAdmin" label="参保单位" :value="data?.enterprises ?? '—'" :hint="data ? `待审核 ${data.pending_enterprises}` : ''" hint-type="warning" icon="OfficeBuilding" accent="primary" :to="{ name: 'team' }" />
+      <StatTile label="在保人数" :value="data?.active_people ?? '—'" :hint="data ? `待处理 ${data.pending_people}` : ''" hint-type="info" icon="UserFilled" accent="primary" :to="{ name: 'workers' }" />
+      <StatTile label="生效保单" :value="data?.active_policies ?? '—'" icon="Document" accent="success" :to="{ name: 'policy' }" />
+      <StatTile label="待处理理赔" :value="data?.claims_open ?? '—'" hint-type="danger" :hint="data && data.claims_open > 0 ? '需跟进' : ''" icon="Warning" accent="danger" :to="{ name: 'claims' }" />
       <StatTile
         v-if="isAdmin"
         label="待处理停保"
@@ -115,8 +115,7 @@ const alertBarOption = computed(() => {
         hint-type="warning"
         icon="Bell"
         accent="warning"
-        style="cursor: pointer"
-        @click="data && data.pending_terminations_count > 0 && router.push({ name: 'pendingTerminations' })"
+        :to="{ name: 'pendingTerminations' }"
       />
     </div>
 
@@ -159,12 +158,18 @@ const alertBarOption = computed(() => {
 
     <div class="chart-grid">
       <PageCard title="保费规模 Top 8 产品">
+        <template v-if="isAdmin" #actions>
+          <el-button link type="primary" @click="router.push({ name: 'insurance' })">管理保险产品</el-button>
+        </template>
         <div class="chart-box">
           <VChart v-if="products.length" :option="premiumBarOption" autoresize style="height: 280px" />
           <el-empty v-else description="暂无数据" :image-size="60" />
         </div>
       </PageCard>
       <PageCard title="在保人次 · 按保司分布">
+        <template v-if="isAdmin" #actions>
+          <el-button link type="primary" @click="router.push({ name: 'insurers' })">保司主体管理</el-button>
+        </template>
         <div class="chart-box">
           <VChart v-if="products.length" :option="insurerDonutOption" autoresize style="height: 280px" />
           <el-empty v-else description="暂无数据" :image-size="60" />
@@ -173,6 +178,9 @@ const alertBarOption = computed(() => {
     </div>
 
     <PageCard title="产品明细" :count="products.length">
+      <template v-if="isAdmin" #actions>
+        <el-button link type="primary" @click="router.push({ name: 'insurance' })">管理保险产品</el-button>
+      </template>
       <el-table :data="products" size="small" style="width: 100%">
         <el-table-column prop="insurer" label="保司" min-width="120" />
         <el-table-column prop="product" label="产品" min-width="150" />
@@ -188,11 +196,17 @@ const alertBarOption = computed(() => {
 
     <div class="chart-grid">
       <PageCard title="人员状态分布">
+        <template #actions>
+          <el-button link type="primary" @click="router.push({ name: 'workers' })">参保员工管理</el-button>
+        </template>
         <div class="chart-box">
           <VChart v-if="data" :option="peopleDonutOption" autoresize style="height: 260px" />
         </div>
       </PageCard>
       <PageCard title="账户余额预警" :hint="isAdmin ? 'Top 8 · 按剩余可用天数排序' : ''">
+        <template #actions>
+          <el-button link type="primary" @click="router.push({ name: 'recharge' })">前往充值中心</el-button>
+        </template>
         <div class="chart-box">
           <VChart v-if="data && data.balance_alerts.length" :option="alertBarOption" autoresize style="height: 260px" />
           <el-empty v-else description="暂无预警" :image-size="60" />

@@ -26,8 +26,11 @@
       <view class="row between" style="margin-top:22rpx"><text class="muted">停保时间</text><text>{{item.terminated_at_display}}</text></view>
     </view>
     <view class="toolbar"><button class="secondary" bindtap="edit">编辑信息</button><button class="secondary" bindtap="claim">理赔报案</button><button wx:if="{{item.policy_no}}" class="secondary" bindtap="cert">参保证明</button></view>
-    <button wx:if="{{item.status!=='pending'}}" class="{{item.status==='stopped'?'primary':'danger-btn'}}" style="margin-top:18rpx" loading="{{operating}}" bindtap="changeStatus">{{item.status==='stopped'?'申请恢复参保':'申请停保'}}</button>
-    <view wx:else class="card notice" style="margin-top:18rpx">员工正在等待人工审核，审核通过后将进入待生效/在保状态。</view>
+    <view class="row" style="gap:16rpx;margin-top:18rpx">
+      <button class="{{item.status==='stopped'?'primary':'secondary'}} grow" disabled="{{item.status!=='stopped'}}" loading="{{item.status==='stopped'&&operating}}" bindtap="enrollStatus">参保</button>
+      <button class="{{item.status==='active'?'primary':'secondary'}} grow" disabled="{{item.status!=='active'}}" bindtap="stopStatus">停保</button>
+    </view>
+    <view wx:if="{{item.status==='pending'}}" class="card notice" style="margin-top:18rpx">员工正在等待人工审核，审核通过后将进入待生效/在保状态。</view>
   </view>
   <view wx:else class="empty">员工记录不存在或无权查看</view>
 </view>

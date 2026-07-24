@@ -6,7 +6,8 @@ App({
     token: '',
     user: null,
     enterprise: null,
-    isDevEnv: false
+    isDevEnv: false,
+    pendingEmployeesFilter: null
   },
 
   onLaunch() {

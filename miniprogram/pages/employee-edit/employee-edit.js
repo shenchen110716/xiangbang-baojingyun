@@ -6,6 +6,7 @@ Page({
     form: { name: '', id_number: '', phone: '', enterprise_id: 0, position_id: 0, effective_at: '', terminated_at: '' },
     originalEffectiveAt: '',
     originalTerminatedAt: '',
+    minTerminatedDate: '',
     effectiveTime: '00:00',
     terminatedTime: '00:00',
     plans: [],
@@ -21,13 +22,24 @@ Page({
     positionIndex: 0,
     selectedPosition: null,
     saving: false,
-    ocrLoading: false,
     idNumberInvalid: false,
     loading: true,
     // 连续添加：第一次新增成功后归属信息（投保单位/实际用工单位/岗位）锁定，
     // 不返回列表页，可以连续手工填写或连续拍照 OCR 添加，直到点"完成"。
     locked: false,
-    addedCount: 0
+    addedCount: 0,
+    // 新增模式只在 !id 时出现三个入口：手工添加/拍照添加/批量导入。批量导入
+    // 是完全独立的另一个页面（自己管投保单位/岗位选择，不依赖这里的 form），
+    // 点它直接跳转，不算这里的一种"模式"；手工/拍照才是本页内切换显示区域。
+    addMode: 'manual',
+    // 拍照添加：一次选多张身份证照片（最多 9 张），逐张 OCR 后堆到这个待确认
+    // 列表里，人工核对/改错后一次性批量提交，取代了之前的单张拍照识别。
+    batchItems: [],
+    batchScanning: false,
+    batchSubmitting: false,
+    batchKeySeq: 0,
+    // 生效/停保时间收进可展开的"更多选项"，onLoad 里按新增/编辑重新设默认值。
+    moreOptionsExpanded: false
   },
   // 7.15-3：先选实际用工单位，再选岗位（岗位名会跨单位重复）。按投保单位下的
   // 已审核岗位聚合出实际用工单位列表，再按所选单位过滤岗位。
@@ -54,7 +66,13 @@ Page({
   },
   onLoad(options) {
     const id = Number(options.id || 0); const presetPositionId = Number(options.positionId || 0);
-    this.setData({ id });
+    // 停保时间选择器的最早可选日——后端硬性要求"最早操作日次日 00:00"（月单）
+    // 或"生效时间往后 24 小时"（日结即时生效），这里用较宽松的那条（次日）
+    // 兜底，提前拦掉最常见的"选今天/选过去"这类必然被后端拒绝的输入；后端
+    // 仍然是最终权威，真正精确的规则（比如按生效时间算的 24 小时）还是由
+    // 提交时的校验兜底。
+    const minTerminatedDate = new Date(); minTerminatedDate.setDate(minTerminatedDate.getDate() + 1);
+    this.setData({ id, minTerminatedDate: minTerminatedDate.toISOString().slice(0, 10) });
     Promise.all([app.request('/enterprises'), app.request('/positions'), app.request('/plans'), id ? app.request('/insured') : Promise.resolve([])])
       .then(([enterprises, allPositions, plans, people]) => {
         const approved = allPositions.filter((item) => item.status === 'approved');
@@ -74,6 +92,9 @@ Page({
         const terminatedTime = current && current.terminated_at && current.terminated_at.length >= 16 ? current.terminated_at.slice(11, 16) : '00:00';
         this.setData({ enterprises, allPositions: approved, plans, ...scope, enterpriseIndex,
           locked: !!presetPos,
+          // 编辑已有记录时生效/停保时间是常改的字段，默认展开；新增时大多数场景
+          // 用不到，默认收起，减少视觉干扰。
+          moreOptionsExpanded: !!id,
           form: current
             ? { name: current.name, id_number: current.id_number, phone: current.phone || '', enterprise_id: current.enterprise_id, position_id: current.position_id || 0, effective_at: effectiveAt, terminated_at: terminatedAt }
             : { ...this.data.form, enterprise_id: enterpriseId, position_id: (scope.selectedPosition && scope.selectedPosition.id) || 0 },
@@ -102,34 +123,88 @@ Page({
     for (let i = 0; i < 17; i++) total += Number(v[i]) * weights[i];
     return checkCodes[total % 11] === v[17];
   },
-  // 7.18-4：拍身份证正面照 → 后端 OCR → 自动填充姓名/身份证号（识别结果需人工核对）。
-  scanIdCard() {
-    if (this.data.ocrLoading) return;
+  // 三个新增入口的切换：手工/拍照是本页内两块区域的显示切换；批量导入是完全
+  // 独立的另一个页面，直接跳转，不停留在这个 tab 上（不然用户会以为点错了，
+  // 页面看起来没反应）。
+  setAddMode(e) {
+    const mode = e.currentTarget.dataset.mode;
+    if (mode === 'import') { wx.navigateTo({ url: '/pages/import/import' }); return; }
+    this.setData({ addMode: mode });
+  },
+  // 一次选多张身份证照片，逐张调用同一个 OCR 接口，识别结果堆进 batchItems
+  // 待人工核对/改错，不直接写进 form/提交——姓名或身份证号识别错了，先在这
+  // 个列表里改，避免脏数据直接进参保申请。
+  batchScan() {
+    if (this.data.batchScanning) return;
     wx.chooseMedia({
-      count: 1, mediaType: ['image'], sourceType: ['camera', 'album'], sizeType: ['compressed'],
+      count: 9, mediaType: ['image'], sourceType: ['camera', 'album'], sizeType: ['compressed'],
       success: (res) => {
-        const filePath = res.tempFiles[0].tempFilePath;
-        this.setData({ ocrLoading: true });
-        wx.uploadFile({
-          url: `${app.globalData.apiBase}/ocr/id-card`,
-          filePath, name: 'file',
-          header: { Authorization: `Bearer ${app.globalData.token}` },
-          success: (up) => {
-            let data = {};
-            try { data = JSON.parse(up.data || '{}'); } catch (e) { data = {}; }
-            if (up.statusCode !== 200) {
-              wx.showToast({ title: data.detail || '识别失败', icon: 'none' });
-              return;
-            }
-            const idNumber = data.id_number || this.data.form.id_number;
-            this.setData({ 'form.name': data.name || this.data.form.name, 'form.id_number': idNumber, idNumberInvalid: !!idNumber && !this.isValidIdNumber(idNumber) });
-            wx.showToast({ title: data.mock ? '模拟识别，请核对' : '识别成功，请核对', icon: 'none', duration: 2200 });
-          },
-          fail: () => wx.showToast({ title: '上传失败，请重试', icon: 'none' }),
-          complete: () => this.setData({ ocrLoading: false })
+        this.setData({ batchScanning: true });
+        const uploadOne = (filePath) => new Promise((resolve) => {
+          wx.uploadFile({
+            url: `${app.globalData.apiBase}/ocr/id-card`,
+            filePath, name: 'file',
+            header: { Authorization: `Bearer ${app.globalData.token}` },
+            success: (up) => {
+              let data = {};
+              try { data = JSON.parse(up.data || '{}'); } catch (e) { data = {}; }
+              resolve(up.statusCode === 200 ? { name: data.name || '', id_number: data.id_number || '' } : { name: '', id_number: '' });
+            },
+            fail: () => resolve({ name: '', id_number: '' })
+          });
         });
-      }
+        Promise.all(res.tempFiles.map((file) => uploadOne(file.tempFilePath))).then((results) => {
+          let keySeq = this.data.batchKeySeq;
+          const items = results.map((r) => {
+            keySeq += 1;
+            return { key: keySeq, name: r.name, id_number: r.id_number, invalid: !!r.id_number && !this.isValidIdNumber(r.id_number) };
+          });
+          this.setData({ batchItems: this.data.batchItems.concat(items), batchKeySeq: keySeq, batchScanning: false });
+          wx.showToast({ title: `已识别 ${items.length} 张，请核对后提交`, icon: 'none', duration: 2200 });
+        });
+      },
+      fail: () => {}
     });
+  },
+  batchInput(e) {
+    const index = Number(e.currentTarget.dataset.index), key = e.currentTarget.dataset.key, value = e.detail.value;
+    const items = this.data.batchItems.slice();
+    items[index] = { ...items[index], [key]: value };
+    if (key === 'id_number') items[index].invalid = !!value && !this.isValidIdNumber(value);
+    this.setData({ batchItems: items });
+  },
+  batchRemove(e) {
+    const index = Number(e.currentTarget.dataset.index);
+    const items = this.data.batchItems.slice();
+    items.splice(index, 1);
+    this.setData({ batchItems: items });
+  },
+  batchClear() { this.setData({ batchItems: [] }); },
+  // 批量提交复用当前已锁定/已选好的投保单位+岗位（和单人新增同一份 form.
+  // enterprise_id/position_id），不支持临时日结/自定义生效停保时间——那两个
+  // 是单人添加里的细粒度选项，OCR 批量场景默认走最简单的"直接参保"路径。
+  submitBatch() {
+    if (this.data.batchSubmitting) return;
+    if (!this.data.form.position_id) { wx.showToast({ title: '暂无审核通过的可投保岗位', icon: 'none' }); return; }
+    const items = this.data.batchItems;
+    if (!items.length) return;
+    const badIndex = items.findIndex((item) => !item.name.trim() || !item.id_number.trim() || item.invalid);
+    if (badIndex !== -1) { wx.showToast({ title: `第 ${badIndex + 1} 行姓名/身份证号有问题，请先修正`, icon: 'none' }); return; }
+    this.setData({ batchSubmitting: true });
+    const enterpriseId = this.data.form.enterprise_id, positionId = this.data.form.position_id;
+    let successCount = 0, failCount = 0;
+    const submitNext = (index) => {
+      if (index >= items.length) {
+        this.setData({ batchSubmitting: false, batchItems: [], locked: true, addedCount: this.data.addedCount + successCount });
+        wx.showToast({ title: `批量添加完成：成功 ${successCount} 人${failCount ? '，失败 ' + failCount + ' 人' : ''}`, icon: 'none', duration: 3000 });
+        return;
+      }
+      const item = items[index];
+      app.request('/insured', { method: 'POST', silent: true, data: { name: item.name.trim(), id_number: item.id_number.trim(), phone: '', enterprise_id: enterpriseId, position_id: positionId } })
+        .then(() => { successCount += 1; submitNext(index + 1); })
+        .catch(() => { failCount += 1; submitNext(index + 1); });
+    };
+    submitNext(0);
   },
   dateChange(e) { this.setData({ [`form.${e.currentTarget.dataset.key}`]: e.detail.value }); },
   timeChange(e) { this.setData({ [e.currentTarget.dataset.key]: e.detail.value }); },
@@ -151,6 +226,7 @@ Page({
     this.setData({ positionIndex, selectedPosition: position || null, ...this.planText(position), 'form.position_id': (position && position.id) || 0 });
   },
   dailyModeChange(e) { this.setData({ dailyMode: e.currentTarget.dataset.value }); },
+  toggleMoreOptions() { this.setData({ moreOptionsExpanded: !this.data.moreOptionsExpanded }); },
   ageFromId(id) {
     const v = String(id || '').trim();
     if (!/^\d{17}[\dXx]$/.test(v)) return null;

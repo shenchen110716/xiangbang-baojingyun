@@ -1,11 +1,11 @@
 import secrets
 import tempfile
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..core import storage
@@ -23,6 +23,7 @@ from ..services import (
     allowed_employer_ids,
     assert_employer_access,
     assert_plan_belongs_to_insurer,
+    enterprise_selectable_plan_ids,
     insurer_plan_ids,
     is_enterprise_owner,
     serialize,
@@ -60,6 +61,22 @@ def _position_employer_access(
         raise HTTPException(403, "无权访问岗位")
 
 
+def _position_insurer_read_access(session: Session, user: User, position: WorkPosition) -> None:
+    """role='insurer' 读取某岗位（及其视频）的权限：已分派到自己名下方案的
+    岗位放行；尚未被任何一方认领的待审核岗位（plan_id 为空、status='pending'）
+    同样放行——这类岗位就是保司核保队列的来源，核保依据（视频）必须能看到，
+    不能等分派到自己名下之后才有权限看。分派到了别的保司方案，或已经审核完
+    但非本保司名下的，一律拒绝。直接用 assert_plan_belongs_to_insurer 在这里
+    会因为 plan_id 为空而先 403，所以未认领的情况单独放行。"""
+    if not user.insurer_id:
+        raise HTTPException(403, "保司账号未绑定保险公司，无法查看岗位")
+    if position.plan_id is None:
+        if position.status != "pending":
+            raise HTTPException(403, "无权访问其他保险公司的方案")
+        return
+    assert_plan_belongs_to_insurer(session, user, position.plan_id)
+
+
 def _require_employer_master_manager(user: User, enterprise_id: int) -> None:
     if user.role == "admin":
         return
@@ -90,10 +107,20 @@ def positions(user: User = Depends(current_user), session: Session = Depends(db)
         allowed=allowed_employer_ids(session,user)
         if allowed is not None: stmt=stmt.where(WorkPosition.actual_employer_id.in_(allowed))
     elif user.role == "insurer":
-        # 保司只看得到已经分派到自己名下方案的岗位——未定类（plan_id 为空）
-        # 的岗位默认由平台先行审核，不进保司视图。
+        # 保司既能看到已经分派到自己名下方案的岗位，也能看到尚未被任何一方
+        # 认领的待审核岗位（plan_id 为空、status='pending'）——review_position()
+        # 允许 role='insurer' 审核，审核时通过 assert_plan_belongs_to_insurer
+        # 强制保司只能把岗位分派到自己名下的方案，谁先审核谁认领，平台和保司
+        # 共享同一批待审核队列。已审核（approved/rejected/supplement）但分派
+        # 到了别的保司方案的岗位依然不可见。
+        if not user.insurer_id:
+            # 保司账号理论上不该出现 insurer_id 为空（创建入口固定会绑定），但
+            # 这里不能把它当"没有自己的方案"处理——那样会退化成放行整个未认领
+            # 待审核队列，等于给一个没有保司归属的账号看到全平台待审内容。
+            raise HTTPException(403, "保司账号未绑定保险公司，无法查看岗位")
         plan_ids = insurer_plan_ids(session, user.insurer_id)
-        stmt = stmt.where(WorkPosition.plan_id.in_(plan_ids)) if plan_ids else stmt.where(WorkPosition.id.is_(None))
+        unclaimed = (WorkPosition.plan_id.is_(None)) & (WorkPosition.status == "pending")
+        stmt = stmt.where(or_(WorkPosition.plan_id.in_(plan_ids), unclaimed)) if plan_ids else stmt.where(unclaimed)
     elif user.role != "admin": raise HTTPException(403,"无权查看岗位")
     result=[]
     for x in session.scalars(stmt):
@@ -152,9 +179,9 @@ def position_videos(item_id:int,user:User=Depends(current_user),session:Session=
     pos=session.get(WorkPosition,item_id)
     if not pos: raise HTTPException(404,'岗位不存在')
     # 保司核保依据是岗位视频，需要读权限；用和 review_position 一致的
-    # plan.insurer_id 归属检查，而不是 _position_employer_access（那个只认
-    # 企业/管理员，会把保司角色一律拒绝）。
-    if user.role=='insurer': assert_plan_belongs_to_insurer(session,user,pos.plan_id)
+    # plan.insurer_id 归属检查（同时放行尚未认领的待审核岗位），而不是
+    # _position_employer_access（那个只认企业/管理员，会把保司角色一律拒绝）。
+    if user.role=='insurer': _position_insurer_read_access(session,user,pos)
     else: _position_employer_access(session,user,pos)
     return [_video_dict(x) for x in session.scalars(select(PositionVideo).where(PositionVideo.position_id==item_id).order_by(PositionVideo.id.desc()))]
 
@@ -239,6 +266,18 @@ def review_position(item_id:int,data:PositionReviewIn,user:User=Depends(current_
         videos[0].status=data.status;videos[0].review_note=data.review_note
     session.commit();audit(session,user,'review','position',str(item.id),f'{data.status}:{item.occupation_class}');return serialize(item)
 
+def _enterprise_position_plan_id(session: Session, enterprise_id: int, plan_id: Optional[int]) -> Optional[int]:
+    """企业新增/编辑岗位时可以直接选定意向保司产品——职业类别仍然由保司审核
+    时依据核保视频确定（企业端不改），但产品不再像过去那样被后端强行清空成
+    None。校验用和 GET /plans 给企业端返回的产品列表同一份口径（见
+    enterprise_selectable_plan_ids），企业不能凭空指定一个自己不可见的方案。"""
+    if plan_id is None:
+        return None
+    if plan_id not in enterprise_selectable_plan_ids(session, enterprise_id):
+        raise HTTPException(400, "请选择本企业可用的保险产品")
+    return plan_id
+
+
 @router.post("/positions")
 def add_position(data: PositionIn, user: User = Depends(current_user), session: Session = Depends(db)):
     target_enterprise = user.enterprise_id if user.role == "enterprise" else data.enterprise_id
@@ -247,7 +286,8 @@ def add_position(data: PositionIn, user: User = Depends(current_user), session: 
     if not employer or employer.enterprise_id!=target_enterprise: raise HTTPException(400,"请选择本企业添加的有效实际工作单位")
     assert_employer_access(session,user,employer.id)
     if employer.status!='active': raise HTTPException(400,"该工作单位已暂停，不能新增岗位")
-    item=WorkPosition(enterprise_id=target_enterprise,actual_employer_id=employer.id,actual_employer=employer.name,name=data.name,occupation_class='待定' if user.role=='enterprise' else data.occupation_class,plan_id=None if user.role=='enterprise' else data.plan_id,status='pending',created_by=user.id)
+    plan_id = _enterprise_position_plan_id(session, target_enterprise, data.plan_id) if user.role == 'enterprise' else data.plan_id
+    item=WorkPosition(enterprise_id=target_enterprise,actual_employer_id=employer.id,actual_employer=employer.name,name=data.name,occupation_class='待定' if user.role=='enterprise' else data.occupation_class,plan_id=plan_id,status='pending',created_by=user.id)
     session.add(item);session.commit();session.refresh(item);audit(session,user,"create","position",str(item.id));return serialize(item)
 
 @router.patch("/positions/{item_id}")
@@ -255,7 +295,7 @@ def update_position(item_id:int,data:PositionIn,user:User=Depends(current_user),
     item=session.get(WorkPosition,item_id)
     if not item: raise HTTPException(404,"岗位不存在")
     _position_employer_access(session,user,item)
-    # 已经有在保/待生效员工的岗位企业端不能再改，否则会被下面的逻辑静默清空职业类别/保险方案、
+    # 已经有在保/待生效员工的岗位企业端不能再改，否则会被下面的逻辑静默清空职业类别、
     # 打回待定类，参保记录和保司对接都可能被打乱；如需变更须走平台后台。空岗位（哪怕已定类）
     # 允许继续调整，不属于"有参保员工"的锁定范围。
     if user.role=='enterprise' and _position_has_active_people(session,item.id): raise HTTPException(400,"该岗位已有参保员工，不能修改实际用工单位/岗位信息，如需变更请联系平台")
@@ -264,7 +304,10 @@ def update_position(item_id:int,data:PositionIn,user:User=Depends(current_user),
     assert_employer_access(session,user,employer.id)
     item.actual_employer_id=employer.id;item.actual_employer=employer.name;item.name=data.name
     if user.role=='enterprise':
-        item.occupation_class='待定';item.plan_id=None;item.status='pending'
+        # 职业类别始终由保司审核视频后确定，企业端不改；但意向产品是企业自己
+        # 选的，审核通过前应该能一直改——不能像以前那样一律清空成 None，那样
+        # 企业刚选完产品，随手改个岗位名称就把选择弄丢了。
+        item.occupation_class='待定';item.plan_id=_enterprise_position_plan_id(session,item.enterprise_id,data.plan_id);item.status='pending'
     else:
         item.occupation_class=data.occupation_class;item.plan_id=data.plan_id
     session.commit();audit(session,user,"update","position",str(item.id));return serialize(item)

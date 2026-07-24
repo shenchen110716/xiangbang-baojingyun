@@ -1,5 +1,5 @@
 import { client } from './client'
-import type { Claim, ClaimDocument, Insurer, Invoice, InsuredPerson, Policy, PositionVideo, WorkPosition } from './types'
+import type { Claim, ClaimDocument, Insurer, InsurancePlan, Invoice, InsuredPerson, Policy, PositionVideo, WorkPosition } from './types'
 
 export function getInsurerProfile() {
   return client.get<Insurer>('/insurer-portal/profile').then((response) => response.data)
@@ -19,6 +19,10 @@ export function reviewInsurerPosition(id: number, data: { occupation_class?: str
 
 export function listInsurerPositionVideos(positionId: number) {
   return client.get<PositionVideo[]>(`/positions/${positionId}/videos`).then((response) => response.data)
+}
+
+export function listInsurerPlans() {
+  return client.get<InsurancePlan[]>('/insurer-portal/plans').then((response) => response.data)
 }
 
 export function listInsurerPolicies() {
@@ -50,7 +54,7 @@ export interface InsurerSettlementRow {
 
 export interface InsurerSettlement {
   insurer_id: number
-  total_active_premium: number
+  total_cumulative_premium: number
   rows: InsurerSettlementRow[]
 }
 
@@ -62,6 +66,8 @@ export interface InsurerMonthlyPremium {
   month: string
   total_premium: number
   insured_count: number
+  settled: boolean
+  settled_at: string | null
 }
 
 export interface InsurerMonthlyPremiumRow {
@@ -70,6 +76,9 @@ export interface InsurerMonthlyPremiumRow {
   id_number: string
   enterprise_name: string
   policy_no: string
+  effective_at: string
+  terminated_at: string | null
+  billable_days: number
   billable_ratio: number
   unit_price: number
   amount: number

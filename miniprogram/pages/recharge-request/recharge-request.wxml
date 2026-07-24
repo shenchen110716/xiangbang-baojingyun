@@ -60,8 +60,8 @@
     <view wx:if="{{recordsLoading}}" class="loading">正在加载…</view>
     <view wx:for="{{records}}" wx:key="id" class="card">
       <view class="row between">
-        <text class="strong">{{item.account_text}}{{item.insurer?'（'+item.insurer+'）':''}}</text>
-        <text class="tag {{item.status_kind==='success'?'tag-success':(item.status_kind==='danger'?'tag-danger':'tag-warning')}}">{{item.status_text}}</text>
+        <text class="strong grow" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-right:12rpx">{{item.account_text}}{{item.insurer?'（'+item.insurer+'）':''}}</text>
+        <text class="tag {{item.status_kind==='success'?'tag-success':(item.status_kind==='danger'?'tag-danger':'tag-warning')}}" style="flex:none">{{item.status_text}}</text>
       </view>
       <view class="list-meta">¥{{item.amount_text}} · {{item.created_at}}</view>
       <view wx:if="{{item.reject_reason}}" class="list-meta">驳回原因：{{item.reject_reason}}</view>

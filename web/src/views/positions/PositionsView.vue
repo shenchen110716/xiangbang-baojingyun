@@ -72,19 +72,19 @@ const activeEmployers = computed(() => employers.value.filter((x) => x.status ==
 // ---- create/edit + video upload (enterprise) ----
 const formVisible = ref(false)
 const editingId = ref<number | null>(null)
-const form = reactive({ actual_employer_id: null as number | null, name: '' })
+const form = reactive({ actual_employer_id: null as number | null, name: '', plan_id: null as number | null })
 const videoFile = ref<File | null>(null)
 const uploading = ref(false)
 
 function openCreate() {
   editingId.value = null
-  Object.assign(form, { actual_employer_id: null, name: '' })
+  Object.assign(form, { actual_employer_id: null, name: '', plan_id: null })
   videoFile.value = null
   formVisible.value = true
 }
 function openEdit(item: WorkPosition) {
   editingId.value = item.id
-  Object.assign(form, { actual_employer_id: item.actual_employer_id, name: item.name })
+  Object.assign(form, { actual_employer_id: item.actual_employer_id, name: item.name, plan_id: item.plan_id ?? null })
   videoFile.value = null
   formVisible.value = true
 }
@@ -96,12 +96,15 @@ async function submitForm() {
   if (!form.actual_employer_id || !form.name) { ElMessage.error('请选择实际工作单位并填写岗位名称'); return }
   if (!editingId.value && !videoFile.value) { ElMessage.error('新增岗位必须上传岗位视频'); return }
   const employer = employers.value.find((x) => x.id === form.actual_employer_id)
+  // 企业端可以直接选定意向保司产品；plan_id 要跟着表单一起提交，不然编辑时
+  // 只改了名字，之前选的产品也会被后端当成"没传"处理而清空。
+  const payload = { actual_employer_id: form.actual_employer_id, actual_employer: employer?.name || '', name: form.name, plan_id: isEnterprise.value ? form.plan_id : undefined }
   uploading.value = true
   try {
     let id = editingId.value
-    if (id) await positionsApi.updatePosition(id, { actual_employer_id: form.actual_employer_id, actual_employer: employer?.name || '', name: form.name })
+    if (id) await positionsApi.updatePosition(id, payload)
     else {
-      const created = await positionsApi.createPosition({ actual_employer_id: form.actual_employer_id, actual_employer: employer?.name || '', name: form.name })
+      const created = await positionsApi.createPosition(payload)
       id = created.id
     }
     if (videoFile.value && id) await positionsApi.uploadPositionVideo(id, videoFile.value)
@@ -313,6 +316,11 @@ function finishQuickInsure() {
           </el-select>
         </el-form-item>
         <el-form-item label="岗位名称" required><el-input v-model="form.name" /></el-form-item>
+        <el-form-item v-if="isEnterprise" label="意向保司产品">
+          <el-select v-model="form.plan_id" clearable placeholder="如已有意向可提前选择，也可留空由平台/保司审核时分配" style="width: 100%">
+            <el-option v-for="p in plans" :key="p.id" :label="`${p.insurer} · ${p.name}`" :value="p.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="岗位视频" :required="!editingId">
           <input type="file" accept="video/mp4,video/quicktime,.m4v" @change="onFileChange" />
         </el-form-item>

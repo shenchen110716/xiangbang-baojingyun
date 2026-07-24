@@ -10,9 +10,11 @@ const router = createRouter({
   },
 })
 
+const PUBLIC_ROUTE_NAMES = new Set(['login', 'enterprise-apply'])
+
 router.beforeEach((to) => {
   const hasToken = !!localStorage.getItem(TOKEN_KEY)
-  if (to.name !== 'login' && !hasToken) {
+  if (!PUBLIC_ROUTE_NAMES.has(to.name as string) && !hasToken) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (to.name === 'login' && hasToken) {

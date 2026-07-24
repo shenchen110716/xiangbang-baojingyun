@@ -1,0 +1,22 @@
+/* 页面整体节流：默认 .page/.search/.chips/.card 的留白是给信息量较少的
+   页面用的，员工列表要在一屏里塞下尽量多行，这里按本页需求收紧，只影响
+   本页（小程序 wxss 按页面自动作用域，不会串到其它页面）。 */
+.page{padding-top:14rpx}
+.safe-bottom{padding-bottom:calc(16rpx + env(safe-area-inset-bottom))}
+.search{margin:16rpx 0}
+.chips{margin:12rpx 0 16rpx}
+.card{padding:22rpx 24rpx;margin-bottom:16rpx}
+.list-meta{margin-top:6rpx}
+
+.header-bar{padding-bottom:16rpx;margin-bottom:0;border-bottom:1px solid #eef0f5;min-height:56rpx}
+/* 参保/停保从顶部固定按钮改成悬浮圆形图标按钮，贯穿整个列表滚动过程都
+   可见，竖排在右侧，"＋"参保在上、"－"停保在下，实心圆+蓝/红区分，
+   两个同尺寸（104rpx，和 .fab 一致）。 */
+.float-actions{position:fixed;right:30rpx;bottom:calc(130rpx + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:24rpx;z-index:15}
+.float-btn{width:104rpx;height:104rpx;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:48rpx;font-weight:700;line-height:1;padding:0;box-sizing:border-box;color:#fff}
+.float-btn-primary{background:#1d4ed8;box-shadow:0 14rpx 32rpx rgba(29,78,216,.35)}
+.float-btn-secondary{background:#e11d48;box-shadow:0 14rpx 32rpx rgba(225,29,72,.35)}
+.select-box{box-sizing:border-box;width:44rpx;height:44rpx;border-radius:50%;border:4rpx solid #dbe0ea;background:#f7f8fb;margin-right:18rpx;margin-top:4rpx;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:30rpx;font-weight:900;line-height:1;transition:transform .12s ease,background-color .12s ease,border-color .12s ease}
+.select-box.checked{background:#1d4ed8;border-color:#1d4ed8;transform:scale(1.08);box-shadow:0 4rpx 10rpx rgba(29,78,216,.35)}
+.select-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:20rpx 20rpx 0 0;padding:16rpx 24rpx calc(14rpx + env(safe-area-inset-bottom));box-shadow:0 -8rpx 24rpx rgba(26,39,84,.1);z-index:20}
+.select-bar-date{background:#f7f8fb;border-radius:12rpx;padding:12rpx 16rpx}
