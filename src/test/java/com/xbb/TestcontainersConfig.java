@@ -38,6 +38,13 @@ public class TestcontainersConfig {
         registry.add("xbb.domains.org.flyway.url", PG::getJdbcUrl);
         registry.add("xbb.domains.org.flyway.user", PG::getUsername);
         registry.add("xbb.domains.org.flyway.password", PG::getPassword);
+        // job 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.job.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.job.datasource.username", () -> "job_user");
+        registry.add("xbb.domains.job.datasource.password", () -> "job_pw");
+        registry.add("xbb.domains.job.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.job.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.job.flyway.password", PG::getPassword);
     }
 
     @Bean

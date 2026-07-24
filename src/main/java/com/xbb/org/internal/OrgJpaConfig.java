@@ -1,22 +1,19 @@
 package com.xbb.org.internal;
 
-import com.xbb.FlywayProps;
-import com.zaxxer.hikari.HikariDataSource;
+import com.xbb.DomainJpaSupport;
 import org.flywaydb.core.Flyway;
-import org.springframework.boot.autoconfigure.flyway.FlywayMigrationInitializer;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.flyway.FlywayMigrationInitializer;
 import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
-import java.util.Map;
 
 @Configuration
 @EnableJpaRepositories(
@@ -26,49 +23,26 @@ import java.util.Map;
 public class OrgJpaConfig {
 
     @Bean
-    @ConfigurationProperties("xbb.domains.org.datasource")
-    DataSourceProperties orgDataSourceProperties() {
-        return new DataSourceProperties();
+    DataSource orgDataSource(Environment env) {
+        return DomainJpaSupport.dataSource(env, "org");
     }
 
-    @Bean
-    DataSource orgDataSource() {
-        HikariDataSource ds = orgDataSourceProperties()
-                .initializeDataSourceBuilder().type(HikariDataSource.class).build();
-        ds.setMaximumPoolSize(3);
-        return ds;
-    }
-
-    @Bean
-    @ConfigurationProperties("xbb.domains.org.flyway")
-    FlywayProps orgFlywayProps() {
-        return new FlywayProps();
-    }
-
-    @Bean(initMethod = "migrate")
-    Flyway orgFlyway() {
-        FlywayProps p = orgFlywayProps();
-        return Flyway.configure()
-                .dataSource(p.getUrl(), p.getUser(), p.getPassword())
-                .schemas(p.getSchemas().split(","))
-                .locations(p.getLocations())
-                .load();
+    @Bean(name = "orgFlyway", initMethod = "migrate")
+    Flyway orgFlyway(Environment env) {
+        return DomainJpaSupport.flyway(env, "org");
     }
 
     @Bean(name = "orgFlywayInitializer")
-    FlywayMigrationInitializer orgFlywayInitializer() {
-        return new FlywayMigrationInitializer(orgFlyway(), null);
+    FlywayMigrationInitializer orgFlywayInitializer(@Qualifier("orgFlyway") Flyway orgFlyway) {
+        return new FlywayMigrationInitializer(orgFlyway, null);
     }
 
     @Bean(name = "orgEntityManagerFactory")
     LocalContainerEntityManagerFactoryBean orgEntityManagerFactory(
             EntityManagerFactoryBuilder builder,
+            @Qualifier("orgDataSource") DataSource orgDataSource,
             @Qualifier("orgFlywayInitializer") FlywayMigrationInitializer orgFlywayInitializer) {
-        return builder.dataSource(orgDataSource())
-                .packages("com.xbb.org.internal")
-                .persistenceUnit("org")
-                .properties(Map.of("hibernate.default_schema", "org"))
-                .build();
+        return DomainJpaSupport.entityManagerFactory(builder, orgDataSource, "org", "com.xbb.org.internal");
     }
 
     @Bean

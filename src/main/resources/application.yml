@@ -33,3 +33,14 @@ xbb:
         password: ${DB_ADMIN_PASSWORD:postgres}
         schemas: org
         locations: classpath:db/migration/org
+    job:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_JOB_USER:job_user}
+        password: ${DB_JOB_PASSWORD:job_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: job
+        locations: classpath:db/migration/job
