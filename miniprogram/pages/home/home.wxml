@@ -38,7 +38,7 @@
       <view class="row between" style="margin-top:18rpx">
         <text class="small">{{item.plan_text}}</text>
         <view class="row">
-          <text class="link-btn" style="margin-right:24rpx" data-id="{{item.id}}" catchtap="addEnroll">+新增参保</text>
+          <text class="mini-btn" style="margin-right:20rpx;font-size:28rpx;padding:14rpx 24rpx;font-weight:700" data-id="{{item.id}}" catchtap="addEnroll">+ 新增参保</text>
           <text class="link-btn">名单 →</text>
         </view>
       </view>
