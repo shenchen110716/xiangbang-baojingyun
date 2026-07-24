@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from backend.app import app, startup  # noqa: E402
 from backend.core.db import SessionLocal  # noqa: E402
 from backend.core.security import pwd  # noqa: E402
-from backend.models import ActualEmployer, Enterprise, Insurer, InsurancePlan, User, WorkPosition  # noqa: E402
+from backend.models import ActualEmployer, Enterprise, Insurer, InsurancePlan, PositionVideo, User, WorkPosition  # noqa: E402
 
 startup()
 client = TestClient(app)
@@ -123,6 +123,49 @@ def test_insurer_cannot_see_already_rejected_unassigned_position():
     assert videos.status_code == 403
 
 
+def test_insurer_plans_endpoint_scoped_to_own_insurer():
+    """GET /insurer-portal/plans 是岗位审核弹窗"分派到方案"下拉框的数据源，
+    绝不能直接借用平台通用的 GET /plans——那个对非 enterprise 角色不做任何
+    过滤，会把其他保司的方案也列出来。"""
+    plan_a_id, plan_b_id, position_a_id, position_b_id = _setup()
+    login = client.post("/api/auth/login", json={"username": "scope_insurer_a", "password": "test1234", "portal": "insurer"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    resp = client.get("/api/insurer-portal/plans", headers=headers)
+    assert resp.status_code == 200
+    ids = [row["id"] for row in resp.json()]
+    assert plan_a_id in ids
+    assert plan_b_id not in ids
+
+
+def test_insurer_can_claim_unclaimed_pending_position_via_review():
+    """回归用例：之前保司端"核保通过"直接拿 row 上的旧 occupation_class/plan_id
+    去调审核接口——对尚未认领的待审核岗位（occupation_class='待定'、plan_id=None）
+    这两个值都是空的，一定会 400/403。现在前端改成弹窗选职业类别+本保司方案，
+    这里验证后端链路本身在拿到正确参数时可以走通：保司审核通过一个未认领岗位，
+    应该把它分派到保司自己的方案下并标记为 approved。"""
+    plan_a_id, plan_b_id, position_a_id, position_b_id = _setup()
+    with SessionLocal() as s:
+        enterprise = s.query(Enterprise).filter(Enterprise.name == "测试企业").first()
+        employer = s.query(ActualEmployer).filter(ActualEmployer.enterprise_id == enterprise.id).first()
+        unclaimed = WorkPosition(enterprise_id=enterprise.id, actual_employer_id=employer.id, actual_employer=employer.name,
+                                  name="可认领岗位", occupation_class="待定", plan_id=None, status="pending")
+        s.add(unclaimed); s.flush()
+        s.add(PositionVideo(position_id=unclaimed.id, name="核保视频.mp4", url="https://example.com/v.mp4", status="pending"))
+        s.commit()
+        unclaimed_id = unclaimed.id
+
+    login = client.post("/api/auth/login", json={"username": "scope_insurer_a", "password": "test1234", "portal": "insurer"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    resp = client.patch(f"/api/positions/{unclaimed_id}/review",
+                        json={"status": "approved", "occupation_class": "1-3类", "plan_id": plan_a_id},
+                        headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "approved"
+    assert body["plan_id"] == plan_a_id
+    assert body["occupation_class"] == "1-3类"
+
+
 def test_insurer_without_insurer_id_sees_nothing():
     """保司账号理论上不该出现 insurer_id 为空（创建入口固定绑定），但防御性
     地不能让这种账号退化成"看到整个未认领待审核队列"——insurer_plan_ids(None)
@@ -151,6 +194,10 @@ def run():
     print("test_insurer_sees_unclaimed_pending_position_and_its_videos: OK")
     test_insurer_cannot_see_already_rejected_unassigned_position()
     print("test_insurer_cannot_see_already_rejected_unassigned_position: OK")
+    test_insurer_plans_endpoint_scoped_to_own_insurer()
+    print("test_insurer_plans_endpoint_scoped_to_own_insurer: OK")
+    test_insurer_can_claim_unclaimed_pending_position_via_review()
+    print("test_insurer_can_claim_unclaimed_pending_position_via_review: OK")
     test_insurer_without_insurer_id_sees_nothing()
     print("test_insurer_without_insurer_id_sees_nothing: OK")
     print("\nAll insurer positions scope tests: PASS")

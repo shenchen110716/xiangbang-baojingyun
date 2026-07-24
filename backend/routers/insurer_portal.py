@@ -15,11 +15,12 @@ from sqlalchemy.orm import Session
 from ..core.db import db
 from ..core.rbac import require_insurer_scope
 from ..core.security import current_user
-from ..models import Insurer, InsuredPerson, PolicyMember, User, WorkPosition
+from ..models import Insurer, InsurancePlan, InsuredPerson, PolicyMember, User, WorkPosition
 from ..schemas.insurer import InsurerProfileIn
 from ..services import (
     effective_person_status, insurer_monthly_premium_rows, insurer_monthly_premium_summary,
-    insurer_plan_ids, insurer_settlement_summary, parse_insurer_month, serialize,
+    insurer_plan_ids, insurer_settlement_summary, parse_insurer_month, plan_dict, serialize,
+    strip_internal_pricing,
 )
 
 router = APIRouter(prefix="/api/insurer-portal", tags=["insurer-portal"])
@@ -103,6 +104,18 @@ def _insurer_person_payload(session: Session, item: InsuredPerson) -> dict:
     payload["effective_at"], payload["terminated_at"] = effective_at, terminated_at
     payload["status"] = effective_person_status(item, terminated_at)
     return payload
+
+
+@router.get("/plans", dependencies=[Depends(_INSURER)])
+def insurer_plans(user: User = Depends(current_user), session: Session = Depends(db)):
+    """岗位核保时保司要在自己名下的方案里选一个分派——不能直接用平台通用的
+    GET /plans（那个对非 enterprise 角色不做任何过滤，会把其他保司的方案也
+    列出来），这里严格按 InsurancePlan.insurer_id == 自己的 insurer_id 限定。"""
+    plan_ids = insurer_plan_ids(session, user.insurer_id)
+    if not plan_ids:
+        return []
+    stmt = select(InsurancePlan).where(InsurancePlan.id.in_(plan_ids)).order_by(InsurancePlan.id.desc())
+    return [strip_internal_pricing(plan_dict(x), user) for x in session.scalars(stmt)]
 
 
 @router.get("/insured", dependencies=[Depends(_INSURER)])

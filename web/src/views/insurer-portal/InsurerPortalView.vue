@@ -3,9 +3,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { exportInsurerMonthlyPremium, flagInsuredPerson, getInsurerMonthlyPremiumDetail, getInsurerMonthlyPremiumSummary, getInsurerProfile, getInsurerSettlement, listInsurerClaimDocuments, listInsurerClaims, listInsurerInsured, listInsurerInvoices, listInsurerPolicies, listInsurerPositionVideos, listInsurerPositions, reviewInsurerClaim, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
+import { exportInsurerMonthlyPremium, flagInsuredPerson, getInsurerMonthlyPremiumDetail, getInsurerMonthlyPremiumSummary, getInsurerProfile, getInsurerSettlement, listInsurerClaimDocuments, listInsurerClaims, listInsurerInsured, listInsurerInvoices, listInsurerPlans, listInsurerPolicies, listInsurerPositionVideos, listInsurerPositions, reviewInsurerClaim, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
 import type { InsurerMonthlyPremium, InsurerMonthlyPremiumRow, InsurerSettlement } from '@/api/insurerPortal'
-import type { Claim, ClaimDocument, Insurer, Invoice, InsuredPerson, Policy, PositionVideo, WorkPosition } from '@/api/types'
+import type { Claim, ClaimDocument, Insurer, InsurancePlan, Invoice, InsuredPerson, Policy, PositionVideo, WorkPosition } from '@/api/types'
+
+const OCCUPATION_CLASSES = ['1-3类', '4类', '5类', '超5类']
 import PageCard from '@/components/PageCard.vue'
 import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
@@ -39,6 +41,10 @@ async function loadProfile() {
 const positions = ref<WorkPosition[]>([])
 async function loadPositions() {
   positions.value = await listInsurerPositions()
+}
+const positionPlans = ref<InsurancePlan[]>([])
+async function loadPositionPlans() {
+  positionPlans.value = await listInsurerPlans()
 }
 const pendingPositions = computed(() => positions.value.filter((x) => x.status !== 'approved'))
 const approvedPositions = computed(() => positions.value.filter((x) => x.status === 'approved'))
@@ -222,6 +228,7 @@ async function load() {
     }
     await loadProfile()
     await loadPositions()
+    await loadPositionPlans()
     await loadPolicies()
     await loadSettlement()
     await loadMonthlyPremium()
@@ -249,13 +256,45 @@ async function submitProfileEdit() {
   }
 }
 
-async function approvePosition(row: WorkPosition) {
+// 岗位核保：待审核岗位既包含已经分派到本保司方案下的岗位，也包含尚未被任何
+// 一方认领的岗位（plan_id 为空）——后者的 occupation_class/plan_id 都还没有
+// 值，不能直接拿 row 上的旧值去调审核接口（那样职业类别会传"待定"、方案会
+// 传空，后端会 400/403），必须弹窗让保司选定类别 + 从自己名下的方案里选一个。
+const positionReviewVisible = ref(false)
+const positionReviewTarget = ref<WorkPosition | null>(null)
+const positionReviewForm = reactive({ status: 'approved' as 'approved' | 'rejected' | 'supplement', occupation_class: '', plan_id: null as number | null, review_note: '' })
+const positionReviewSaving = ref(false)
+function openPositionReview(row: WorkPosition) {
+  positionReviewTarget.value = row
+  Object.assign(positionReviewForm, {
+    status: 'approved',
+    occupation_class: row.occupation_class && row.occupation_class !== '待定' ? row.occupation_class : '',
+    plan_id: row.plan_id ?? null,
+    review_note: '',
+  })
+  positionReviewVisible.value = true
+}
+async function submitPositionReview() {
+  if (!positionReviewTarget.value) return
+  if (!positionReviewTarget.value.video_count) { ElMessage.error('岗位视频上传后才能审核'); return }
+  if (positionReviewForm.status === 'approved' && !positionReviewForm.occupation_class) { ElMessage.error('请选择职业类别'); return }
+  if (positionReviewForm.status !== 'approved' && !positionReviewForm.review_note.trim()) { ElMessage.error('补件或驳回时必须填写审核意见'); return }
+  if (!positionReviewForm.plan_id) { ElMessage.error('请选择要分派到的保险方案'); return }
+  positionReviewSaving.value = true
   try {
-    await reviewInsurerPosition(row.id, { status: 'approved', occupation_class: row.occupation_class, plan_id: row.plan_id })
-    ElMessage.success('已核保')
+    await reviewInsurerPosition(positionReviewTarget.value.id, {
+      status: positionReviewForm.status,
+      occupation_class: positionReviewForm.status === 'approved' ? positionReviewForm.occupation_class : undefined,
+      plan_id: positionReviewForm.plan_id,
+      review_note: positionReviewForm.review_note,
+    })
+    ElMessage.success('审核完成')
+    positionReviewVisible.value = false
     loadPositions()
   } catch (e) {
     ElMessage.error((e as Error).message)
+  } finally {
+    positionReviewSaving.value = false
   }
 }
 
@@ -282,7 +321,7 @@ function logout() {
     <main class="portal-body" v-loading="loading">
       <el-tabs v-model="tab">
         <el-tab-pane label="岗位核保" name="positions">
-          <PageCard title="待审核岗位" :count="pendingPositionsTotal" hint="仅显示已分派到本保司产品线下、尚未核保通过的岗位">
+          <PageCard title="待审核岗位" :count="pendingPositionsTotal" hint="包含已分派到本保司产品线下、以及尚未被任何一方认领的待审核岗位——谁先审核谁认领">
             <el-table :data="pendingPositionsPaged" size="small">
               <el-table-column prop="name" label="岗位名称" min-width="140" />
               <el-table-column prop="actual_employer_name" label="实际用工单位" min-width="160" />
@@ -297,7 +336,7 @@ function logout() {
               <el-table-column label="操作" width="160">
                 <template #default="{ row }">
                   <el-button link type="primary" size="small" @click="openPositionVideos(row)">查看视频</el-button>
-                  <el-button link type="primary" size="small" @click="approvePosition(row)">核保通过</el-button>
+                  <el-button link type="primary" size="small" @click="openPositionReview(row)">审核</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -546,6 +585,39 @@ function logout() {
       </template>
     </el-dialog>
 
+    <el-dialog v-model="positionReviewVisible" title="岗位审核定类" width="480px">
+      <el-form v-if="positionReviewTarget" :model="positionReviewForm" label-width="110px">
+        <el-form-item label="岗位">
+          <span>{{ positionReviewTarget.name }} · {{ positionReviewTarget.actual_employer_name || positionReviewTarget.actual_employer }}</span>
+        </el-form-item>
+        <p v-if="!positionReviewTarget.video_count" class="warning-text">该岗位尚未上传视频，无法审核。</p>
+        <el-form-item label="审核结果">
+          <el-select v-model="positionReviewForm.status" style="width: 100%">
+            <el-option label="审核通过" value="approved" />
+            <el-option label="待补充材料" value="supplement" />
+            <el-option label="审核驳回" value="rejected" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="职业类别" :required="positionReviewForm.status === 'approved'">
+          <el-select v-model="positionReviewForm.occupation_class" :disabled="positionReviewForm.status !== 'approved'" style="width: 100%">
+            <el-option v-for="c in OCCUPATION_CLASSES" :key="c" :label="c" :value="c" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="分派到方案" required>
+          <el-select v-model="positionReviewForm.plan_id" placeholder="请选择本公司名下的方案" style="width: 100%">
+            <el-option v-for="p in positionPlans" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="审核意见" :required="positionReviewForm.status !== 'approved'">
+          <el-input v-model="positionReviewForm.review_note" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="positionReviewVisible = false">取消</el-button>
+        <el-button type="primary" :loading="positionReviewSaving" @click="submitPositionReview">提交审核</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="monthlyDetailVisible" :title="`${monthlyDetailMonth} 保费明细`" width="760px">
       <el-table v-loading="monthlyDetailLoading" :data="monthlyDetailPaged" size="small">
         <el-table-column prop="person_name" label="姓名" width="90" />
@@ -679,5 +751,10 @@ function logout() {
   align-items: center;
   gap: 8px;
   font-size: 12px;
+}
+.warning-text {
+  color: var(--el-color-danger);
+  font-size: 12px;
+  margin: 0 0 12px;
 }
 </style>

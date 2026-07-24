@@ -1,5 +1,5 @@
 import { client } from './client'
-import type { Claim, ClaimDocument, Insurer, Invoice, InsuredPerson, Policy, PositionVideo, WorkPosition } from './types'
+import type { Claim, ClaimDocument, Insurer, InsurancePlan, Invoice, InsuredPerson, Policy, PositionVideo, WorkPosition } from './types'
 
 export function getInsurerProfile() {
   return client.get<Insurer>('/insurer-portal/profile').then((response) => response.data)
@@ -19,6 +19,10 @@ export function reviewInsurerPosition(id: number, data: { occupation_class?: str
 
 export function listInsurerPositionVideos(positionId: number) {
   return client.get<PositionVideo[]>(`/positions/${positionId}/videos`).then((response) => response.data)
+}
+
+export function listInsurerPlans() {
+  return client.get<InsurancePlan[]>('/insurer-portal/plans').then((response) => response.data)
 }
 
 export function listInsurerPolicies() {
