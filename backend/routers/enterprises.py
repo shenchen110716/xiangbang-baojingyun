@@ -58,7 +58,11 @@ def add_enterprise(data: EnterpriseIn, user: User = Depends(current_user), sessi
 def enterprise_status(item_id: int, status_value: str = Query(..., alias="status"), user: User = Depends(current_user), session: Session = Depends(db)):
     item = session.get(Enterprise, item_id)
     if not item: raise HTTPException(404, "企业不存在")
-    item.status = status_value; session.commit(); audit(session, user, "status_change", "enterprise", str(item.id), status_value); return serialize(item)
+    item.status = status_value
+    if status_value == "approved":
+        owner = session.scalar(select(User).where(User.enterprise_id == item_id, User.role == "enterprise", User.is_owner.is_(True)))
+        if owner: owner.active = True
+    session.commit(); audit(session, user, "status_change", "enterprise", str(item.id), status_value); return serialize(item)
 
 @router.patch("/enterprises/{item_id}")
 def update_enterprise(item_id: int, data: EnterpriseUpdate, user: User = Depends(current_user), session: Session = Depends(db)):
