@@ -33,7 +33,13 @@
   <view class="section">
     <view class="section-head"><text class="section-title">参保方案</text><text class="section-link" bindtap="addPosition">+ 新增方案</text></view>
     <view wx:for="{{positionCards}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="goPosition">
-      <view class="row between"><text class="list-title">{{item.name}}</text><text class="tag tag-success">在保/待生效 {{item.insured_count}} 人</text></view>
+      <view class="row between">
+        <text class="list-title">{{item.name}}</text>
+        <view class="row">
+          <text class="tag tag-success" style="margin-right:10rpx">在保 {{item.active_count}}</text>
+          <text wx:if="{{item.pending_count}}" class="tag tag-warning">待生效 {{item.pending_count}}</text>
+        </view>
+      </view>
       <view class="list-meta">{{item.actual_employer_name||'未关联用工单位'}} · {{item.occupation_class}}</view>
       <view class="row between" style="margin-top:18rpx">
         <text class="small">{{item.plan_text}}</text>

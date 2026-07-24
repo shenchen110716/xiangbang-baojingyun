@@ -28,14 +28,25 @@ Page({
   },
   // 每张卡片对应一个已审核通过（status==='approved'）的岗位——职业类别、关联
   // 方案在审核时已经定好，这里只负责把三份已有接口的数据拼到一起，不新增
-  // 后端字段。在保人数按 position_id 对 /insured 全量列表分组统计，只算
-  // active/pending（已停保的人不计入"在保方案"的人数展示）。
+  // 后端字段。在保/待生效人数按 position_id 对 /insured 全量列表分组统计，
+  // 已停保的人不计入。之前把两者合并成一个数直接加总，口径本身就漏了一种
+  // 情况：员工 status 是 'active' 但 effective_at 还没到（月单最早次日生
+  // 效），这批人其实也该算"待生效"——和 pages/employees/employees.js 的
+  // isPendingEffective() 判断口径保持一致，不能只看 status==='pending'。
+  isPendingEffective(person) {
+    return person.status === 'active' && person.effective_at && new Date(person.effective_at) > new Date();
+  },
   buildPositionCards(positions, plans, people) {
     const planById = new Map(plans.map((plan) => [plan.id, plan]));
-    const countByPosition = new Map();
+    const activeByPosition = new Map();
+    const pendingByPosition = new Map();
     people.forEach((person) => {
-      if (person.status !== 'active' && person.status !== 'pending') return;
-      countByPosition.set(person.position_id, (countByPosition.get(person.position_id) || 0) + 1);
+      const pending = person.status === 'pending' || this.isPendingEffective(person);
+      if (pending) {
+        pendingByPosition.set(person.position_id, (pendingByPosition.get(person.position_id) || 0) + 1);
+      } else if (person.status === 'active') {
+        activeByPosition.set(person.position_id, (activeByPosition.get(person.position_id) || 0) + 1);
+      }
     });
     return positions
       .filter((position) => position.status === 'approved')
@@ -48,7 +59,8 @@ Page({
           actual_employer_name: position.actual_employer_name || '',
           occupation_class: position.occupation_class || '待定',
           plan_text: priceText,
-          insured_count: countByPosition.get(position.id) || 0
+          active_count: activeByPosition.get(position.id) || 0,
+          pending_count: pendingByPosition.get(position.id) || 0
         };
       });
   },
