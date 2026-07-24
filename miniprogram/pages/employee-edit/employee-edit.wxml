@@ -22,9 +22,7 @@
     </view>
 
     <view wx:if="{{!id && addMode==='photo'}}" style="margin-top:16rpx">
-      <button class="secondary ocr-btn" bindtap="batchScan" loading="{{batchScanning}}" disabled="{{batchScanning}}">
-        📷 拍身份证照片（最多 9 张）
-      </button>
+      <button class="secondary ocr-btn" bindtap="batchScan" loading="{{batchScanning}}" disabled="{{batchScanning}}">📷 拍身份证照片（最多9张）</button>
       <view class="ocr-hint">拍摄或选择身份证正面照，自动填充姓名与身份证号，请核对后再提交</view>
       <view wx:if="{{batchItems.length}}" class="card-plain" style="background:#f4f7ff;margin-top:16rpx">
         <view class="row between"><text class="strong">待确认 {{batchItems.length}} 人</text><text class="link-btn" bindtap="batchClear">清空</text></view>

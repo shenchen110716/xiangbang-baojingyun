@@ -1,4 +1,4 @@
-.ocr-btn{width:100%;margin-bottom:10rpx}
+.ocr-btn{width:100%;margin-bottom:10rpx;white-space:nowrap;font-size:26rpx;padding:18rpx 10rpx}
 .ocr-hint{font-size:22rpx;color:#8892a8;margin-bottom:22rpx;line-height:1.5}
 .position-summary{background:#f4f7ff;border-radius:16rpx;padding:20rpx;margin-top:16rpx}
 .segmented{display:flex;background:#f0f2f6;border-radius:16rpx;padding:6rpx;margin:24rpx 0}
