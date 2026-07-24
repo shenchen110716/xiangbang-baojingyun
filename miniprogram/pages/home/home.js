@@ -80,6 +80,13 @@ Page({
     app.globalData.pendingEmployeesFilter = { status: '', position_id: Number(e.currentTarget.dataset.id) };
     wx.switchTab({ url: '/pages/employees/employees' });
   },
+  // 直接跳到新增参保表单，岗位归属信息预锁定；employee-edit.js 已经支持连续
+  // 添加（第一人提交成功后不返回、清空个人信息、留在原页面继续填下一人），
+  // 不用像 goPosition 那样先经过参保人员列表这一层。employee-edit 不是
+  // tabBar 页面，用 wx.navigateTo 没问题。
+  addEnroll(e) {
+    wx.navigateTo({ url: `/pages/employee-edit/employee-edit?positionId=${e.currentTarget.dataset.id}` });
+  },
   addPosition() { wx.navigateTo({ url: '/pages/position-edit/position-edit' }); },
   goLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
   onShareAppMessage() { return app.share('/pages/home/home', 'from=share'); }

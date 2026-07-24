@@ -35,7 +35,13 @@
     <view wx:for="{{positionCards}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="goPosition">
       <view class="row between"><text class="list-title">{{item.name}}</text><text class="tag tag-success">在保/待生效 {{item.insured_count}} 人</text></view>
       <view class="list-meta">{{item.actual_employer_name||'未关联用工单位'}} · {{item.occupation_class}}</view>
-      <view class="row between" style="margin-top:18rpx"><text class="small">{{item.plan_text}}</text><text class="link-btn">增/减保 →</text></view>
+      <view class="row between" style="margin-top:18rpx">
+        <text class="small">{{item.plan_text}}</text>
+        <view class="row">
+          <text class="link-btn" style="margin-right:24rpx" data-id="{{item.id}}" catchtap="addEnroll">+新增参保</text>
+          <text class="link-btn">名单 →</text>
+        </view>
+      </view>
     </view>
     <view wx:if="{{!loading&&!positionCards.length}}" class="empty">
       <view class="empty-icon">案</view>
