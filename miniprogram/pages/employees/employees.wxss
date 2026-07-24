@@ -10,13 +10,14 @@
 
 .header-bar{padding-bottom:16rpx;margin-bottom:0;border-bottom:1px solid #eef0f5;min-height:56rpx}
 /* 参保/停保从顶部固定按钮改成悬浮圆形图标按钮，贯穿整个列表滚动过程都
-   可见——和 .fab（新增理赔的悬浮圆按钮）同一套定位/尺寸基准（tabBar
-   上方 130rpx + 安全区，96rpx 圆），竖排在右侧，"＋"参保在上、"－"
-   停保在下。 */
-.float-actions{position:fixed;right:30rpx;bottom:calc(130rpx + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:20rpx;z-index:15}
-.float-btn{width:96rpx;height:96rpx;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:48rpx;font-weight:700;line-height:1;padding:0;box-sizing:border-box}
-.float-btn-primary{background:#1d4ed8;color:#fff;box-shadow:0 14rpx 28rpx rgba(29,78,216,.32)}
-.float-btn-secondary{background:#fff;color:#dc2626;border:2rpx solid #f6d3d3;box-shadow:0 10rpx 24rpx rgba(26,39,84,.12)}
+   可见——和 .fab（理赔页的悬浮"+"圆按钮）用完全一样的尺寸/阴影/定位
+   基准（tabBar 上方 130rpx + 安全区，104rpx 圆），竖排在右侧，"＋"
+   参保在上、"－"停保在下，两个都是同等分量的实心圆，用蓝/红区分
+   增减操作，不做成一实一虚。 */
+.float-actions{position:fixed;right:30rpx;bottom:calc(130rpx + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:24rpx;z-index:15}
+.float-btn{width:104rpx;height:104rpx;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:48rpx;font-weight:700;line-height:1;padding:0;box-sizing:border-box}
+.float-btn-primary{background:#1d4ed8;color:#fff;box-shadow:0 14rpx 32rpx rgba(29,78,216,.35)}
+.float-btn-secondary{background:#e11d48;color:#fff;box-shadow:0 14rpx 32rpx rgba(225,29,72,.35)}
 .select-box{box-sizing:border-box;width:44rpx;height:44rpx;border-radius:50%;border:4rpx solid #dbe0ea;background:#f7f8fb;margin-right:18rpx;margin-top:4rpx;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:30rpx;font-weight:900;line-height:1;transition:transform .12s ease,background-color .12s ease,border-color .12s ease}
 .select-box.checked{background:#1d4ed8;border-color:#1d4ed8;transform:scale(1.08);box-shadow:0 4rpx 10rpx rgba(29,78,216,.35)}
 .select-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:20rpx 20rpx 0 0;padding:16rpx 24rpx calc(14rpx + env(safe-area-inset-bottom));box-shadow:0 -8rpx 24rpx rgba(26,39,84,.1);z-index:20}

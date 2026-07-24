@@ -44,7 +44,7 @@
        空间，不留个占位高度的话会挡住列表最后几条，还可能因为页面内容
        "看起来"刚好撑满一屏而滚不动。两者互斥（进勾选模式后悬浮按钮就
        让位给底部的批量操作栏），占位高度按各自实际高度留。 -->
-  <view wx:if="{{!selectMode}}" style="height:280rpx"></view>
+  <view wx:if="{{!selectMode}}" style="height:300rpx"></view>
   <view wx:if="{{!selectMode}}" class="float-actions">
     <button class="float-btn float-btn-primary" bindtap="add">＋</button>
     <button class="float-btn float-btn-secondary" data-mode="stopped" bindtap="startSelect">－</button>
