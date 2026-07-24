@@ -36,7 +36,9 @@ Page({
     batchItems: [],
     batchScanning: false,
     batchSubmitting: false,
-    batchKeySeq: 0
+    batchKeySeq: 0,
+    // 生效/停保时间收进可展开的"更多选项"，onLoad 里按新增/编辑重新设默认值。
+    moreOptionsExpanded: false
   },
   // 7.15-3：先选实际用工单位，再选岗位（岗位名会跨单位重复）。按投保单位下的
   // 已审核岗位聚合出实际用工单位列表，再按所选单位过滤岗位。
@@ -83,6 +85,9 @@ Page({
         const terminatedTime = current && current.terminated_at && current.terminated_at.length >= 16 ? current.terminated_at.slice(11, 16) : '00:00';
         this.setData({ enterprises, allPositions: approved, plans, ...scope, enterpriseIndex,
           locked: !!presetPos,
+          // 编辑已有记录时生效/停保时间是常改的字段，默认展开；新增时大多数场景
+          // 用不到，默认收起，减少视觉干扰。
+          moreOptionsExpanded: !!id,
           form: current
             ? { name: current.name, id_number: current.id_number, phone: current.phone || '', enterprise_id: current.enterprise_id, position_id: current.position_id || 0, effective_at: effectiveAt, terminated_at: terminatedAt }
             : { ...this.data.form, enterprise_id: enterpriseId, position_id: (scope.selectedPosition && scope.selectedPosition.id) || 0 },
@@ -214,6 +219,7 @@ Page({
     this.setData({ positionIndex, selectedPosition: position || null, ...this.planText(position), 'form.position_id': (position && position.id) || 0 });
   },
   dailyModeChange(e) { this.setData({ dailyMode: e.currentTarget.dataset.value }); },
+  toggleMoreOptions() { this.setData({ moreOptionsExpanded: !this.data.moreOptionsExpanded }); },
   ageFromId(id) {
     const v = String(id || '').trim();
     if (!/^\d{17}[\dXx]$/.test(v)) return null;

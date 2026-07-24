@@ -1,2 +1,7 @@
 .ocr-btn{width:100%;margin-bottom:10rpx}
 .ocr-hint{font-size:22rpx;color:#8892a8;margin-bottom:22rpx;line-height:1.5}
+.position-summary{background:#f4f7ff;border-radius:16rpx;padding:20rpx;margin-top:16rpx}
+.segmented{display:flex;background:#f0f2f6;border-radius:16rpx;padding:6rpx;margin:24rpx 0}
+.segmented-item{flex:1;text-align:center;padding:16rpx 0;font-size:26rpx;color:#666;border-radius:12rpx}
+.segmented-item.active{background:#fff;color:#1d4ed8;font-weight:600;box-shadow:0 4rpx 12rpx rgba(26,39,84,.08)}
+.more-options-toggle{display:flex;align-items:center;justify-content:space-between;padding:20rpx 0;font-size:26rpx;color:#4b5468}
