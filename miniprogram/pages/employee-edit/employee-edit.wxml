@@ -3,9 +3,11 @@
   <view class="subtitle">选择已审核岗位后，职业类别、保险方案和费率将自动带出</view>
   <view wx:if="{{loading}}" class="loading">正在加载…</view>
   <view wx:else class="card section">
-    <label class="field"><view class="field-label required">投保单位</view><picker disabled="{{locked}}" range="{{enterprises}}" range-key="name" value="{{enterpriseIndex}}" bindchange="enterpriseChange"><view class="picker">{{enterprises[enterpriseIndex].name||'请选择'}}</view></picker></label>
-    <label class="field"><view class="field-label required">实际用工单位</view><picker disabled="{{locked}}" range="{{employers}}" range-key="name" value="{{employerIndex}}" bindchange="employerChange"><view class="picker">{{employers[employerIndex].name||'请先选择投保单位'}}</view></picker></label>
-    <label class="field"><view class="field-label required">已审核岗位</view><picker disabled="{{locked}}" range="{{positions}}" range-key="name" value="{{positionIndex}}" bindchange="positionChange"><view class="picker">{{positions[positionIndex].name||'该用工单位暂无可用岗位'}}</view></picker></label>
+    <block wx:if="{{!locked}}">
+      <label class="field"><view class="field-label required">投保单位</view><picker range="{{enterprises}}" range-key="name" value="{{enterpriseIndex}}" bindchange="enterpriseChange"><view class="picker">{{enterprises[enterpriseIndex].name||'请选择'}}</view></picker></label>
+      <label class="field"><view class="field-label required">实际用工单位</view><picker range="{{employers}}" range-key="name" value="{{employerIndex}}" bindchange="employerChange"><view class="picker">{{employers[employerIndex].name||'请先选择投保单位'}}</view></picker></label>
+      <label class="field"><view class="field-label required">已审核岗位</view><picker range="{{positions}}" range-key="name" value="{{positionIndex}}" bindchange="positionChange"><view class="picker">{{positions[positionIndex].name||'该用工单位暂无可用岗位'}}</view></picker></label>
+    </block>
     <view wx:if="{{locked}}" class="card-plain" style="background:#fff8ec;margin-top:16rpx">
       <text class="small">归属信息已锁定（本次共添加 {{addedCount}} 人），继续手工填写或拍照添加下一人，或点下方"完成"结束</text>
     </view>
