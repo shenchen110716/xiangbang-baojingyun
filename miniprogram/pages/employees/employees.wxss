@@ -2,4 +2,5 @@
 .mini-btn-primary{background:#1d4ed8;color:#fff}
 .select-box{width:44rpx;height:44rpx;border-radius:50%;border:2rpx solid #c7cedb;margin-right:20rpx;margin-top:6rpx;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26rpx}
 .select-box.checked{background:#1d4ed8;border-color:#1d4ed8}
-.select-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;padding:20rpx 30rpx calc(20rpx + env(safe-area-inset-bottom));box-shadow:0 -8rpx 24rpx rgba(26,39,84,.08);z-index:20}
+.select-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:24rpx 24rpx 0 0;padding:24rpx 30rpx calc(20rpx + env(safe-area-inset-bottom));box-shadow:0 -8rpx 24rpx rgba(26,39,84,.1);z-index:20}
+.select-bar-date{background:#f7f8fb;border-radius:14rpx;padding:16rpx 20rpx}
