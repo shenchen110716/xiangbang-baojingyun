@@ -76,8 +76,9 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     ledger_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(ledger_entries)")}
     if "account_id" not in ledger_columns: s.connection().exec_driver_sql("ALTER TABLE ledger_entries ADD COLUMN account_id INTEGER")
     payment_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(payment_records)")}
-    for column, definition in [("channel", "VARCHAR(20) DEFAULT 'native'"), ("openid", "VARCHAR(64)"), ("provider_trade_no", "VARCHAR(80)"), ("paid_at", "DATETIME")]:
-        if column not in payment_columns: s.connection().exec_driver_sql(f"ALTER TABLE payment_records ADD COLUMN {column} {definition}")
+    if payment_columns:
+        for column, definition in [("channel", "VARCHAR(20) DEFAULT 'native'"), ("openid", "VARCHAR(64)"), ("provider_trade_no", "VARCHAR(80)"), ("paid_at", "DATETIME")]:
+            if column not in payment_columns: s.connection().exec_driver_sql(f"ALTER TABLE payment_records ADD COLUMN {column} {definition}")
 
 
 def migrate_premium_balances(s: Session) -> None:
