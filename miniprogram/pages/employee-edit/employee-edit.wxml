@@ -74,7 +74,7 @@
       </block>
 
       <view class="row" style="gap:16rpx;margin-top:28rpx">
-        <button class="primary grow" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{id?'保存员工信息':(locked?'保存并继续添加下一人':'提交参保审核')}}</button>
+        <button class="primary grow" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{id?'保存员工信息':(locked?'保存并继续添加':'提交参保审核')}}</button>
         <button wx:if="{{locked}}" class="secondary grow" bindtap="finish">完成</button>
       </view>
     </view>
