@@ -2,8 +2,12 @@
   <view wx:if="{{loading}}" class="loading">正在加载…</view>
   <view wx:elif="{{notFound}}" class="empty"><view class="empty-icon">📄</view>未找到对应记录</view>
   <block wx:else>
+    <view wx:if="{{!isActive}}" class="card notice" style="background:#fff0f2;color:#d94357;border:2rpx solid #f3a8b3">
+      <view class="strong">⚠️ 当前非在保状态（{{statusLabel}}）</view>
+      <view class="small">该人员目前不处于有效参保状态，本页仅作参保历史查询，不能作为有效的在保凭证使用。</view>
+    </view>
     <view class="card">
-      <view class="cert-title">在保证明</view>
+      <view class="cert-title">{{isActive?'在保证明':'参保状态查询'}}</view>
       <view class="cert-field"><text class="cert-k">险种名称</text><text class="cert-v">{{person.plan_name||'—'}}</text></view>
       <view class="cert-field"><text class="cert-k">被保险单位</text><text class="cert-v">{{person.enterprise_name||'—'}}</text></view>
       <view class="cert-field"><text class="cert-k">保单生效期间</text><text class="cert-v">{{coveragePeriod}}</text></view>
@@ -17,7 +21,7 @@
       <view class="cert-field"><text class="cert-k">职业/工种</text><text class="cert-v">{{person.position_name||person.occupation||'—'}}</text></view>
       <view class="cert-field"><text class="cert-k">职业类别</text><text class="cert-v">{{person.occupation_class||'—'}}</text></view>
       <view class="cert-field"><text class="cert-k">工作单位</text><text class="cert-v">{{person.actual_employer_name||'—'}}</text></view>
-      <view class="cert-field"><text class="cert-k">状态</text><text class="cert-v">{{statusLabel}}</text></view>
+      <view class="cert-field"><text class="cert-k">状态</text><text class="cert-v" style="{{isActive?'':'color:#d94357;font-weight:600'}}">{{statusLabel}}</text></view>
     </view>
     <view class="card notice">
       <view class="list-meta">说明：本证明由系统根据当前参保数据自动生成，仅作为参保情况的电子查询凭证，不代表保险公司或本平台的正式盖章文件；如需具备法律效力的正式保单/批单，请以保险公司出具的原件为准。</view>

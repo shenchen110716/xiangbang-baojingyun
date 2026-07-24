@@ -5,20 +5,31 @@ App({
     apiBase: DEFAULT_API_BASE,
     token: '',
     user: null,
-    enterprise: null
+    enterprise: null,
+    isDevEnv: false
   },
 
   onLaunch() {
-    this.globalData.apiBase = wx.getStorageSync('apiBase') || DEFAULT_API_BASE;
+    try {
+      const { miniProgram } = wx.getAccountInfoSync();
+      this.globalData.isDevEnv = miniProgram.envVersion !== 'release';
+    } catch (error) {
+      this.globalData.isDevEnv = false;
+    }
+    //正式版禁止切换服务地址，避免已登录用户被诱导改到攻击者服务器后继续携带 token 请求。
+    this.globalData.apiBase = (this.globalData.isDevEnv && wx.getStorageSync('apiBase')) || DEFAULT_API_BASE;
     this.globalData.token = wx.getStorageSync('token') || '';
     this.globalData.user = wx.getStorageSync('user') || null;
   },
 
   setApiBase(value) {
+    if (!this.globalData.isDevEnv) throw new Error('正式版不支持修改服务地址');
     const base = String(value || '').trim().replace(/\/$/, '');
     if (!/^https?:\/\//.test(base)) throw new Error('服务地址必须以 http:// 或 https:// 开头');
-    this.globalData.apiBase = base.endsWith('/api') ? base : `${base}/api`;
-    wx.setStorageSync('apiBase', this.globalData.apiBase);
+    const next = base.endsWith('/api') ? base : `${base}/api`;
+    if (next !== this.globalData.apiBase) this.logout(false);
+    this.globalData.apiBase = next;
+    wx.setStorageSync('apiBase', next);
   },
 
   login(username, password) {
@@ -42,14 +53,6 @@ App({
         return user;
       });
     });
-  },
-
-  ensureLogin() {
-    if (!this.globalData.token) {
-      wx.reLaunch({ url: '/pages/login/login' });
-      return Promise.reject(new Error('请先登录'));
-    }
-    return Promise.resolve(this.globalData.user || this.loadProfile());
   },
 
   rawRequest(path, options = {}) {

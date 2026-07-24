@@ -137,14 +137,22 @@ def run() -> None:
         env["ADMIN_PASSWORD"] = "admin123"
         env["ENTERPRISE_PASSWORD"] = "enterprise123"
         env["ID_ENCRYPTION_KEY"] = "smoke-only-id-key-not-a-production-secret"
+        # 捕获子进程输出到文件而不是 DEVNULL：之前静默丢弃，一旦服务器没起来
+        # （端口冲突、启动异常等）只会看到"server did not come up in time"，
+        # 看不出真正原因；同时轮询时先查进程是否已经退出，提前失败，不用干等满整个超时。
+        log_path = Path(folder) / "server.log"
+        log_file = open(log_path, "wb")
         process = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "backend.app:app",
              "--host", "127.0.0.1", "--port", str(port)],
             cwd=ROOT, env=env,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdout=log_file, stderr=subprocess.STDOUT,
         )
+        log_file.close()
         try:
-            for _ in range(50):
+            for _ in range(75):
+                if process.poll() is not None:
+                    raise RuntimeError(f"server exited early (code {process.returncode}):\n{log_path.read_text(errors='replace')}")
                 try:
                     if call("GET", "/api/health")[0] == 200:
                         break
@@ -152,7 +160,7 @@ def run() -> None:
                     pass
                 time.sleep(0.2)
             else:
-                raise RuntimeError("server did not come up in time")
+                raise RuntimeError(f"server did not come up in time; log:\n{log_path.read_text(errors='replace')}")
 
             admin = login("admin", "admin123", "admin")
             owner = login("enterprise", "enterprise123", "enterprise")

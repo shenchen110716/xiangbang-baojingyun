@@ -11,15 +11,14 @@
       <view class="field-label">登录密码</view>
       <input class="input" value="{{password}}" password data-field="password" bindinput="input" placeholder="请输入密码" />
     </label>
-    <view class="row between" bindtap="toggleServer">
+    <view wx:if="{{isDevEnv}}" class="row between" bindtap="toggleServer">
       <text class="small">服务连接设置</text><text class="link-btn">{{showServer?'收起':'展开'}}</text>
     </view>
-    <label wx:if="{{showServer}}" class="field">
+    <label wx:if="{{isDevEnv && showServer}}" class="field">
       <input class="input" value="{{apiBase}}" data-field="apiBase" bindinput="input" placeholder="https://your-domain.com/api" />
-      <view class="small">开发者工具本地调试可使用 http://127.0.0.1:8001/api</view>
+      <view class="small">开发者工具本地调试可使用 http://127.0.0.1:8001/api（仅开发/体验版可见）</view>
     </label>
     <button class="primary" loading="{{loading}}" disabled="{{loading}}" bindtap="submit">登录用户端</button>
     <view wx:if="{{error}}" class="error">{{error}}</view>
-    <view class="small" style="margin-top:24rpx">本地测试账号 enterprise，密码 enterprise123</view>
   </view>
 </view>

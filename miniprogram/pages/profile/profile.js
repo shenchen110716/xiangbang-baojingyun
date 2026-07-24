@@ -36,7 +36,7 @@ Page({
   },
   contactSupport() { wx.showModal({ title: '联系客服', content: '如需帮助，请联系您的专属业务员，或在「消息与待办」中留言，平台工作人员会尽快处理。', showCancel: false }); },
   switchUser() { wx.showModal({ title: '切换登录用户', content: '将退出当前账号，目标操作员需重新输入账号和密码。', success: (res) => { if (!res.confirm) return; app.logout(false); wx.reLaunch({ url: '/pages/login/login?switch=1' }); } }); },
-  changePassword() { wx.showModal({ title: '当前密码', editable: true, placeholderText: '请输入当前密码', success: (current) => { if (!current.confirm) return; wx.showModal({ title: '新密码', editable: true, placeholderText: '至少 6 位', success: (next) => { if (!next.confirm) return; const password = String(next.content || ''); if (password.length < 6) { wx.showToast({ title: '新密码至少 6 位', icon: 'none' }); return; } app.request('/auth/password', { method: 'PATCH', data: { current_password: String(current.content || ''), new_password: password } }).then(() => wx.showToast({ title: '密码已修改' })); } }); } }); },
+  changePassword() { wx.navigateTo({ url: '/pages/change-password/change-password' }); },
   logout() { wx.showModal({ title: '退出登录', content: '确认退出当前企业账号？', success: (res) => res.confirm && app.logout() }); },
   onShareAppMessage() { return app.share('/pages/home/home', 'from=profile'); }
 });

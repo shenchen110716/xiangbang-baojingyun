@@ -2,7 +2,7 @@
   <view wx:if="{{loading}}" class="loading">正在加载员工详情…</view>
   <view wx:elif="{{item}}">
     <view class="hero">
-      <view class="row"><view class="avatar" style="background:rgba(255,255,255,.16);color:#fff">{{item.initial}}</view><view><view class="hero-title">{{item.name}}</view><view class="hero-sub">{{item.id_number}}</view></view></view>
+      <view class="row"><view class="avatar" style="background:rgba(255,255,255,.16);color:#fff">{{item.initial}}</view><view><view class="hero-title">{{item.name}}</view><view class="hero-sub">{{item.id_masked}}</view></view></view>
       <view style="margin-top:26rpx"><text class="tag {{item.status_display==='pending'?'tag-warning':item.status_display==='active'?'tag-success':'tag-gray'}}">{{item.status_label}}</text></view>
     </view>
     <view class="card section">

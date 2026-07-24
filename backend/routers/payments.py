@@ -75,10 +75,14 @@ async def wechat_notify(request:Request,session:Session=Depends(db)):
         row.status=payload.get("status",row.status); session.commit()
     return {"ok":True,"order_no":row.order_no,"status":row.status,"idempotent":False}
 
-@router.get("/payments", dependencies=[Depends(require_role("admin", detail="仅总后台可查看支付记录"))])
-def list_payments(enterprise_id:int|None=Query(None), status_value:str=Query("",alias="status"), channel:str=Query(""), session:Session=Depends(db)):
+@router.get("/payments", dependencies=[Depends(require_role("admin", "enterprise", detail="仅总后台或投保单位可查看支付记录"))])
+def list_payments(enterprise_id:int|None=Query(None), status_value:str=Query("",alias="status"), channel:str=Query(""), user:User=Depends(current_user), session:Session=Depends(db)):
     stmt=select(PaymentRecord).order_by(PaymentRecord.created_at.desc())
-    if enterprise_id: stmt=stmt.where(PaymentRecord.enterprise_id==enterprise_id)
+    if user.role == "enterprise":
+        if not user.enterprise_id: raise HTTPException(403, "账号未绑定投保单位")
+        stmt = stmt.where(PaymentRecord.enterprise_id == user.enterprise_id)
+    elif enterprise_id:
+        stmt=stmt.where(PaymentRecord.enterprise_id==enterprise_id)
     if status_value: stmt=stmt.where(PaymentRecord.status==status_value)
     if channel: stmt=stmt.where(PaymentRecord.channel==channel)
     rows=session.scalars(stmt).all()

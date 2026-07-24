@@ -15,10 +15,14 @@ Page({
         item.initial = String(item.name || '员').slice(0, 1);
         item.effective_at_display = app.formatCoverageDate(item.effective_at, item.effective_mode);
         item.terminated_at_display = app.formatCoverageDate(item.terminated_at, item.effective_mode);
+        item.id_masked = this.maskId(item.id_number);
       }
       this.setData({ item, loading: false });
     }).catch(() => this.setData({ loading: false }));
   },
+  // 跟员工列表页（employees.js）保持一致的打码规则，详情页此前是明文展示，
+  // 同一份数据两处展示口径不一致。
+  maskId(value) { const text = String(value || ''); return text.length > 10 ? `${text.slice(0, 6)}********${text.slice(-4)}` : text; },
   edit() { wx.navigateTo({ url: `/pages/employee-edit/employee-edit?id=${this.data.id}` }); },
   claim() { wx.navigateTo({ url: `/pages/claim-create/claim-create?personId=${this.data.id}` }); },
   cert() { wx.navigateTo({ url: `/pages/cert/cert?id=${this.data.id}` }); },

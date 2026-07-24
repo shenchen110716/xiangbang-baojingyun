@@ -27,7 +27,8 @@
     "pages/messages/messages",
     "pages/reports/reports",
     "pages/settings/settings",
-    "pages/timeliness/timeliness"
+    "pages/timeliness/timeliness",
+    "pages/change-password/change-password"
   ],
   "window": {
     "navigationBarTitleText": "响帮帮无忧保",

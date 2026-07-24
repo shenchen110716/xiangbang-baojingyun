@@ -4,7 +4,21 @@ Page({
   onLoad(options) { this.setData({ id: Number(options.id || 0) }); this.load(); },
   load() {
     Promise.all([app.request('/actual-employers'), this.data.id ? app.request('/positions') : Promise.resolve([]), this.data.id ? app.request(`/positions/${this.data.id}/videos`) : Promise.resolve([])])
-      .then(([employers, positions, videos]) => { const activeEmployers = employers.filter((row) => row.status === 'active'); const item = positions.find((row) => row.id === this.data.id) || null; const employerIndex = Math.max(0, activeEmployers.findIndex((row) => item && row.id === item.actual_employer_id)); const form = item ? { actual_employer: item.actual_employer_name || item.actual_employer, actual_employer_id: item.actual_employer_id, name: item.name } : { actual_employer: (activeEmployers[0] && activeEmployers[0].name) || '', actual_employer_id: (activeEmployers[0] && activeEmployers[0].id) || null, name: '' }; this.setData({ employers: activeEmployers, item, videos, employerIndex, form, loading: false }); }).catch(() => this.setData({ loading: false }));
+      .then(([employers, positions, videos]) => {
+        const activeEmployers = employers.filter((row) => row.status === 'active');
+        const item = positions.find((row) => row.id === this.data.id) || null;
+        // 有 id 但列表里找不到对应岗位，说明这不是本企业的岗位（越权/脏链接），
+        // 跟请求 403 一样处理：不要渲染半成品表单。
+        if (this.data.id && !item) { this.setData({ loading: false }); wx.showToast({ title: '该岗位不存在或无权查看', icon: 'none' }); wx.navigateBack(); return; }
+        const employerIndex = Math.max(0, activeEmployers.findIndex((row) => item && row.id === item.actual_employer_id)); const form = item ? { actual_employer: item.actual_employer_name || item.actual_employer, actual_employer_id: item.actual_employer_id, name: item.name } : { actual_employer: (activeEmployers[0] && activeEmployers[0].name) || '', actual_employer_id: (activeEmployers[0] && activeEmployers[0].id) || null, name: '' };
+        const itemWithLabel = item ? { ...item, status_label: app.statusText(item.status) } : null;
+        const videosWithLabel = (videos || []).map((v) => ({ ...v, status_label: app.statusText(v.status) }));
+        this.setData({ employers: activeEmployers, item: itemWithLabel, videos: videosWithLabel, employerIndex, form, loading: false });
+      })
+      .catch(() => {
+        this.setData({ loading: false });
+        if (this.data.id) { wx.showToast({ title: '加载失败或无权查看该岗位', icon: 'none' }); wx.navigateBack(); }
+      });
   },
   input(e) { this.setData({ [`form.${e.currentTarget.dataset.key}`]: e.detail.value }); },
   employerChange(e) { const employerIndex = Number(e.detail.value), employer = this.data.employers[employerIndex]; this.setData({ employerIndex, 'form.actual_employer_id': employer.id, 'form.actual_employer': employer.name }); },

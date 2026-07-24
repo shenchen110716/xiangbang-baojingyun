@@ -8,6 +8,7 @@ import type { InsurerMonthlyPremium, InsurerMonthlyPremiumRow, InsurerSettlement
 import type { Claim, ClaimDocument, Insurer, Invoice, InsuredPerson, Policy, PositionVideo, WorkPosition } from '@/api/types'
 import PageCard from '@/components/PageCard.vue'
 import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
+import HelpDrawer from '@/components/HelpDrawer.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -15,6 +16,7 @@ const auth = useAuthStore()
 const tab = ref('positions')
 const loading = ref(true)
 const passwordDialogVisible = ref(false)
+const helpVisible = ref(false)
 
 const profile = ref<Insurer | null>(null)
 const profileForm = reactive({ name: '', contact: '', phone: '', credit_code: '', email: '', address: '' })
@@ -252,6 +254,7 @@ function logout() {
       <div class="portal-brand">响帮帮无忧保 · 保司工作台</div>
       <div class="portal-actions">
         <span class="portal-user">{{ auth.user?.name }}</span>
+        <el-button size="small" :icon="'QuestionFilled'" @click="helpVisible = true">帮助</el-button>
         <el-button size="small" @click="passwordDialogVisible = true">修改密码</el-button>
         <el-button size="small" @click="logout">退出登录</el-button>
       </div>
@@ -512,6 +515,7 @@ function logout() {
     </el-dialog>
 
     <PasswordChangeDialog v-model="passwordDialogVisible" />
+    <HelpDrawer v-model="helpVisible" role="insurer" />
   </div>
 </template>
 
