@@ -1,16 +1,20 @@
 const app = getApp();
 Page({
-  data: { user: {}, userInitial: '响', enterprise: {}, dashboard: {}, messageCount: 0, linkedAccounts: [], loading: true },
-  // 首页改为免登录直接打开后，底部 tabBar 从进入小程序起就一直可见，未登录时也能
-  // 点到这个 tab；这里补上登录态检查，避免未带 token 直接打接口报"登录已过期"。
+  data: { loggedIn: false, user: {}, userInitial: '响', enterprise: {}, dashboard: {}, messageCount: 0, linkedAccounts: [], loading: true },
+  // 未登录时不能强制跳登录页——底部 tabBar 一直可见，未登录也能点到这个
+  // tab，之前一进页面就 reLaunch 到登录页，等于逛都不让逛。改成和首页一样，
+  // 未登录只展示品牌介绍 + 登录入口，不请求任何需要鉴权的数据；真正需要
+  // 登录的操作（点菜单项、切换账号等）由 go() 等方法自己拦截提示登录。
   onShow() {
-    if (!app.globalData.token) { wx.reLaunch({ url: '/pages/login/login' }); return; }
+    if (!app.globalData.token) { this.setData({ loggedIn: false, loading: false }); return; }
+    this.setData({ loggedIn: true });
     Promise.all([app.loadProfile(), app.request('/dashboard', { silent: true }), app.request('/messages', { silent: true })]).then(([user, dashboard, messages]) => {
       dashboard.premium_balance_total = (dashboard.premium_accounts || []).reduce((sum, item) => sum + (item.balance || 0), 0);
       this.setData({ user, userInitial: String(user.name || '响').slice(0, 1), enterprise: app.globalData.enterprise || {}, dashboard, messageCount: messages.filter((item) => item.type !== 'success').length, loading: false });
       this.loadLinkedAccounts();
     }).catch(() => this.setData({ loading: false }));
   },
+  goLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
   go(e) { wx.navigateTo({ url: e.currentTarget.dataset.url }); },
   // 企业切换：同一手机号可能是多家投保单位的主管，各自单独开户；后端 /auth/linked-accounts
   // 已经按手机号匹配好了可切换的账号列表（和 Web 端「切换账户」共用同一套接口），

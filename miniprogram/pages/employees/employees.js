@@ -19,16 +19,20 @@ Page({
     selectedIds: [],
     stopDate: '',
     minStopDate: '',
-    bulkSubmitting: false
+    bulkSubmitting: false,
+    loggedIn: false
   },
   onLoad(options) {
     if (options && options.status) this.setData({ status: options.status });
     if (options && options.position_id) this.setData({ positionId: Number(options.position_id) });
   },
-  // 首页改为免登录直接打开后，底部 tabBar 从进入小程序起就一直可见，未登录时也能
-  // 点到这个 tab；这里补上登录态检查，避免未带 token 直接打接口报"登录已过期"。
+  goLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
+  // 未登录时不能强制跳登录页——底部 tabBar 一直可见，未登录也能点到这个
+  // tab，之前一进页面就 reLaunch 到登录页，等于逛都不让逛。改成和首页一样，
+  // 未登录只展示登录入口，不请求任何需要鉴权的数据。
   onShow() {
-    if (!app.globalData.token) { wx.reLaunch({ url: '/pages/login/login' }); return; }
+    if (!app.globalData.token) { this.setData({ loggedIn: false, loading: false }); return; }
+    this.setData({ loggedIn: true });
     // 首页的统计卡片/参保方案卡片跳这个 tab 时用 wx.switchTab（tabBar 页面
     // 不支持 wx.navigateTo，switchTab 又不支持带参数），筛选条件走全局变量
     // 中转，这里读一次就清空。没有待处理的中转数据说明是用户直接点了底部

@@ -1,4 +1,17 @@
 <view class="page safe-bottom">
+  <view wx:if="{{!loggedIn}}" class="hero">
+    <view class="hero-title">响帮帮无忧保</view>
+    <view class="hero-sub">登录后可查看和管理参保员工</view>
+  </view>
+  <view wx:if="{{!loggedIn}}" class="section">
+    <view class="card notice">
+      <view class="strong">还未登录</view>
+      <view class="list-meta">登录后可查看参保员工名单、办理参保/停保</view>
+    </view>
+    <button class="primary" style="margin-top:20rpx" bindtap="goLogin">登录 / 切换账号</button>
+  </view>
+
+  <block wx:if="{{loggedIn}}">
   <view wx:if="{{!selectMode || positionId}}" class="header-bar row between">
     <text wx:if="{{positionId}}" class="link-btn grow" bindtap="clearPositionFilter">{{positionName||'该岗位'}} · 查看全部员工 →</text>
     <view wx:else class="grow"></view>
@@ -52,4 +65,5 @@
       <button class="primary grow" loading="{{bulkSubmitting}}" disabled="{{bulkSubmitting}}" bindtap="confirmSelect">确定停保</button>
     </view>
   </view>
+  </block>
 </view>
