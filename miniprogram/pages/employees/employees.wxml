@@ -21,6 +21,7 @@
         <view class="list-meta">{{item.id_masked}}<text wx:if="{{item.phone}}"> · {{item.phone}}</text></view>
         <view class="list-meta">{{item.actual_employer_name||'未关联用工单位'}} · {{item.position_name||'未关联岗位'}}</view>
         <view wx:if="{{item.plan_name}}" class="small" style="margin-top:10rpx">{{item.insurer}} · {{item.plan_name}}</view>
+        <view wx:if="{{item.terminated_at_display}}" class="small" style="margin-top:10rpx;color:#dc2626">停保时间：{{item.terminated_at_display}}</view>
       </view>
     </view>
   </view>
@@ -28,7 +29,7 @@
   <view wx:if="{{selectMode}}" class="select-bar">
     <view wx:if="{{selectMode==='stopped'}}" class="row between" style="margin-bottom:16rpx">
       <text class="small" style="white-space:nowrap">停保时间</text>
-      <picker mode="date" value="{{stopDate}}" bindchange="stopDateChange"><view class="picker" style="min-width:220rpx">{{stopDate}}</view></picker>
+      <picker mode="date" value="{{stopDate}}" start="{{minStopDate}}" bindchange="stopDateChange"><view class="picker" style="min-width:220rpx">{{stopDate}}</view></picker>
     </view>
     <view class="row between">
       <text class="small" style="white-space:nowrap;margin-right:16rpx">已选 {{selectedIds.length}} 人</text>

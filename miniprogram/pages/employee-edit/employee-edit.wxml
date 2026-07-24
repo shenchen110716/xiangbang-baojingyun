@@ -65,7 +65,7 @@
         </label>
         <label class="field">
           <view class="field-label">停保时间</view>
-          <picker mode="date" value="{{form.terminated_at}}" data-key="terminated_at" bindchange="dateChange"><view class="picker">{{form.terminated_at||'不填则不修改'}}</view></picker>
+          <picker mode="date" value="{{form.terminated_at}}" start="{{minTerminatedDate}}" data-key="terminated_at" bindchange="dateChange"><view class="picker">{{form.terminated_at||'不填则不修改'}}</view></picker>
           <picker wx:if="{{form.terminated_at}}" mode="time" value="{{terminatedTime}}" data-key="terminatedTime" bindchange="timeChange"><view class="picker" style="margin-top:12rpx">时间 {{terminatedTime}}</view></picker>
           <view class="list-meta">最早为操作日次日 00:00，且必须晚于生效时间</view>
         </label>

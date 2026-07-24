@@ -18,6 +18,7 @@ Page({
     selectMode: '', // '' | 'active' | 'stopped'
     selectedIds: [],
     stopDate: '',
+    minStopDate: '',
     bulkSubmitting: false
   },
   onLoad(options) {
@@ -54,7 +55,13 @@ Page({
         // 待生效对外统一成一个筛选值：待审核(pending) + 已通过但未来才生效(active 但 effective_at
         // 还没到)，之前拆成 pending/active-pending 两个同名不同值的筛选项，看着像重复。
         const pendingBucket = pendingEffective || item.status === 'pending';
-        return { ...item, initial: String(item.name || '员').slice(0, 1), status_label: pendingBucket ? '待生效' : app.statusText(item.status), status_display: pendingBucket ? 'pending' : item.status, id_masked: this.maskId(item.id_number) };
+        return {
+          ...item, initial: String(item.name || '员').slice(0, 1), status_label: pendingBucket ? '待生效' : app.statusText(item.status), status_display: pendingBucket ? 'pending' : item.status, id_masked: this.maskId(item.id_number),
+          // 已停保的人在列表里之前只有一个灰色状态标签，看不出具体哪天停的，
+          // 要点进详情才知道——审计"停保相关显示"时发现的缺口，这里直接把
+          // 停保时间带出来，和详情页 formatCoverageDate() 同一个格式化规则。
+          terminated_at_display: item.status === 'stopped' ? app.formatCoverageDate(item.terminated_at, item.effective_mode) : ''
+        };
       });
       // 首页参保方案卡片带 position_id 进来时，标题里显示岗位名——从命中的第一条
       // 记录上取 position_name，不用再单独请求 /positions。
@@ -100,10 +107,11 @@ Page({
   startSelect(e) {
     const mode = e.currentTarget.dataset.mode;
     const stopDate = new Date(); stopDate.setDate(stopDate.getDate() + 1);
+    const minStopDate = stopDate.toISOString().slice(0, 10);
     // 停保只对"在保"的人有意义，进勾选模式时把状态筛选默认切到"在保"，
     // 列表直接收窄成可选范围，不用用户自己再点一次筛选 chip。
     const status = mode === 'stopped' ? 'active' : this.data.status;
-    this.setData({ selectMode: mode, selectedIds: [], stopDate: stopDate.toISOString().slice(0, 10), status });
+    this.setData({ selectMode: mode, selectedIds: [], stopDate: minStopDate, minStopDate, status });
     this.applyFilter();
   },
   cancelSelect() { this.setData({ selectMode: '', selectedIds: [] }); },
@@ -137,10 +145,15 @@ Page({
       ? app.request(`/insured/${id}`, { method: 'PATCH', data: { terminated_at: this.data.stopDate }, silent: true })
       : app.request(`/insured/${id}/status?status=active`, { method: 'PATCH', silent: true }));
     Promise.allSettled(requests).then((results) => {
-      const failCount = results.filter((r) => r.status === 'rejected').length;
-      const successCount = results.length - failCount;
+      const failed = results.filter((r) => r.status === 'rejected');
+      const successCount = results.length - failed.length;
       this.setData({ bulkSubmitting: false, selectMode: '', selectedIds: [] });
-      wx.showToast({ title: `${mode === 'stopped' ? '停保' : '参保'}完成：成功 ${successCount} 人${failCount ? '，失败 ' + failCount + ' 人' : ''}`, icon: 'none', duration: 3000 });
+      // 批量请求用 silent:true 不会自动弹错误 toast，之前失败了只显示一个
+      // 冷冰冰的数字，用户不知道为什么——比如停保时间选早了（后端要求最早
+      // 次日 00:00），带上第一条失败的具体原因，比"失败 N 人"有用得多。
+      const firstError = failed.length ? (failed[0].reason && failed[0].reason.message) : '';
+      const suffix = failed.length ? `，失败 ${failed.length} 人${firstError ? '（' + firstError + '）' : ''}` : '';
+      wx.showToast({ title: `${mode === 'stopped' ? '停保' : '参保'}完成：成功 ${successCount} 人${suffix}`, icon: 'none', duration: failed.length ? 4500 : 3000 });
       this.load();
     });
   },

@@ -6,6 +6,7 @@ Page({
     form: { name: '', id_number: '', phone: '', enterprise_id: 0, position_id: 0, effective_at: '', terminated_at: '' },
     originalEffectiveAt: '',
     originalTerminatedAt: '',
+    minTerminatedDate: '',
     effectiveTime: '00:00',
     terminatedTime: '00:00',
     plans: [],
@@ -65,7 +66,13 @@ Page({
   },
   onLoad(options) {
     const id = Number(options.id || 0); const presetPositionId = Number(options.positionId || 0);
-    this.setData({ id });
+    // 停保时间选择器的最早可选日——后端硬性要求"最早操作日次日 00:00"（月单）
+    // 或"生效时间往后 24 小时"（日结即时生效），这里用较宽松的那条（次日）
+    // 兜底，提前拦掉最常见的"选今天/选过去"这类必然被后端拒绝的输入；后端
+    // 仍然是最终权威，真正精确的规则（比如按生效时间算的 24 小时）还是由
+    // 提交时的校验兜底。
+    const minTerminatedDate = new Date(); minTerminatedDate.setDate(minTerminatedDate.getDate() + 1);
+    this.setData({ id, minTerminatedDate: minTerminatedDate.toISOString().slice(0, 10) });
     Promise.all([app.request('/enterprises'), app.request('/positions'), app.request('/plans'), id ? app.request('/insured') : Promise.resolve([])])
       .then(([enterprises, allPositions, plans, people]) => {
         const approved = allPositions.filter((item) => item.status === 'approved');
