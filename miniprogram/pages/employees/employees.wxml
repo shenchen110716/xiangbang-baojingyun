@@ -3,7 +3,7 @@
     <text wx:if="{{positionId}}" class="link-btn grow" bindtap="clearPositionFilter">{{positionName||'该岗位'}} · 查看全部员工 →</text>
     <view wx:else class="grow"></view>
     <view wx:if="{{!selectMode}}" class="row" style="flex:none">
-      <button class="mini-btn" style="margin-right:12rpx" data-mode="active" bindtap="startSelect">参保</button>
+      <button class="mini-btn" style="margin-right:12rpx" bindtap="add">参保</button>
       <button class="mini-btn" data-mode="stopped" bindtap="startSelect">停保</button>
     </view>
   </view>
