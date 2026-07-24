@@ -4,7 +4,7 @@
       <view class="avatar" style="background:rgba(255,255,255,.16);color:#fff">{{userInitial}}</view>
       <view class="grow">
         <view class="hero-title">{{user.name||'企业管理员'}}</view>
-        <view class="row"><text class="hero-sub">{{enterprise.name||'当前投保单位'}}</text><text wx:if="{{linkedAccounts.length}}" class="hero-sub" style="margin-left:14rpx;text-decoration:underline" bindtap="switchIdentity">身份切换 ⇄</text></view>
+        <view class="row"><text class="hero-sub">{{enterprise.name||'当前投保单位'}}</text><text wx:if="{{linkedAccounts.length}}" class="tag" style="margin-left:14rpx;background:rgba(255,255,255,.22);color:#fff" bindtap="switchIdentity">身份切换 ⇄</text></view>
       </view>
     </view>
     <view class="row between" style="margin-top:30rpx"><text class="hero-sub">账号 {{user.username}}</text><text class="tag">企业用户</text></view>
