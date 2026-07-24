@@ -21,6 +21,7 @@ def run():
         os.environ["ENTERPRISE_PASSWORD"] = "enterprise123"
 
         from fastapi import HTTPException
+        from pydantic import ValidationError
         from sqlalchemy import select
 
         from backend.app import startup
@@ -114,6 +115,26 @@ def run():
             enterprise_status(rejected_enterprise.id, "rejected", admin, session)
             rejected_owner = session.scalar(select(User).where(User.username == "apply_owner_rejected"))
             assert rejected_owner.active is False, "被拒绝的申请，账号必须保持不能登录"
+
+            try:
+                EnterpriseApplyIn(
+                    enterprise_name="超长账号单位", credit_code="91XBBZP0005",
+                    contact="超长账号", phone="13700000006",
+                    username="x" * 100, password="pass1234",
+                )
+                raise AssertionError("超长登录账号应该被 Pydantic 拒绝，但没有抛出异常")
+            except ValidationError:
+                pass
+
+            try:
+                EnterpriseApplyIn(
+                    enterprise_name="弱密码单位", credit_code="91XBBZP0006",
+                    contact="弱密码", phone="13700000007",
+                    username="apply_owner_weakpw", password="123",
+                )
+                raise AssertionError("过短密码应该被 Pydantic 拒绝，但没有抛出异常")
+            except ValidationError:
+                pass
 
     print("enterprise apply smoke test: PASS")
 

@@ -2,6 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.audit import audit
@@ -30,7 +31,11 @@ def apply_enterprise(data: EnterpriseApplyIn, session: Session = Depends(db)):
     session.flush()
     owner = User(username=data.username, password_hash=pwd.hash(data.password), name=data.contact, phone=data.phone, role="enterprise", enterprise_id=enterprise.id, is_owner=True, enterprise_role="owner", active=False)
     session.add(owner)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(409, "该账号名已被占用，请更换登录账号")
     audit(session, owner, "apply", "enterprise", str(enterprise.id))
     return {"message": "提交成功，请等待审核"}
 
