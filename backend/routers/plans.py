@@ -1,16 +1,16 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.audit import audit
 from ..core.db import db
 from ..core.rbac import require_role
 from ..core.security import current_user
-from ..models import AgentCommission, InsurancePlan, PlanTier, Policy, User, WorkPosition
+from ..models import AgentCommission, InsurancePlan, PlanTier, Policy, User
 from ..schemas import PlanIn, PlanTierIn, PlanUpdate
-from ..services import plan_dict, pricing_snapshot, serialize, strip_internal_pricing
+from ..services import enterprise_selectable_plan_ids, plan_dict, pricing_snapshot, serialize, strip_internal_pricing
 
 router = APIRouter(prefix="/api", tags=["plans"])
 
@@ -19,9 +19,8 @@ router = APIRouter(prefix="/api", tags=["plans"])
 def plans(user: User = Depends(current_user), session: Session = Depends(db)):
     stmt = select(InsurancePlan).order_by(InsurancePlan.id.desc())
     if user.role == "enterprise" and user.enterprise_id:
-        allowed = select(AgentCommission.plan_id).where(AgentCommission.enterprise_id == user.enterprise_id)
-        position_plans=select(WorkPosition.plan_id).where(WorkPosition.enterprise_id==user.enterprise_id,WorkPosition.plan_id.is_not(None))
-        stmt = stmt.where(or_(InsurancePlan.id.in_(allowed),InsurancePlan.id.in_(position_plans)))
+        allowed_ids = enterprise_selectable_plan_ids(session, user.enterprise_id)
+        stmt = stmt.where(InsurancePlan.id.in_(allowed_ids)) if allowed_ids else stmt.where(InsurancePlan.id.is_(None))
         items = session.scalars(stmt).all()
         relations = {}
         for r in session.scalars(select(AgentCommission).where(AgentCommission.enterprise_id == user.enterprise_id, AgentCommission.status == "active").order_by(AgentCommission.id.asc())):
@@ -43,9 +42,8 @@ def plan_tiers(plan_id: Optional[int] = None, user: User = Depends(current_user)
     stmt=select(PlanTier).order_by(PlanTier.id.desc())
     relations = {}
     if user.role=='enterprise' and user.enterprise_id:
-        allowed=select(AgentCommission.plan_id).where(AgentCommission.enterprise_id==user.enterprise_id)
-        position_plans=select(WorkPosition.plan_id).where(WorkPosition.enterprise_id==user.enterprise_id,WorkPosition.plan_id.is_not(None))
-        stmt=stmt.where(or_(PlanTier.plan_id.in_(allowed),PlanTier.plan_id.in_(position_plans)))
+        allowed_ids = enterprise_selectable_plan_ids(session, user.enterprise_id)
+        stmt = stmt.where(PlanTier.plan_id.in_(allowed_ids)) if allowed_ids else stmt.where(PlanTier.id.is_(None))
         for r in session.scalars(select(AgentCommission).where(AgentCommission.enterprise_id == user.enterprise_id, AgentCommission.status == "active").order_by(AgentCommission.id.asc())):
             relations[r.plan_id] = r
     if plan_id: stmt=stmt.where(PlanTier.plan_id==plan_id)
