@@ -86,8 +86,18 @@
 
 - `POST /api/enterprises`、`POST /api/enterprises/{id}/admins`（员工代录路径）
   保持现状，管理员仍可像现在一样手动新增企业和账号。
-- `EnterprisesPanel.vue` 的待核验列表/筛选/审核按钮完全不改——自助提交的
-  `pending` 企业会自然出现在这个既有列表里。
+- `EnterprisesPanel.vue` 的待核验列表/筛选完全不改——自助提交的 `pending` 企业
+  会自然出现在这个既有列表里。
+
+### 修正：后台目前没有"审核"按钮（写 spec 时的错误假设）
+
+调查代码后发现 `EnterprisesPanel.vue` 从未调用过已存在的 `setEnterpriseStatus`
+API 封装——待核验/已核验目前只是一个只读筛选条件，没有任何按钮能把状态从
+`pending` 改成 `approved`。这意味着不管是自助申请还是员工代录，企业一旦创建就
+永远停在 `pending`，没有人工能推进审核。这是本设计能跑通的必要前提，不算范围
+扩大：列表操作列加一个"审核通过"按钮（`pending` 状态下可见），调用现有
+`setEnterpriseStatus(id, 'approved')`。不加"驳回"按钮——驳回没有紧急性，
+管理员可以暂时不处理（如需要，后续单独加）。
 
 ## 前端改动
 
