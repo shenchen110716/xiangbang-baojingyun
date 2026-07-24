@@ -1,6 +1,6 @@
 from .auth import LoginIn, PasswordChangeIn, TokenOut, UserOut
 from .operator import OperatorIn, OperatorUpdate
-from .enterprise import EnterpriseIn, EnterpriseUpdate, RechargeIn
+from .enterprise import EnterpriseIn, EnterpriseUpdate, RechargeIn, EnterpriseApplyIn
 from .agent import AgentIn, CommissionIn, CommissionUpdate
 from .position import (
     PositionIn, ActualEmployerIn, ActualEmployerUpdate,
@@ -25,7 +25,7 @@ from .employment import (
 __all__ = [
     "LoginIn", "PasswordChangeIn", "TokenOut", "UserOut",
     "OperatorIn", "OperatorUpdate",
-    "EnterpriseIn", "EnterpriseUpdate", "RechargeIn",
+    "EnterpriseIn", "EnterpriseUpdate", "RechargeIn", "EnterpriseApplyIn",
     "AgentIn", "CommissionIn", "CommissionUpdate",
     "PositionIn", "ActualEmployerIn", "ActualEmployerUpdate",
     "PositionVideoIn", "PositionVideoReviewIn", "PositionReviewIn",

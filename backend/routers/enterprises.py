@@ -9,11 +9,30 @@ from ..core.db import db
 from ..core.rbac import require_role
 from ..core.security import current_user, pwd
 from ..models import AgentCommission, Enterprise, InsurancePlan, InsuredPerson, LedgerEntry, Policy, User, WorkPosition
-from ..schemas import AgentIn, EnterpriseIn, EnterpriseUpdate, RechargeIn
+from ..schemas import AgentIn, EnterpriseApplyIn, EnterpriseIn, EnterpriseUpdate, RechargeIn
 from ..services import amount, ledger_dict, post_ledger_entry, premium_account_view, premium_accounts_for_enterprise, pricing_snapshot, reconcile_enterprise_ledger, serialize, strip_internal_pricing, usage_account_view
 
 router = APIRouter(prefix="/api", tags=["enterprises"])
 
+
+@router.post("/enterprises/apply")
+def apply_enterprise(data: EnterpriseApplyIn, session: Session = Depends(db)):
+    if not data.enterprise_name.strip() or not data.contact.strip() or not data.phone.strip() or not data.username.strip() or not data.password.strip():
+        raise HTTPException(400, "请填写单位名称、联系人、联系电话、登录账号和密码")
+    if session.scalar(select(User).where(User.username == data.username)):
+        raise HTTPException(409, "该账号名已被占用，请更换登录账号")
+    if data.credit_code.strip():
+        existing = session.scalar(select(Enterprise).where(Enterprise.credit_code == data.credit_code, Enterprise.status != "rejected"))
+        if existing:
+            raise HTTPException(409, "该单位已提交过申请，请等待审核或联系客服")
+    enterprise = Enterprise(name=data.enterprise_name, credit_code=data.credit_code, contact=data.contact, phone=data.phone, status="pending")
+    session.add(enterprise)
+    session.flush()
+    owner = User(username=data.username, password_hash=pwd.hash(data.password), name=data.contact, phone=data.phone, role="enterprise", enterprise_id=enterprise.id, is_owner=True, enterprise_role="owner", active=False)
+    session.add(owner)
+    session.commit()
+    audit(session, owner, "apply", "enterprise", str(enterprise.id))
+    return {"message": "提交成功，请等待审核"}
 
 @router.get("/enterprises")
 def enterprises(q: str = "", status_filter: Optional[str] = Query(None, alias="status"), user: User = Depends(current_user), session: Session = Depends(db)):
