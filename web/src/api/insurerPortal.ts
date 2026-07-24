@@ -1,5 +1,5 @@
 import { client } from './client'
-import type { Claim, Insurer, Invoice, InsuredPerson, Policy, WorkPosition } from './types'
+import type { Claim, ClaimDocument, Insurer, Invoice, InsuredPerson, Policy, PositionVideo, WorkPosition } from './types'
 
 export function getInsurerProfile() {
   return client.get<Insurer>('/insurer-portal/profile').then((response) => response.data)
@@ -15,6 +15,10 @@ export function listInsurerPositions() {
 
 export function reviewInsurerPosition(id: number, data: { occupation_class?: string; status: 'approved' | 'rejected' | 'supplement'; plan_id?: number | null; review_note?: string }) {
   return client.patch<WorkPosition>(`/positions/${id}/review`, data).then((response) => response.data)
+}
+
+export function listInsurerPositionVideos(positionId: number) {
+  return client.get<PositionVideo[]>(`/positions/${positionId}/videos`).then((response) => response.data)
 }
 
 export function listInsurerPolicies() {
@@ -53,6 +57,35 @@ export function getInsurerSettlement() {
   return client.get<InsurerSettlement>('/insurer-portal/settlement').then((response) => response.data)
 }
 
+export interface InsurerMonthlyPremium {
+  month: string
+  total_premium: number
+  insured_count: number
+}
+
+export interface InsurerMonthlyPremiumRow {
+  person_id: number
+  person_name: string
+  id_number: string
+  enterprise_name: string
+  policy_no: string
+  billable_ratio: number
+  unit_price: number
+  amount: number
+}
+
+export function getInsurerMonthlyPremiumSummary(months = 12) {
+  return client.get<InsurerMonthlyPremium[]>('/insurer-portal/settlement/monthly', { params: { months } }).then((response) => response.data)
+}
+
+export function getInsurerMonthlyPremiumDetail(month: string) {
+  return client.get<InsurerMonthlyPremiumRow[]>(`/insurer-portal/settlement/monthly/${month}`).then((response) => response.data)
+}
+
+export function exportInsurerMonthlyPremium(month: string) {
+  return client.get(`/insurer-portal/settlement/monthly/${month}/export`, { responseType: 'blob' }).then((response) => response.data as Blob)
+}
+
 export function listInsurerInvoices() {
   return client.get<Invoice[]>('/invoices').then((response) => response.data)
 }
@@ -71,4 +104,8 @@ export function listInsurerClaims() {
 
 export function reviewInsurerClaim(id: number, data: { status: 'approved' | 'rejected' | 'supplement'; approved_amount?: number; rejection_reason?: string; note?: string }) {
   return client.patch<Claim>(`/claims/${id}/status`, data).then((response) => response.data)
+}
+
+export function listInsurerClaimDocuments(claimId: number) {
+  return client.get<ClaimDocument[]>(`/claims/${claimId}/documents`).then((response) => response.data)
 }

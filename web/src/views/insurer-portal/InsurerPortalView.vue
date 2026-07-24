@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { flagInsuredPerson, getInsurerProfile, getInsurerSettlement, listInsurerClaims, listInsurerInsured, listInsurerInvoices, listInsurerPolicies, listInsurerPositions, reviewInsurerClaim, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
-import type { InsurerSettlement } from '@/api/insurerPortal'
-import type { Claim, Insurer, Invoice, InsuredPerson, Policy, WorkPosition } from '@/api/types'
+import { exportInsurerMonthlyPremium, flagInsuredPerson, getInsurerMonthlyPremiumDetail, getInsurerMonthlyPremiumSummary, getInsurerProfile, getInsurerSettlement, listInsurerClaimDocuments, listInsurerClaims, listInsurerInsured, listInsurerInvoices, listInsurerPolicies, listInsurerPositionVideos, listInsurerPositions, reviewInsurerClaim, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
+import type { InsurerMonthlyPremium, InsurerMonthlyPremiumRow, InsurerSettlement } from '@/api/insurerPortal'
+import type { Claim, ClaimDocument, Insurer, Invoice, InsuredPerson, Policy, PositionVideo, WorkPosition } from '@/api/types'
 import PageCard from '@/components/PageCard.vue'
 import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
 
@@ -32,6 +32,30 @@ async function loadPositions() {
   positions.value = await listInsurerPositions()
 }
 
+const positionVideosVisible = ref(false)
+const positionVideosTarget = ref<WorkPosition | null>(null)
+const positionVideos = ref<PositionVideo[]>([])
+const positionVideosLoading = ref(false)
+async function openPositionVideos(row: WorkPosition) {
+  positionVideosTarget.value = row
+  positionVideosVisible.value = true
+  positionVideosLoading.value = true
+  try {
+    const result = await listInsurerPositionVideos(row.id)
+    if (positionVideosTarget.value?.id === row.id) positionVideos.value = result
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    if (positionVideosTarget.value?.id === row.id) positionVideosLoading.value = false
+  }
+}
+
+// 和 miniprogram/pages/claims/claims.js 的 maskId() 保持一致的脱敏规则。
+function maskId(value: string) {
+  const text = String(value || '')
+  return text.length > 10 ? `${text.slice(0, 3)}${'*'.repeat(text.length - 7)}${text.slice(-4)}` : text
+}
+
 const policies = ref<Policy[]>([])
 async function loadPolicies() {
   policies.value = await listInsurerPolicies()
@@ -52,6 +76,47 @@ async function loadSettlement() {
   settlement.value = await getInsurerSettlement()
 }
 
+const monthlyPremium = ref<InsurerMonthlyPremium[]>([])
+async function loadMonthlyPremium() {
+  monthlyPremium.value = await getInsurerMonthlyPremiumSummary()
+}
+
+const monthlyDetailVisible = ref(false)
+const monthlyDetailMonth = ref('')
+const monthlyDetailRows = ref<InsurerMonthlyPremiumRow[]>([])
+const monthlyDetailLoading = ref(false)
+const monthlyDetailExporting = ref(false)
+async function openMonthlyDetail(row: InsurerMonthlyPremium) {
+  monthlyDetailMonth.value = row.month
+  monthlyDetailVisible.value = true
+  monthlyDetailLoading.value = true
+  try {
+    const result = await getInsurerMonthlyPremiumDetail(row.month)
+    if (monthlyDetailMonth.value === row.month) monthlyDetailRows.value = result
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    if (monthlyDetailMonth.value === row.month) monthlyDetailLoading.value = false
+  }
+}
+async function exportMonthlyDetail() {
+  if (!monthlyDetailMonth.value) return
+  monthlyDetailExporting.value = true
+  try {
+    const blob = await exportInsurerMonthlyPremium(monthlyDetailMonth.value)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `premium-${monthlyDetailMonth.value}.xlsx`
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    monthlyDetailExporting.value = false
+  }
+}
+
 const invoices = ref<Invoice[]>([])
 async function loadInvoices() {
   invoices.value = await listInsurerInvoices()
@@ -61,6 +126,12 @@ const insuredList = ref<InsuredPerson[]>([])
 async function loadInsured() {
   insuredList.value = await listInsurerInsured()
 }
+const insuredSearch = ref('')
+const filteredInsuredList = computed(() => {
+  const q = insuredSearch.value.trim()
+  if (!q) return insuredList.value
+  return insuredList.value.filter((x) => x.name.includes(q) || x.id_number.includes(q))
+})
 
 const flagDialogVisible = ref(false)
 const flagTarget = ref<InsuredPerson | null>(null)
@@ -89,11 +160,22 @@ async function loadClaims() {
 
 const claimDialogVisible = ref(false)
 const claimTarget = ref<Claim | null>(null)
+const claimDocuments = ref<ClaimDocument[]>([])
+const claimDocumentsLoading = ref(false)
 const claimForm = reactive({ status: 'approved' as 'approved' | 'rejected' | 'supplement', approved_amount: 0, rejection_reason: '', note: '' })
-function openClaimDialog(row: Claim) {
+async function openClaimDialog(row: Claim) {
   claimTarget.value = row
   Object.assign(claimForm, { status: 'approved', approved_amount: 0, rejection_reason: '', note: '' })
   claimDialogVisible.value = true
+  claimDocumentsLoading.value = true
+  try {
+    const result = await listInsurerClaimDocuments(row.id)
+    if (claimTarget.value?.id === row.id) claimDocuments.value = result
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    if (claimTarget.value?.id === row.id) claimDocumentsLoading.value = false
+  }
 }
 async function submitClaimReview() {
   if (!claimTarget.value) return
@@ -121,6 +203,7 @@ async function load() {
     await loadPositions()
     await loadPolicies()
     await loadSettlement()
+    await loadMonthlyPremium()
     await loadInvoices()
     await loadInsured()
     await loadClaims()
@@ -182,11 +265,18 @@ function logout() {
               <el-table-column prop="name" label="岗位名称" min-width="140" />
               <el-table-column prop="actual_employer_name" label="实际用工单位" min-width="160" />
               <el-table-column prop="occupation_class" label="职业类别" width="100" />
+              <el-table-column label="岗位视频" width="100">
+                <template #default="{ row }">
+                  <el-tag v-if="row.video_count" size="small" :type="row.latest_video_status === 'approved' ? 'success' : 'info'">{{ row.video_count }} 段</el-tag>
+                  <span v-else class="muted">未上传</span>
+                </template>
+              </el-table-column>
               <el-table-column label="状态" width="90">
                 <template #default="{ row }"><el-tag size="small" :type="row.status === 'approved' ? 'success' : 'info'">{{ row.status === 'approved' ? '已核保' : row.status }}</el-tag></template>
               </el-table-column>
-              <el-table-column label="操作" width="100">
+              <el-table-column label="操作" width="160">
                 <template #default="{ row }">
+                  <el-button link type="primary" size="small" @click="openPositionVideos(row)">查看视频</el-button>
                   <el-button v-if="row.status !== 'approved'" link type="primary" size="small" @click="approvePosition(row)">核保通过</el-button>
                 </template>
               </el-table-column>
@@ -196,10 +286,15 @@ function logout() {
         </el-tab-pane>
 
         <el-tab-pane label="参保管理" name="enrollment">
-          <PageCard title="参保员工" :count="insuredList.length" hint="只能标注异常原因，不能直接修改参保状态">
-            <el-table :data="insuredList" size="small">
+          <PageCard title="参保员工" :count="filteredInsuredList.length" hint="只能标注异常原因，不能直接修改参保状态">
+            <template #actions>
+              <el-input v-model="insuredSearch" placeholder="按姓名/身份证号搜索" clearable style="width: 220px" />
+            </template>
+            <el-table :data="filteredInsuredList" size="small">
               <el-table-column prop="name" label="姓名" width="100" />
-              <el-table-column prop="id_number" label="身份证号" min-width="180" />
+              <el-table-column label="身份证号" min-width="180">
+                <template #default="{ row }">{{ maskId(row.id_number) }}</template>
+              </el-table-column>
               <el-table-column prop="status" label="状态" width="90" />
               <el-table-column label="异常标注" min-width="160">
                 <template #default="{ row }">
@@ -211,7 +306,7 @@ function logout() {
                 <template #default="{ row }"><el-button link type="primary" size="small" @click="openFlagDialog(row)">标注</el-button></template>
               </el-table-column>
             </el-table>
-            <el-empty v-if="!insuredList.length" description="暂无名下参保员工" :image-size="60" />
+            <el-empty v-if="!filteredInsuredList.length" :description="insuredSearch ? '没有匹配的员工' : '暂无名下参保员工'" :image-size="60" />
           </PageCard>
 
           <PageCard title="名下保单" :count="policies.length">
@@ -246,7 +341,7 @@ function logout() {
               <el-table-column prop="status" label="状态" width="110" />
               <el-table-column label="操作" width="100">
                 <template #default="{ row }">
-                  <el-button v-if="row.status === 'insurer_review'" link type="primary" size="small" @click="openClaimDialog(row)">审核</el-button>
+                  <el-button link type="primary" size="small" @click="openClaimDialog(row)">{{ row.status === 'insurer_review' ? '审核' : '查看' }}</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -263,6 +358,19 @@ function logout() {
               </div>
             </div>
           </PageCard>
+
+          <PageCard title="按月应收总保费" :count="monthlyPremium.length" hint="按人按天/按月折算，单价为结算价；点击某月查看明细并可导出">
+            <el-table :data="monthlyPremium" size="small">
+              <el-table-column prop="month" label="月份" width="120" />
+              <el-table-column label="应收总保费" width="140"><template #default="{ row }">{{ row.total_premium }}</template></el-table-column>
+              <el-table-column label="在保人数" width="100"><template #default="{ row }">{{ row.insured_count }}</template></el-table-column>
+              <el-table-column label="操作" width="100">
+                <template #default="{ row }"><el-button link type="primary" size="small" @click="openMonthlyDetail(row)">查看明细</el-button></template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!monthlyPremium.length" description="暂无按月保费数据" :image-size="60" />
+          </PageCard>
+
           <PageCard title="保单结算明细" :count="settlement?.rows.length || 0">
             <el-table :data="settlement?.rows || []" size="small">
               <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
@@ -312,6 +420,7 @@ function logout() {
     </main>
 
     <el-dialog v-model="flagDialogVisible" title="标注参停保异常" width="420px">
+      <p v-if="flagTarget" class="dialog-subject">{{ flagTarget.name }} · {{ flagTarget.id_number }}</p>
       <el-input v-model="flagReason" type="textarea" :rows="3" placeholder="留空并提交表示取消标注" />
       <template #footer>
         <el-button @click="flagDialogVisible = false">取消</el-button>
@@ -319,8 +428,33 @@ function logout() {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="claimDialogVisible" title="理赔审核" width="480px">
-      <el-form :model="claimForm" label-width="100px">
+    <el-dialog v-model="claimDialogVisible" :title="claimTarget?.status === 'insurer_review' ? '理赔审核' : '理赔详情'" width="560px">
+      <template v-if="claimTarget">
+        <div class="claim-detail">
+          <p><b>案件号：</b>{{ claimTarget.claim_no }} · <b>状态：</b>{{ claimTarget.status }}</p>
+          <p><b>被保险人：</b>{{ claimTarget.person_name }}（{{ maskId(claimTarget.id_number) }}）· <b>投保单位：</b>{{ claimTarget.enterprise_name }}</p>
+          <p><b>事故时间/地点：</b>{{ claimTarget.accident_at }} · {{ claimTarget.accident_place }}（{{ claimTarget.accident_type }}）</p>
+          <p><b>伤情部位：</b>{{ claimTarget.injury_part || '未填写' }} · <b>就诊医院：</b>{{ claimTarget.hospital || '未填写' }}</p>
+          <p><b>诊断：</b>{{ claimTarget.diagnosis || '未填写' }}</p>
+          <p><b>事故经过：</b>{{ claimTarget.description || '未填写' }}</p>
+          <p><b>医疗费用：</b>{{ claimTarget.medical_cost }} · <b>申请金额：</b>{{ claimTarget.amount }}
+            <template v-if="claimTarget.approved_amount"> · <b>核赔金额：</b>{{ claimTarget.approved_amount }}</template>
+          </p>
+          <p><b>联系人：</b>{{ claimTarget.contact_name || '未填写' }} {{ claimTarget.contact_phone }}</p>
+        </div>
+        <div v-loading="claimDocumentsLoading" class="claim-documents">
+          <p class="claim-documents-title">理赔材料（{{ claimDocuments.length }}）</p>
+          <ul v-if="claimDocuments.length">
+            <li v-for="doc in claimDocuments" :key="doc.id">
+              <a :href="doc.url" target="_blank">{{ doc.name }}</a>
+              <small class="muted">（{{ doc.doc_type }} · {{ doc.status }}）</small>
+            </li>
+          </ul>
+          <el-empty v-else description="暂无上传材料" :image-size="40" />
+        </div>
+      </template>
+
+      <el-form v-if="claimTarget?.status === 'insurer_review'" :model="claimForm" label-width="100px" class="claim-review-form">
         <el-form-item label="审核结论">
           <el-radio-group v-model="claimForm.status">
             <el-radio-button value="approved">核赔通过</el-radio-button>
@@ -337,8 +471,40 @@ function logout() {
         <el-form-item label="备注"><el-input v-model="claimForm.note" type="textarea" :rows="2" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="claimDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitClaimReview">提交</el-button>
+        <el-button @click="claimDialogVisible = false">{{ claimTarget?.status === 'insurer_review' ? '取消' : '关闭' }}</el-button>
+        <el-button v-if="claimTarget?.status === 'insurer_review'" type="primary" @click="submitClaimReview">提交</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="positionVideosVisible" :title="`${positionVideosTarget?.name || ''} · 岗位视频`" width="520px">
+      <div v-loading="positionVideosLoading">
+        <div v-for="video in positionVideos" :key="video.id" class="position-video-item">
+          <video :src="video.url" controls preload="metadata" class="position-video-player" />
+          <div class="position-video-meta">
+            <el-tag size="small" :type="video.status === 'approved' ? 'success' : 'info'">{{ video.status }}</el-tag>
+            <span v-if="video.review_note" class="muted">{{ video.review_note }}</span>
+          </div>
+        </div>
+        <el-empty v-if="!positionVideosLoading && !positionVideos.length" description="暂无岗位视频" :image-size="50" />
+      </div>
+      <template #footer>
+        <el-button @click="positionVideosVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="monthlyDetailVisible" :title="`${monthlyDetailMonth} 保费明细`" width="640px">
+      <el-table v-loading="monthlyDetailLoading" :data="monthlyDetailRows" size="small">
+        <el-table-column prop="person_name" label="姓名" width="100" />
+        <el-table-column label="身份证号" min-width="180"><template #default="{ row }">{{ maskId(row.id_number) }}</template></el-table-column>
+        <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
+        <el-table-column prop="policy_no" label="保单号" min-width="140" />
+        <el-table-column label="单价" width="90"><template #default="{ row }">{{ row.unit_price }}</template></el-table-column>
+        <el-table-column label="应收金额" width="100"><template #default="{ row }">{{ row.amount }}</template></el-table-column>
+      </el-table>
+      <el-empty v-if="!monthlyDetailLoading && !monthlyDetailRows.length" description="该月暂无应收保费" :image-size="50" />
+      <template #footer>
+        <el-button @click="monthlyDetailVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="monthlyDetailExporting" @click="exportMonthlyDetail">导出明细</el-button>
       </template>
     </el-dialog>
 
@@ -404,5 +570,56 @@ function logout() {
   font-size: 20px;
   font-weight: 700;
   margin-top: 6px;
+}
+.muted {
+  color: var(--el-text-color-placeholder);
+}
+.dialog-subject {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.claim-detail p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.claim-documents {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.claim-documents-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.claim-documents ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.claim-documents li {
+  margin-bottom: 4px;
+}
+.claim-review-form {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.position-video-item {
+  margin-bottom: 16px;
+}
+.position-video-player {
+  width: 100%;
+  border-radius: 8px;
+  background: #000;
+}
+.position-video-meta {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
 }
 </style>

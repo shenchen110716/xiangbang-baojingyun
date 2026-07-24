@@ -151,7 +151,11 @@ def actual_employer_status(item_id:int,status_value:Literal['active','paused']=Q
 def position_videos(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
     pos=session.get(WorkPosition,item_id)
     if not pos: raise HTTPException(404,'岗位不存在')
-    _position_employer_access(session,user,pos)
+    # 保司核保依据是岗位视频，需要读权限；用和 review_position 一致的
+    # plan.insurer_id 归属检查，而不是 _position_employer_access（那个只认
+    # 企业/管理员，会把保司角色一律拒绝）。
+    if user.role=='insurer': assert_plan_belongs_to_insurer(session,user,pos.plan_id)
+    else: _position_employer_access(session,user,pos)
     return [_video_dict(x) for x in session.scalars(select(PositionVideo).where(PositionVideo.position_id==item_id).order_by(PositionVideo.id.desc()))]
 
 @router.post("/positions/{item_id}/videos")
