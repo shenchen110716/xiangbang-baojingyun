@@ -17,7 +17,18 @@ Page({
   },
   // 首页改为免登录直接打开后，底部 tabBar 从进入小程序起就一直可见，未登录时也能
   // 点到这个 tab；这里补上登录态检查，避免未带 token 直接打接口报"登录已过期"。
-  onShow() { if (!app.globalData.token) { wx.reLaunch({ url: '/pages/login/login' }); return; } this.load(); },
+  onShow() {
+    if (!app.globalData.token) { wx.reLaunch({ url: '/pages/login/login' }); return; }
+    // 首页的统计卡片/参保方案卡片跳这个 tab 时用 wx.switchTab（tabBar 页面
+    // 不支持 wx.navigateTo，switchTab 又不支持带参数），筛选条件走全局变量
+    // 中转，这里读一次就清空，避免用户手动点 tab 切回来时残留上次的筛选。
+    const pending = app.globalData.pendingEmployeesFilter;
+    if (pending) {
+      app.globalData.pendingEmployeesFilter = null;
+      this.setData({ status: pending.status || '', positionId: pending.position_id || 0 });
+    }
+    this.load();
+  },
   onPullDownRefresh() { this.load().finally(() => wx.stopPullDownRefresh()); },
   isPendingEffective(item) { return item.status === 'active' && item.effective_at && new Date(item.effective_at) > new Date(); },
   load() {

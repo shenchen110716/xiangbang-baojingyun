@@ -76,7 +76,18 @@ Page({
       .catch((error) => { this.setData({ loading: false }); wx.showToast({ title: error.message, icon: 'none' }); });
   },
   go(e) { wx.navigateTo({ url: e.currentTarget.dataset.url }); },
-  goPosition(e) { wx.navigateTo({ url: `/pages/employees/employees?position_id=${e.currentTarget.dataset.id}` }); },
+  goEmployees(e) {
+    const status = (e.currentTarget.dataset.status) || '';
+    app.globalData.pendingEmployeesFilter = { status, position_id: 0 };
+    wx.switchTab({ url: '/pages/employees/employees' });
+  },
+  goClaims() {
+    wx.switchTab({ url: '/pages/claims/claims' });
+  },
+  goPosition(e) {
+    app.globalData.pendingEmployeesFilter = { status: '', position_id: Number(e.currentTarget.dataset.id) };
+    wx.switchTab({ url: '/pages/employees/employees' });
+  },
   addPosition() { wx.navigateTo({ url: '/pages/position-edit/position-edit' }); },
   goLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
   onShareAppMessage() { return app.share('/pages/home/home', 'from=share'); }

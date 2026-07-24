@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE = 'https://xiangbang-baojingyun.onrender.com/api';
+const DEFAULT_API_BASE = 'https://www.xbbzp.com/api';
 
 App({
   globalData: {
@@ -6,7 +6,8 @@ App({
     token: '',
     user: null,
     enterprise: null,
-    isDevEnv: false
+    isDevEnv: false,
+    pendingEmployeesFilter: null
   },
 
   onLaunch() {
