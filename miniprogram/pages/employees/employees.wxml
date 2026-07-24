@@ -27,12 +27,12 @@
   <view wx:if="{{!loading&&!filtered.length}}" class="empty"><view class="empty-icon">☷</view><view>暂无符合条件的员工</view><view class="small link-btn" bindtap="importFile">可以手工新增或批量导入</view></view>
   <view wx:if="{{selectMode}}" class="select-bar">
     <view wx:if="{{selectMode==='stopped'}}" class="row between" style="margin-bottom:16rpx">
-      <text class="small">停保时间</text>
+      <text class="small" style="white-space:nowrap">停保时间</text>
       <picker mode="date" value="{{stopDate}}" bindchange="stopDateChange"><view class="picker" style="min-width:220rpx">{{stopDate}}</view></picker>
     </view>
     <view class="row between">
-      <text class="small">已选 {{selectedIds.length}} 人</text>
-      <view class="row">
+      <text class="small" style="white-space:nowrap;margin-right:16rpx">已选 {{selectedIds.length}} 人</text>
+      <view class="row" style="flex:none">
         <button class="secondary" style="margin-right:16rpx" bindtap="cancelSelect">取消</button>
         <button class="primary" loading="{{bulkSubmitting}}" disabled="{{bulkSubmitting}}" bindtap="confirmSelect">{{selectMode==='stopped'?'确定停保':'确定参保'}}</button>
       </view>
