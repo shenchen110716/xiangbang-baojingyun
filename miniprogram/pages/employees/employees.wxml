@@ -4,15 +4,19 @@
       <view class="title">{{positionId?(positionName||'该岗位')+' · 参保员工':'参保员工'}}</view>
       <view class="subtitle">{{positionId?'共 '+filtered.length+' 人':'共 '+items.length+' 人，按单位和岗位管理'}}<text wx:if="{{positionId}}" class="link-btn" style="margin-left:16rpx" bindtap="clearPositionFilter">查看全部员工 →</text></view>
     </view>
-    <button class="mini-btn" bindtap="importFile">批量导入</button>
+    <view wx:if="{{!selectMode}}" class="row">
+      <button class="mini-btn" style="margin-right:12rpx" data-mode="active" bindtap="startSelect">参保</button>
+      <button class="mini-btn" data-mode="stopped" bindtap="startSelect">停保</button>
+    </view>
   </view>
   <view class="search"><input class="input" placeholder="姓名、身份证、手机号或岗位" bindinput="search" /></view>
   <scroll-view class="chips" scroll-x enhanced show-scrollbar="{{false}}">
-    <view wx:for="{{statuses}}" wx:key="value" class="chip {{status===item.value?'active':''}}" data-value="{{item.value}}" bindtap="chooseStatus">{{item.label}}</view>
+    <view wx:for="{{statusChips}}" wx:key="value" class="chip {{status===item.value?'active':''}}" data-value="{{item.value}}" bindtap="chooseStatus">{{item.label}}({{item.count}})</view>
   </scroll-view>
   <view wx:if="{{loading}}" class="loading">正在加载员工…</view>
-  <view wx:for="{{filtered}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="detail">
+  <view wx:for="{{filtered}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="rowTap">
     <view class="row top">
+      <view wx:if="{{selectMode}}" class="select-box {{selectedIds.indexOf(item.id)>-1?'checked':''}}">{{selectedIds.indexOf(item.id)>-1?'✓':''}}</view>
       <view class="avatar">{{item.initial}}</view>
       <view class="grow">
         <view class="row between"><text class="list-title">{{item.name}}</text><text class="tag {{item.status_display==='pending'?'tag-warning':item.status_display==='active'?'tag-success':'tag-gray'}}">{{item.status_label}}</text></view>
@@ -22,6 +26,19 @@
       </view>
     </view>
   </view>
-  <view wx:if="{{!loading&&!filtered.length}}" class="empty"><view class="empty-icon">☷</view><view>暂无符合条件的员工</view><view class="small">可以手工新增或批量导入</view></view>
-  <view class="fab" bindtap="add">+</view>
+  <view wx:if="{{!loading&&!filtered.length}}" class="empty"><view class="empty-icon">☷</view><view>暂无符合条件的员工</view><view class="small link-btn" bindtap="importFile">可以手工新增或批量导入</view></view>
+  <view wx:if="{{!selectMode}}" class="fab" bindtap="add">+</view>
+  <view wx:if="{{selectMode}}" class="select-bar">
+    <view wx:if="{{selectMode==='stopped'}}" class="row between" style="margin-bottom:16rpx">
+      <text class="small">停保时间</text>
+      <picker mode="date" value="{{stopDate}}" bindchange="stopDateChange"><view class="picker" style="min-width:220rpx">{{stopDate}}</view></picker>
+    </view>
+    <view class="row between">
+      <text class="small">已选 {{selectedIds.length}} 人</text>
+      <view class="row">
+        <button class="secondary" style="margin-right:16rpx" bindtap="cancelSelect">取消</button>
+        <button class="primary" loading="{{bulkSubmitting}}" disabled="{{bulkSubmitting}}" bindtap="confirmSelect">{{selectMode==='stopped'?'确定停保':'确定参保'}}</button>
+      </view>
+    </view>
+  </view>
 </view>
