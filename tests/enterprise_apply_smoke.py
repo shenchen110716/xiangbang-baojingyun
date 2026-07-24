@@ -64,6 +64,32 @@ def run():
                 assert e.status_code == 409, f"重复申请应返回 409，实际 {e.status_code}"
 
             try:
+                apply_enterprise(
+                    EnterpriseApplyIn(
+                        enterprise_name="缺字段单位", credit_code="91XBBZP0003",
+                        contact="", phone="13700000004",
+                        username="apply_owner_missing", password="pass1234",
+                    ),
+                    session,
+                )
+                raise AssertionError("联系人为空应该被拒绝，但没有抛出异常")
+            except HTTPException as e:
+                assert e.status_code == 400, f"必填项缺失应返回 400，实际 {e.status_code}"
+
+            try:
+                apply_enterprise(
+                    EnterpriseApplyIn(
+                        enterprise_name="重复账号单位", credit_code="91XBBZP0004",
+                        contact="孙重复账号", phone="13700000005",
+                        username="apply_owner", password="pass1234",
+                    ),
+                    session,
+                )
+                raise AssertionError("重复账号名应该被拒绝，但没有抛出异常")
+            except HTTPException as e:
+                assert e.status_code == 409, f"重复账号名应返回 409，实际 {e.status_code}"
+
+            try:
                 login(LoginIn(username="apply_owner", password="pass1234", portal="enterprise"), session)
                 raise AssertionError("审核通过前不应该能登录")
             except HTTPException as e:
