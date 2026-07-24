@@ -76,11 +76,6 @@ Page({
       .catch((error) => { this.setData({ loading: false }); wx.showToast({ title: error.message, icon: 'none' }); });
   },
   go(e) { wx.navigateTo({ url: e.currentTarget.dataset.url }); },
-  goEmployees(e) {
-    const status = (e.currentTarget.dataset.status) || '';
-    app.globalData.pendingEmployeesFilter = { status, position_id: 0 };
-    wx.switchTab({ url: '/pages/employees/employees' });
-  },
   goPosition(e) {
     app.globalData.pendingEmployeesFilter = { status: '', position_id: Number(e.currentTarget.dataset.id) };
     wx.switchTab({ url: '/pages/employees/employees' });
