@@ -9,7 +9,16 @@
     </view>
     <view class="row between" style="margin-top:30rpx"><text class="hero-sub">账号 {{user.username||'未登录'}}</text><text class="tag">企业用户</text></view>
   </view>
-  <view class="grid-2 section"><view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">保费余额</text><text class="stat-value">¥{{dashboard.premium_balance_total||0}}</text></view><view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">使用费余额</text><text class="stat-value">¥{{dashboard.usage_balance||0}}</text></view></view>
+  <view class="grid-2 section">
+    <view class="stat stat-tappable" data-account="premium" bindtap="goRecharge"><text class="stat-label">保费可用余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.premium_balance_total||0}}</text><text class="stat-sub">充值 ¥{{dashboard.premium_recharged_total||0}} · 销售保费 ¥{{dashboard.premium_consumed_total||0}}</text></view>
+    <view class="stat stat-tappable" data-account="usage" bindtap="goRecharge"><text class="stat-label">服务费可用余额 <text class="stat-go">去充值 ›</text></text><text class="stat-value">¥{{dashboard.usage_available||0}}</text><text class="stat-sub">充值 ¥{{dashboard.usage_recharged||0}} · 已用 ¥{{dashboard.usage_consumed||0}}</text></view>
+  </view>
+  <view wx:if="{{dashboard.balance_alerts.length}}" class="section">
+    <view wx:for="{{dashboard.balance_alerts}}" wx:key="_key" class="card notice notice-danger" data-account="{{item.account}}" bindtap="goRecharge">
+      <view class="row between"><text class="strong">账户余额预警</text><text class="tag tag-danger">{{item.days_left}} 天</text></view>
+      <view class="list-meta">{{item.account==='premium'?'保费账户':'平台使用费账户'}}余额 ¥{{item.balance}}，请及时充值</view>
+    </view>
+  </view>
   <view class="card section">
     <view class="menu-item" data-url="/pages/employers/employers" bindtap="go"><view class="menu-icon">企</view><text class="grow">工作单位管理</text><text class="chevron">›</text></view>
     <view class="menu-item" data-url="/pages/positions/positions" bindtap="go"><view class="menu-icon">岗</view><text class="grow">投保岗位与视频</text><text class="chevron">›</text></view>

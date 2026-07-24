@@ -1,6 +1,6 @@
 const app = getApp();
 Page({
-  data: { user: {}, userInitial: '响', enterprise: {}, dashboard: {}, messageCount: 0, linkedAccounts: [], loading: true },
+  data: { user: {}, userInitial: '响', enterprise: {}, dashboard: { premium_balance_total: 0, premium_recharged_total: 0, premium_consumed_total: 0, usage_available: 0, usage_recharged: 0, usage_consumed: 0, balance_alerts: [] }, messageCount: 0, linkedAccounts: [], loading: true },
   // 未登录时不拦截浏览——菜单结构照常渲染，只是没有账号数据；只有真正
   // 点了会触发接口调用的操作（菜单项、切换账号、改密码等）才跳登录页。
   // 返回 false 时调用方要 return，不再往下执行。
@@ -12,9 +12,18 @@ Page({
   onShow() {
     if (!app.globalData.token) { this.setData({ loading: false }); return; }
     Promise.all([app.loadProfile(), app.request('/dashboard', { silent: true }), app.request('/messages', { silent: true })]).then(([user, dashboard, messages]) => {
-      // 跟首页 home.js 同一份"可用余额"口径（充值 − 已消耗），不是原始充值总额
-      // balance——两处之前算法不一样，会看到两个页面数字对不上。
-      dashboard.premium_balance_total = (dashboard.premium_accounts || []).reduce((sum, item) => sum + (item.available != null ? item.available : (item.balance || 0)), 0);
+      const premiumAccounts = dashboard.premium_accounts || [];
+      // 跟首页原来同一份"可用余额"口径（充值 − 已消耗），不是原始充值总额
+      // balance——保费/服务费余额这块完整功能从首页搬过来后，充值/已用的
+      // 明细文案也一起带过来，不只是搬一个总数。
+      dashboard.premium_balance_total = premiumAccounts.reduce((sum, item) => sum + (item.available != null ? item.available : (item.balance || 0)), 0);
+      dashboard.premium_recharged_total = premiumAccounts.reduce((sum, item) => sum + (item.recharged != null ? item.recharged : (item.balance || 0)), 0);
+      dashboard.premium_consumed_total = premiumAccounts.reduce((sum, item) => sum + (item.consumed || 0), 0);
+      // 一个企业可能有多个保费账户（不同保司/收款账户）同时余额预警，后端
+      // 每条 alert 的 account 字段对premium账户全是同一个字符串 'premium'
+      // （区分靠 account_id），用它当 wx:key 会撞车，这里补一个按位置生成
+      // 的唯一 key。
+      dashboard.balance_alerts = (dashboard.balance_alerts || []).map((alert, index) => ({ ...alert, _key: `${alert.account}-${alert.account_id || 0}-${index}` }));
       this.setData({ user, userInitial: String(user.name || '响').slice(0, 1), enterprise: app.globalData.enterprise || {}, dashboard, messageCount: messages.filter((item) => item.type !== 'success').length, loading: false });
       this.loadLinkedAccounts();
     }).catch(() => this.setData({ loading: false }));
@@ -22,6 +31,24 @@ Page({
   go(e) {
     if (!this.requireLogin()) return;
     wx.navigateTo({ url: e.currentTarget.dataset.url });
+  },
+  // 保费/服务费余额卡片的完整功能（含去充值跳转）从首页搬过来的：直接跳
+  // 到真正的充值页（不是先到账户总览页 billing 再点一次），和首页原来
+  // goRecharge() 同一套跳转参数——服务费账户是企业级唯一账户不用带保司；
+  // 保费账户如果这家企业只挂了一个收款账户、且这个账户只对应一个保司
+  // 名称，顺手带上，充值页就不用用户自己再选一次。
+  goRecharge(e) {
+    if (!this.requireLogin()) return;
+    const accountType = e.currentTarget.dataset.account === 'premium' ? 'premium' : 'usage';
+    const enterpriseId = (this.data.enterprise && this.data.enterprise.id) || (app.globalData.user && app.globalData.user.enterprise_id) || 0;
+    let insurerParam = '';
+    if (accountType === 'premium') {
+      const accounts = this.data.dashboard.premium_accounts || [];
+      if (accounts.length === 1 && accounts[0].insurers && accounts[0].insurers.length === 1) {
+        insurerParam = `&insurer=${encodeURIComponent(accounts[0].insurers[0])}`;
+      }
+    }
+    wx.navigateTo({ url: `/pages/recharge-request/recharge-request?enterpriseId=${enterpriseId}&accountType=${accountType}${insurerParam}` });
   },
   // 企业切换：同一手机号可能是多家投保单位的主管，各自单独开户；后端 /auth/linked-accounts
   // 已经按手机号匹配好了可切换的账号列表（和 Web 端「切换账户」共用同一套接口），

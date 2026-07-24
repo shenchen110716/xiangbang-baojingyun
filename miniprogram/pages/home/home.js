@@ -3,7 +3,8 @@ const app = getApp();
 Page({
   data: {
     loading: true,
-    dashboard: { active_people: 0, pending_people: 0, premium_balance_total: 0, usage_available: 0, usage_recharged: 0, usage_consumed: 0, claims_open: 0, balance_alerts: [] },
+    totalActiveCount: 0,
+    totalPendingCount: 0,
     user: {},
     enterprise: {},
     greeting: '你好',
@@ -85,25 +86,21 @@ Page({
     const today = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
     this.setData({ loading: true, greeting, today });
     return Promise.all([
-      app.request('/dashboard', { silent: true }),
       app.loadProfile(),
       app.request('/positions', { silent: true }),
       app.request('/plans', { silent: true }),
       app.request('/insured', { silent: true })
     ])
-      .then(([dashboard, user, positions, plans, people]) => {
-        const premiumAccounts = dashboard.premium_accounts || [];
-        // balance 现在等于可用余额（充值 − 已消耗），与三端口径一致。
-        dashboard.premium_balance_total = premiumAccounts.reduce((sum, item) => sum + (item.available != null ? item.available : (item.balance || 0)), 0);
-        dashboard.premium_recharged_total = premiumAccounts.reduce((sum, item) => sum + (item.recharged != null ? item.recharged : (item.balance || 0)), 0);
-        dashboard.premium_consumed_total = premiumAccounts.reduce((sum, item) => sum + (item.consumed || 0), 0);
-        // 一个企业可能有多个保费账户（不同保司/收款账户）同时余额预警，
-        // 后端每条 alert 的 account 字段对премium账户全是同一个字符串
-        // 'premium'（区分靠 account_id），用它当 wx:key 会撞车，这里补一个
-        // 按位置生成的唯一 key。
-        dashboard.balance_alerts = (dashboard.balance_alerts || []).map((alert, index) => ({ ...alert, _key: `${alert.account}-${alert.account_id || 0}-${index}` }));
+      .then(([user, positions, plans, people]) => {
         const positionCards = this.buildPositionCards(positions || [], plans || [], people || []);
-        this.setData({ dashboard, user, enterprise: app.globalData.enterprise || {}, positionCards, loading: false });
+        // 首页看板"在保人数"/"待生效人数"是全公司口径，不分岗位——直接把
+        // 每张岗位卡片已经算好的 active_count/pending_count 加总，不用另外
+        // 请求 /dashboard 或重新遍历一遍 people（岗位卡片的口径已经包含了
+        // "岗位被打回待审核但仍有在保/待生效人员"这类边界情况，见
+        // buildPositionCards 里的说明，加总天然也是对的）。
+        const totalActiveCount = positionCards.reduce((sum, item) => sum + item.active_count, 0);
+        const totalPendingCount = positionCards.reduce((sum, item) => sum + item.pending_count, 0);
+        this.setData({ user, enterprise: app.globalData.enterprise || {}, positionCards, totalActiveCount, totalPendingCount, loading: false });
         this.applyPositionSearch();
       })
       .catch((error) => { this.setData({ loading: false }); wx.showToast({ title: error.message, icon: 'none' }); });
@@ -126,25 +123,13 @@ Page({
     this.setData({ positionSearchQuery: e.detail.value });
     this.applyPositionSearch();
   },
-  // 之前点"去充值"只会跳到资金账户总览页（/pages/billing/billing），还要
-  // 再点一次才进真正的充值页——直接跳 recharge-request，和 billing.js 里
-  // recharge() 的跳转参数保持一致。服务费账户是企业级唯一账户，不用带保司；
-  // 保费账户如果这家企业只挂了一个收款账户、且这个账户只对应一个保司名称，
-  // 顺手带上，充值页就不用用户自己再选一次；有多个账户/多个保司名称的情况
-  // 就不猜，交给充值页自己的保司选择器（recharge-request.js 已经支持不传
-  // insurer 时自己加载可选项）。
-  goRecharge(e) {
+  // 保费/服务费余额卡片（含去充值跳转）搬到"我的"页面了，首页看板换成
+  // 在保/待生效人数，点击直接跳到员工列表按对应状态筛选好——不带 position_id
+  // （0 表示不限岗位），和 goPosition 用同一套 pendingEmployeesFilter 中转。
+  goEmployeesByStatus(e) {
     if (!this.requireLogin()) return;
-    const accountType = e.currentTarget.dataset.account === 'premium' ? 'premium' : 'usage';
-    const enterpriseId = (this.data.enterprise && this.data.enterprise.id) || (app.globalData.user && app.globalData.user.enterprise_id) || 0;
-    let insurerParam = '';
-    if (accountType === 'premium') {
-      const accounts = this.data.dashboard.premium_accounts || [];
-      if (accounts.length === 1 && accounts[0].insurers && accounts[0].insurers.length === 1) {
-        insurerParam = `&insurer=${encodeURIComponent(accounts[0].insurers[0])}`;
-      }
-    }
-    wx.navigateTo({ url: `/pages/recharge-request/recharge-request?enterpriseId=${enterpriseId}&accountType=${accountType}${insurerParam}` });
+    app.globalData.pendingEmployeesFilter = { status: e.currentTarget.dataset.status, position_id: 0 };
+    wx.switchTab({ url: '/pages/employees/employees' });
   },
   goPosition(e) {
     if (!this.requireLogin()) return;
