@@ -122,6 +122,19 @@ async function removeEnterprise(item: Enterprise) {
     ElMessage.error((e as Error).message)
   }
 }
+
+async function approveEnterprise(item: Enterprise) {
+  try {
+    await ElMessageBox.confirm(`确定审核通过投保单位「${item.name}」吗？通过后企业主账号将立即可以登录。`, '审核确认', { type: 'warning' })
+  } catch { return }
+  try {
+    await enterprisesApi.setEnterpriseStatus(item.id, 'approved')
+    ElMessage.success('已通过审核')
+    load()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
 </script>
 
 <template>
@@ -172,6 +185,7 @@ async function removeEnterprise(item: Enterprise) {
         </el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
+            <el-button v-if="row.status === 'pending'" link type="success" size="small" @click="approveEnterprise(row)">审核通过</el-button>
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-button link type="primary" size="small" @click="goManageAccounts(row)">管理账号</el-button>
             <el-button link type="primary" size="small" @click="openProducts(row)">参保产品</el-button>
