@@ -13,4 +13,6 @@ public interface SettlementApi {
     void voidSettlement(long settlementId, String reason);
 
     Optional<SettlementView> findById(long settlementId);
+
+    Optional<SettlementView> findByApplicationId(long applicationId);
 }

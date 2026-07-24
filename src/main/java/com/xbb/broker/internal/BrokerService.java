@@ -2,6 +2,7 @@ package com.xbb.broker.internal;
 
 import com.xbb.broker.api.BrokerApi;
 import com.xbb.broker.api.BrokerRegistered;
+import com.xbb.broker.api.CommissionPaid;
 import com.xbb.broker.api.WorkerBound;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -15,13 +16,15 @@ class BrokerService implements BrokerApi {
 
     private final BrokerRepository brokers;
     private final InvitationRepository invitations;
+    private final CommissionRepository commissions;
     private final BrokerVerifiedUserRepository verifiedUsers;
     private final ApplicationEventPublisher events;
 
-    BrokerService(BrokerRepository brokers, InvitationRepository invitations,
+    BrokerService(BrokerRepository brokers, InvitationRepository invitations, CommissionRepository commissions,
                   BrokerVerifiedUserRepository verifiedUsers, ApplicationEventPublisher events) {
         this.brokers = brokers;
         this.invitations = invitations;
+        this.commissions = commissions;
         this.verifiedUsers = verifiedUsers;
         this.events = events;
     }
@@ -60,8 +63,27 @@ class BrokerService implements BrokerApi {
     }
 
     @Override
+    @Transactional("brokerTransactionManager")
+    public void payCommission(long commissionId) {
+        Commission commission = commissions.findById(commissionId)
+                .orElseThrow(() -> new IllegalArgumentException("佣金记录不存在"));
+        commission.pay();
+        commissions.save(commission);
+        events.publishEvent(new CommissionPaid(
+                commissionId, commission.getBrokerUserId(), commission.getAmountCents(), Instant.now()));
+    }
+
+    @Override
     @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
     public Optional<BrokerView> findBroker(long userId) {
         return Optional.of(new BrokerView(userId, brokers.existsById(userId)));
+    }
+
+    @Override
+    @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
+    public Optional<CommissionView> findCommission(long commissionId) {
+        return commissions.findById(commissionId).map(c -> new CommissionView(
+                c.getId(), c.getBrokerUserId(), c.getWorkerUserId(), c.getSettlementId(),
+                c.getAmountCents(), c.getStatus()));
     }
 }

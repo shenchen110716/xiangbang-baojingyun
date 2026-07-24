@@ -45,8 +45,18 @@ class SettlementService implements SettlementApi {
     @Override
     @Transactional(transactionManager = "settlementTransactionManager", readOnly = true)
     public Optional<SettlementView> findById(long settlementId) {
-        return settlements.findById(settlementId).map(s -> new SettlementView(
+        return settlements.findById(settlementId).map(this::toView);
+    }
+
+    @Override
+    @Transactional(transactionManager = "settlementTransactionManager", readOnly = true)
+    public Optional<SettlementView> findByApplicationId(long applicationId) {
+        return settlements.findByApplicationId(applicationId).map(this::toView);
+    }
+
+    private SettlementView toView(Settlement s) {
+        return new SettlementView(
                 s.getId(), s.getApplicationId(), s.getJobId(), s.getWorkerUserId(),
-                s.getAmountCents(), s.getStatus(), s.getVoidReason()));
+                s.getAmountCents(), s.getStatus(), s.getVoidReason());
     }
 }
