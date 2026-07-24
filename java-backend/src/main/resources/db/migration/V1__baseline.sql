@@ -1,4 +1,4 @@
--- Baseline schema for the Java/MyBatis port of 响帮帮保经云.
+-- Baseline schema for the Java/MyBatis port of 响帮帮无忧保.
 -- Consolidates the four Alembic migrations from the Python backend
 -- (baseline + ledger_entries + users.session_version + policy_members)
 -- into a single end-state schema, since this is a greenfield rewrite with

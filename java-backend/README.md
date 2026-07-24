@@ -1,4 +1,4 @@
-# 响帮帮保经云 — Java 后端（Spring Boot + MyBatis）
+# 响帮帮无忧保 — Java 后端（Spring Boot + MyBatis）
 
 这是 `backend/`（FastAPI + SQLAlchemy）的完整 Java 重新实现，API 契约（路径、方法、请求/响应 JSON 字段名）与原后端逐一对齐，因此 `web/`（Vue3 管理后台）和 `miniprogram/`（微信小程序）**无需任何修改**即可直接连接这套新后端。
 
