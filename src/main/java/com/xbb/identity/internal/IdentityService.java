@@ -31,7 +31,7 @@ class IdentityService implements IdentityApi {
     }
 
     @Override
-    @Transactional
+    @Transactional("identityTransactionManager")
     public LoginResult loginByPhone(String phone, String code) {
         if (!codes.verify(phone, code)) {
             throw new IllegalArgumentException("验证码错误或已过期");
@@ -51,14 +51,14 @@ class IdentityService implements IdentityApi {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional(transactionManager = "identityTransactionManager", readOnly = true)
     public Optional<UserView> findVerifiedUser(long userId) {
         return users.findById(userId)
                 .map(u -> new UserView(u.getId(), u.getPhone(), u.isVerified(), u.getInviteCode()));
     }
 
     @Override
-    @Transactional
+    @Transactional("identityTransactionManager")
     public void verifyRealName(long userId, String realName, String idNumber) {
         if (users.existsByIdNumber(idNumber)) {
             throw new IllegalStateException("该身份证已被绑定");
