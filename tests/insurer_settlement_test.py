@@ -208,6 +208,21 @@ def test_monthly_premium_rows_filter_zero_amount():
         assert all(row["amount"] > 0 for row in rows)
 
 
+def test_monthly_premium_summary_excludes_zero_premium_months():
+    """按月营收总保费列表：一个完全没有产生保费的保司，months 参数覆盖的每
+    个自然月保费合计都是 0，汇总列表应该整个是空的——不能像明细那样只过滤
+    单条记录，列表本身也不该堆一长串"当月保费合计=0"的月份行。"""
+    from backend.services import insurer_monthly_premium_summary
+
+    with SessionLocal() as s:
+        insurer = Insurer(name="零保费汇总测试保司"); s.add(insurer); s.commit()
+        insurer_id = insurer.id
+
+    with SessionLocal() as s:
+        rows = insurer_monthly_premium_summary(s, insurer_id, months=6)
+    assert rows == []
+
+
 def test_settlement_mark_unmark_roundtrip():
     """月度结算标记：管理员标记/取消，保司端汇总同步返回 settled/settled_at；
     重复标记只更新同一条记录（唯一约束 uq_insurer_monthly_settlement 兜底）；
@@ -215,11 +230,24 @@ def test_settlement_mark_unmark_roundtrip():
     from backend.core.business_time import business_today
     from backend.models import InsurerMonthlySettlement
 
+    from datetime import datetime, timezone
+
     today = business_today()
     month = today.strftime("%Y-%m")
     with SessionLocal() as s:
+        # 汇总列表现在只列保费大于 0 的月份——这条用例要验证标记/取消标记在
+        # 汇总里能看到，所以这个月必须真的产生保费，不能是空保司。
         insurer = Insurer(name="结算标记测试保司"); s.add(insurer); s.flush()
         insurer_id = insurer.id
+        plan = InsurancePlan(insurer="结算标记测试保司", name="方案", price=100, commission_rate=0.1, billing_mode="monthly", insurer_id=insurer_id)
+        s.add(plan); s.flush()
+        enterprise = Enterprise(name="结算标记测试企业"); s.add(enterprise); s.flush()
+        policy = Policy(policy_no="POL-SETTLE-MARK", enterprise_id=enterprise.id, plan_id=plan.id, premium=0, status="active")
+        s.add(policy); s.flush()
+        person = InsuredPerson(enterprise_id=enterprise.id, name="结算标记甲", id_number="340123199001019997", status="active", policy_id=policy.id)
+        s.add(person); s.flush()
+        month_start = datetime(today.year, today.month, 1, tzinfo=timezone.utc)
+        s.add(PolicyMember(policy_id=policy.id, person_id=person.id, effective_at=month_start, status="active"))
         if not s.query(User).filter(User.username == "settlement_mark_admin").first():
             s.add(User(username="settlement_mark_admin", password_hash=pwd.hash("test1234"), name="平台管理员", role="admin"))
         s.commit()
@@ -306,6 +334,8 @@ def run():
     print("test_monthly_premium_summary_detail_export_scoped: OK")
     test_monthly_premium_rows_filter_zero_amount()
     print("test_monthly_premium_rows_filter_zero_amount: OK")
+    test_monthly_premium_summary_excludes_zero_premium_months()
+    print("test_monthly_premium_summary_excludes_zero_premium_months: OK")
     test_settlement_mark_unmark_roundtrip()
     print("test_settlement_mark_unmark_roundtrip: OK")
     test_insured_payload_includes_effective_and_terminated_at()

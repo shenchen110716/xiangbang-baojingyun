@@ -164,17 +164,23 @@ def _settlement_record(session: Session, insurer_id: int, month: str) -> Insurer
 
 def insurer_monthly_premium_summary(session: Session, insurer_id: int, months: int = 12) -> list[dict]:
     """最近 months 个自然月（含当月，倒序）的应收总保费汇总，附带该月是否已经
-    平台标记结算、结算时间——纯记账标记，不影响这里的金额计算本身。"""
+    平台标记结算、结算时间——纯记账标记，不影响这里的金额计算本身。当月保费
+    合计为 0 的月份（该保司在这个月完全没有产生保费）直接不列出，和明细页
+    "只列保费大于 0 的记录"（insurer_monthly_premium_rows）保持同一口径，不
+    然列表里会堆一长串没有实际意义的 0 记录。"""
     today = business_today()
     result = []
     for i in range(months):
         y, m = _shift_month(today.year, today.month, -i)
         month_str = f"{y:04d}-{m:02d}"
         rows = insurer_monthly_premium_rows(session, insurer_id, y, m)
+        total_premium = amount(sum(row["amount"] for row in rows))
+        if total_premium <= 0:
+            continue
         settlement = _settlement_record(session, insurer_id, month_str)
         result.append({
             "month": month_str,
-            "total_premium": amount(sum(row["amount"] for row in rows)),
+            "total_premium": total_premium,
             "insured_count": len({row["person_id"] for row in rows}),
             "settled": settlement is not None,
             "settled_at": settlement.settled_at if settlement else None,
