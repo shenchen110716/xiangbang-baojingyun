@@ -28,7 +28,7 @@
   <!-- select-bar 是 position:fixed 悬浮在底部的，不占文档流空间，不留个
        占位高度的话它会挡住列表最后几条，还可能因为页面内容"看起来"刚好
        撑满一屏而滚不动。 -->
-  <view wx:if="{{selectMode}}" style="height:240rpx"></view>
+  <view wx:if="{{selectMode}}" style="height:220rpx"></view>
   <view wx:if="{{selectMode}}" class="select-bar">
     <view class="row between select-bar-date" style="margin-bottom:14rpx">
       <view class="row">
