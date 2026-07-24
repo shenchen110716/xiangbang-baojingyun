@@ -49,14 +49,14 @@
           <text wx:if="{{item.pending_count}}" class="tag tag-warning">待生效 {{item.pending_count}}</text>
         </view>
       </view>
-      <view class="list-meta" style="color:#4b5468;font-size:26rpx;font-weight:500">{{item.actual_employer_name||'未关联用工单位'}} · {{item.occupation_class}}</view>
-      <view class="row between" style="margin-top:18rpx">
-        <text class="small" style="color:#5b6479;font-size:25rpx;font-weight:500">{{item.plan_text}}</text>
+      <view class="row between" style="margin-top:6rpx">
+        <text class="list-meta" style="color:#4b5468;font-size:26rpx;font-weight:500;margin-top:0">{{item.actual_employer_name||'未关联用工单位'}} · {{item.occupation_class}}</text>
         <view class="row">
           <text class="mini-btn" style="margin-right:20rpx;width:56rpx;height:56rpx;padding:0;font-size:40rpx;font-weight:700;line-height:56rpx;text-align:center;display:inline-block" data-id="{{item.id}}" catchtap="addEnroll">+</text>
           <text class="link-btn">名单 →</text>
         </view>
       </view>
+      <view class="small" style="margin-top:18rpx;color:#5b6479;font-size:25rpx;font-weight:500">{{item.plan_text}}</view>
     </view>
     <view wx:if="{{!loading&&!positionCards.length}}" class="empty">
       <view class="empty-icon">案</view>
