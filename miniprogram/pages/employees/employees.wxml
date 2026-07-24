@@ -16,8 +16,14 @@
     <view class="row top">
       <view wx:if="{{selectMode}}" class="select-box {{selectedIds.indexOf(item.id)>-1?'checked':''}}">{{selectedIds.indexOf(item.id)>-1?'✔':''}}</view>
       <view class="grow">
-        <view class="row between"><text class="list-title">{{item.name}}</text><text class="tag {{item.status_display==='pending'?'tag-warning':item.status_display==='active'?'tag-success':'tag-gray'}}">{{item.status_label}}</text></view>
-        <view class="list-meta">{{item.id_masked}}<text wx:if="{{item.phone}}"> · {{item.phone}}</text></view>
+        <view class="row between">
+          <view class="row grow" style="min-width:0">
+            <text class="list-title" style="flex:none">{{item.name}}</text>
+            <text class="small" style="margin-left:14rpx;color:#8791a7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">{{item.id_masked}}</text>
+          </view>
+          <text class="tag {{item.status_display==='pending'?'tag-warning':item.status_display==='active'?'tag-success':'tag-gray'}}" style="flex:none;margin-left:12rpx">{{item.status_label}}</text>
+        </view>
+        <view wx:if="{{item.phone}}" class="list-meta">{{item.phone}}</view>
         <view class="list-meta">{{item.actual_employer_name||'未关联用工单位'}} · {{item.position_name||'未关联岗位'}}</view>
         <view wx:if="{{item.plan_name}}" class="small" style="margin-top:10rpx">{{item.insurer}} · {{item.plan_name}}</view>
         <view wx:if="{{item.effective_at_display}}" class="small" style="margin-top:10rpx">参保时间：{{item.effective_at_display}}</view>
