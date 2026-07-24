@@ -34,7 +34,9 @@ Page({
       }
     });
   },
-  contactSupport() { wx.showModal({ title: '联系客服', content: '如需帮助，请联系您的专属业务员，或在「消息与待办」中留言，平台工作人员会尽快处理。', showCancel: false }); },
+  // pages/employees/employees 是 tabBar 页面，wx.navigateTo 不能跳 tabBar
+  // 页面（会直接失败），必须用 wx.switchTab；不带筛选条件，进去就是全量列表。
+  goEmployees() { wx.switchTab({ url: '/pages/employees/employees' }); },
   switchUser() { wx.showModal({ title: '切换登录用户', content: '将退出当前账号，目标操作员需重新输入账号和密码。', success: (res) => { if (!res.confirm) return; app.logout(false); wx.reLaunch({ url: '/pages/login/login?switch=1' }); } }); },
   changePassword() { wx.navigateTo({ url: '/pages/change-password/change-password' }); },
   logout() { wx.showModal({ title: '退出登录', content: '确认退出当前企业账号？', success: (res) => res.confirm && app.logout() }); },

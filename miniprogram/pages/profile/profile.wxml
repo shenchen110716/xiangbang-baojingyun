@@ -11,19 +11,22 @@
   </view>
   <view class="grid-2 section"><view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">保费余额</text><text class="stat-value">¥{{dashboard.premium_balance_total||0}}</text></view><view class="stat stat-tappable" data-url="/pages/billing/billing" bindtap="go"><text class="stat-label">使用费余额</text><text class="stat-value">¥{{dashboard.usage_balance||0}}</text></view></view>
   <view class="card section">
-    <view class="menu-item" bindtap="contactSupport"><view class="menu-icon">客</view><text class="grow">联系客服</text><text class="chevron">›</text></view>
-    <view class="menu-item" data-url="/pages/operators/operators" bindtap="go"><view class="menu-icon">通</view><text class="grow">企业通讯录</text><text class="chevron">›</text></view>
-    <view class="menu-item" data-url="/pages/billing/billing" bindtap="go"><view class="menu-icon">¥</view><text class="grow">资金账户 / 充值</text><text class="chevron">›</text></view>
-  </view>
-  <view class="card section">
     <view class="menu-item" data-url="/pages/employers/employers" bindtap="go"><view class="menu-icon">企</view><text class="grow">工作单位管理</text><text class="chevron">›</text></view>
     <view class="menu-item" data-url="/pages/positions/positions" bindtap="go"><view class="menu-icon">岗</view><text class="grow">投保岗位与视频</text><text class="chevron">›</text></view>
+    <view class="menu-item" bindtap="goEmployees"><view class="menu-icon">员</view><text class="grow">参保员工</text><text class="chevron">›</text></view>
+  </view>
+  <view class="card section">
     <view class="menu-item" data-url="/pages/products/products" bindtap="go"><view class="menu-icon">保</view><text class="grow">已分配参保产品</text><text class="chevron">›</text></view>
     <view class="menu-item" data-url="/pages/policies/policies" bindtap="go"><view class="menu-icon">单</view><text class="grow">保单管理</text><text class="chevron">›</text></view>
   </view>
+  <view class="card section">
+    <view class="menu-item" data-url="/pages/billing/billing" bindtap="go"><view class="menu-icon">¥</view><text class="grow">资金账户 / 充值</text><text class="chevron">›</text></view>
+    <view class="menu-item" data-url="/pages/reports/reports" bindtap="go"><view class="menu-icon">报</view><text class="grow">经营报表</text><text class="chevron">›</text></view>
+  </view>
   <view class="card">
     <view class="menu-item" data-url="/pages/messages/messages" bindtap="go"><view class="menu-icon">信</view><text class="grow">消息与待办</text><text wx:if="{{messageCount}}" class="badge">{{messageCount}}</text><text class="chevron">›</text></view>
-    <view class="menu-item" data-url="/pages/reports/reports" bindtap="go"><view class="menu-icon">报</view><text class="grow">经营报表</text><text class="chevron">›</text></view>
+    <view class="menu-item" data-url="/pages/timeliness/timeliness" bindtap="go"><view class="menu-icon">率</view><text class="grow">参停保及时率</text><text class="chevron">›</text></view>
+    <view class="menu-item" data-url="/pages/operators/operators" bindtap="go"><view class="menu-icon">通</view><text class="grow">企业通讯录</text><text class="chevron">›</text></view>
     <view class="menu-item" data-url="/pages/settings/settings" bindtap="go"><view class="menu-icon">设</view><text class="grow">系统设置</text><text class="chevron">›</text></view>
   </view>
   <button class="secondary" bindtap="switchUser">切换登录用户</button>
