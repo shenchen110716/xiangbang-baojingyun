@@ -49,35 +49,67 @@ def test_insurer_settlement_scoped_and_hides_profit():
         assert "agent_commission_amount" not in row
 
 
-def test_settlement_total_active_premium_reflects_real_headcount():
-    """回归用例：之前 total_active_premium 直接加总 Policy.premium 这个静态列，
-    而真实数据里这一列经常没被填过（新建保单不强制录入，实际保费按人动态算），
-    导致"在保保费合计"页面上一直显示 0。修复后应该按当前在保 PolicyMember
-    数量 × 结算价重新算，哪怕 Policy.premium 本身就是 0 也要得出非零合计。"""
+def test_settlement_total_cumulative_premium_reflects_real_headcount():
+    """回归用例：之前直接加总 Policy.premium 这个静态列，而真实数据里这一列
+    经常没被填过（新建保单不强制录入，实际保费按人动态算），导致"在保保费
+    合计"页面上一直显示 0。修复后按累计口径重算，哪怕 Policy.premium 本身
+    是 0 也要得出非零合计。"""
     with SessionLocal() as s:
-        insurer = Insurer(name="在保保费回归测试保司"); s.add(insurer); s.flush()
-        plan = InsurancePlan(insurer="在保保费回归测试保司", name="方案", price=100, commission_rate=0.1, insurer_id=insurer.id)
+        insurer = Insurer(name="累计保费回归测试保司"); s.add(insurer); s.flush()
+        plan = InsurancePlan(insurer="累计保费回归测试保司", name="方案", price=100, commission_rate=0.1, insurer_id=insurer.id)
         s.add(plan); s.flush()
-        enterprise = Enterprise(name="在保保费回归测试企业"); s.add(enterprise); s.flush()
+        enterprise = Enterprise(name="累计保费回归测试企业"); s.add(enterprise); s.flush()
         # Policy.premium 故意留 0，模拟真实数据里这一列没被填过的情况。
         policy = Policy(policy_no="POL-ZERO-PREMIUM", enterprise_id=enterprise.id, plan_id=plan.id, premium=0, status="active")
         s.add(policy); s.flush()
         person = InsuredPerson(enterprise_id=enterprise.id, name="非零保费甲", id_number="340123199001019993", status="active", policy_id=policy.id)
         s.add(person); s.flush()
         s.add(PolicyMember(policy_id=policy.id, person_id=person.id, status="active"))
-        user = User(username="zero_premium_insurer", password_hash=pwd.hash("test1234"), name="保司账号", role="insurer", insurer_id=insurer.id)
+        user = User(username="cumulative_premium_insurer", password_hash=pwd.hash("test1234"), name="保司账号", role="insurer", insurer_id=insurer.id)
         s.add(user); s.commit()
 
-    login = client.post("/api/auth/login", json={"username": "zero_premium_insurer", "password": "test1234", "portal": "insurer"})
+    login = client.post("/api/auth/login", json={"username": "cumulative_premium_insurer", "password": "test1234", "portal": "insurer"})
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
     resp = client.get("/api/insurer-portal/settlement", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
-    assert body["total_active_premium"] > 0
+    assert body["total_cumulative_premium"] > 0
     row = next(r for r in body["rows"] if r["policy_no"] == "POL-ZERO-PREMIUM")
     assert row["insured_count"] == 1
     assert row["premium"] > 0
-    assert row["premium"] == body["total_active_premium"]
+    assert row["premium"] == body["total_cumulative_premium"]
+
+
+def test_settlement_cumulative_includes_already_stopped_people():
+    """累计口径不能只看"现在还在保的人"——已经停保的人在他们停保前的在保
+    区间同样要计入累计总额，且累计合计不应该因为保单本身状态不是 active
+    就被漏掉。"""
+    from datetime import datetime, timedelta, timezone
+    from backend.core.business_time import business_today
+
+    with SessionLocal() as s:
+        insurer = Insurer(name="停保累计测试保司"); s.add(insurer); s.flush()
+        plan = InsurancePlan(insurer="停保累计测试保司", name="方案", price=100, commission_rate=0.1, billing_mode="daily", insurer_id=insurer.id)
+        s.add(plan); s.flush()
+        enterprise = Enterprise(name="停保累计测试企业"); s.add(enterprise); s.flush()
+        policy = Policy(policy_no="POL-STOPPED-CUMULATIVE", enterprise_id=enterprise.id, plan_id=plan.id, premium=0, status="active")
+        s.add(policy); s.flush()
+        person = InsuredPerson(enterprise_id=enterprise.id, name="已停保甲", id_number="340123199001019994", status="stopped", policy_id=None)
+        s.add(person); s.flush()
+        today = business_today()
+        effective = datetime(today.year, today.month, 1, tzinfo=timezone.utc)
+        terminated = datetime.now(timezone.utc) - timedelta(days=1)
+        s.add(PolicyMember(policy_id=policy.id, person_id=person.id, effective_at=effective, terminated_at=terminated, status="stopped"))
+        user = User(username="stopped_cumulative_insurer", password_hash=pwd.hash("test1234"), name="保司账号", role="insurer", insurer_id=insurer.id)
+        s.add(user); s.commit()
+
+    login = client.post("/api/auth/login", json={"username": "stopped_cumulative_insurer", "password": "test1234", "portal": "insurer"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    resp = client.get("/api/insurer-portal/settlement", headers=headers)
+    assert resp.status_code == 200
+    row = next(r for r in resp.json()["rows"] if r["policy_no"] == "POL-STOPPED-CUMULATIVE")
+    assert row["insured_count"] == 1
+    assert row["premium"] > 0
 
 
 def test_monthly_premium_summary_detail_export_scoped():
@@ -119,6 +151,10 @@ def test_monthly_premium_summary_detail_export_scoped():
     rows = detail.json()
     assert any(row["person_name"] == "月度甲" for row in rows)
     assert all(row["person_name"] != "月度乙" for row in rows)
+    detail_row = next(row for row in rows if row["person_name"] == "月度甲")
+    assert detail_row["effective_at"] == month_start.date().isoformat()
+    assert detail_row["terminated_at"] is None
+    assert detail_row["billable_days"] > 0
 
     export = client.get(f"/api/insurer-portal/settlement/monthly/{month}/export", headers=headers)
     assert export.status_code == 200
@@ -151,8 +187,10 @@ def test_monthly_premium_summary_detail_export_scoped():
 def run():
     test_insurer_settlement_scoped_and_hides_profit()
     print("test_insurer_settlement_scoped_and_hides_profit: OK")
-    test_settlement_total_active_premium_reflects_real_headcount()
-    print("test_settlement_total_active_premium_reflects_real_headcount: OK")
+    test_settlement_total_cumulative_premium_reflects_real_headcount()
+    print("test_settlement_total_cumulative_premium_reflects_real_headcount: OK")
+    test_settlement_cumulative_includes_already_stopped_people()
+    print("test_settlement_cumulative_includes_already_stopped_people: OK")
     test_monthly_premium_summary_detail_export_scoped()
     print("test_monthly_premium_summary_detail_export_scoped: OK")
     print("\nAll insurer settlement tests: PASS")

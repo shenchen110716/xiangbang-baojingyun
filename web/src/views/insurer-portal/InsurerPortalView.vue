@@ -350,19 +350,19 @@ function logout() {
         </el-tab-pane>
 
         <el-tab-pane label="财务管理" name="settlement">
-          <PageCard title="保费结算总览" hint="仅显示保费与结算价，平台内部利润/返佣数据不对保司开放">
+          <PageCard title="保费结算总览" hint="累计口径——从每个人各自的生效日起累计到今天，已停保的人在停保前的在保期依然计入；仅显示保费与结算价，平台内部利润/返佣数据不对保司开放">
             <div class="stat-grid">
               <div class="stat-tile">
-                <div class="stat-label">在保保费合计</div>
-                <div class="stat-value">{{ settlement?.total_active_premium ?? '—' }}</div>
+                <div class="stat-label">累计保费合计</div>
+                <div class="stat-value">{{ settlement?.total_cumulative_premium ?? '—' }}</div>
               </div>
             </div>
           </PageCard>
 
-          <PageCard title="按月应收总保费" :count="monthlyPremium.length" hint="按人按天/按月折算，单价为结算价；点击某月查看明细并可导出">
+          <PageCard title="按月营收总保费" :count="monthlyPremium.length" hint="按人按天/按月折算，单价为结算价；点击某月查看明细并可导出">
             <el-table :data="monthlyPremium" size="small">
               <el-table-column prop="month" label="月份" width="120" />
-              <el-table-column label="应收总保费" width="140"><template #default="{ row }">{{ row.total_premium }}</template></el-table-column>
+              <el-table-column label="当月保费合计" width="140"><template #default="{ row }">{{ row.total_premium }}</template></el-table-column>
               <el-table-column label="在保人数" width="100"><template #default="{ row }">{{ row.insured_count }}</template></el-table-column>
               <el-table-column label="操作" width="100">
                 <template #default="{ row }"><el-button link type="primary" size="small" @click="openMonthlyDetail(row)">查看明细</el-button></template>
@@ -376,9 +376,9 @@ function logout() {
               <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
               <el-table-column prop="plan_name" label="产品方案" min-width="140" />
               <el-table-column prop="policy_no" label="保单号" min-width="140" />
-              <el-table-column label="在保人数" width="90"><template #default="{ row }">{{ row.insured_count }}</template></el-table-column>
+              <el-table-column label="累计参保人数" width="100"><template #default="{ row }">{{ row.insured_count }}</template></el-table-column>
               <el-table-column label="结算价（单价）" width="120"><template #default="{ row }">{{ row.policy_floor_price ?? '—' }}</template></el-table-column>
-              <el-table-column label="保费合计" width="100"><template #default="{ row }">{{ row.premium }}</template></el-table-column>
+              <el-table-column label="累计保费" width="100"><template #default="{ row }">{{ row.premium }}</template></el-table-column>
               <el-table-column prop="status" label="状态" width="90" />
             </el-table>
             <el-empty v-if="!settlement?.rows.length" description="暂无结算数据" :image-size="60" />
@@ -493,14 +493,16 @@ function logout() {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="monthlyDetailVisible" :title="`${monthlyDetailMonth} 保费明细`" width="640px">
+    <el-dialog v-model="monthlyDetailVisible" :title="`${monthlyDetailMonth} 保费明细`" width="760px">
       <el-table v-loading="monthlyDetailLoading" :data="monthlyDetailRows" size="small">
-        <el-table-column prop="person_name" label="姓名" width="100" />
-        <el-table-column label="身份证号" min-width="180"><template #default="{ row }">{{ maskId(row.id_number) }}</template></el-table-column>
-        <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
-        <el-table-column prop="policy_no" label="保单号" min-width="140" />
-        <el-table-column label="单价" width="90"><template #default="{ row }">{{ row.unit_price }}</template></el-table-column>
-        <el-table-column label="应收金额" width="100"><template #default="{ row }">{{ row.amount }}</template></el-table-column>
+        <el-table-column prop="person_name" label="姓名" width="90" />
+        <el-table-column label="身份证号" min-width="170"><template #default="{ row }">{{ maskId(row.id_number) }}</template></el-table-column>
+        <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
+        <el-table-column prop="policy_no" label="保单号" min-width="130" />
+        <el-table-column label="参保时间" width="100"><template #default="{ row }">{{ row.effective_at }}</template></el-table-column>
+        <el-table-column label="停保时间" width="100"><template #default="{ row }">{{ row.terminated_at || '在保' }}</template></el-table-column>
+        <el-table-column label="参保天数" width="90"><template #default="{ row }">{{ row.billable_days }}</template></el-table-column>
+        <el-table-column label="合计保费" width="100"><template #default="{ row }">{{ row.amount }}</template></el-table-column>
       </el-table>
       <el-empty v-if="!monthlyDetailLoading && !monthlyDetailRows.length" description="该月暂无应收保费" :image-size="50" />
       <template #footer>

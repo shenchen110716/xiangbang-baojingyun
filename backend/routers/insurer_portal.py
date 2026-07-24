@@ -88,13 +88,14 @@ def settlement_monthly_export(month: str, user: User = Depends(current_user), se
     book = openpyxl.Workbook()
     sheet = book.active
     sheet.title = f"{clean_month}保费明细"
-    header = ["姓名", "身份证号", "投保单位", "保单号", "计费比例", "单价", "应收金额"]
+    header = ["姓名", "身份证号", "投保单位", "保单号", "参保时间", "停保时间", "参保天数", "单价", "合计保费"]
     sheet.append(header)
     for cell in sheet[1]:
         cell.font = openpyxl.styles.Font(bold=True)
     for row in rows:
         sheet.append([row["person_name"], row["id_number"], row["enterprise_name"], row["policy_no"],
-                      row["billable_ratio"], row["unit_price"], row["amount"]])
+                      row["effective_at"], row["terminated_at"] or "在保", row["billable_days"],
+                      row["unit_price"], row["amount"]])
     output = io.BytesIO()
     book.save(output)
     book.close()

@@ -50,7 +50,7 @@ export interface InsurerSettlementRow {
 
 export interface InsurerSettlement {
   insurer_id: number
-  total_active_premium: number
+  total_cumulative_premium: number
   rows: InsurerSettlementRow[]
 }
 
@@ -70,6 +70,9 @@ export interface InsurerMonthlyPremiumRow {
   id_number: string
   enterprise_name: string
   policy_no: string
+  effective_at: string
+  terminated_at: string | null
+  billable_days: number
   billable_ratio: number
   unit_price: number
   amount: number

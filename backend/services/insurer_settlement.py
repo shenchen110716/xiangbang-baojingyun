@@ -18,39 +18,45 @@ from .pricing import plan_price_for_class, pricing_snapshot, strip_internal_pric
 from .serialization import amount
 
 
-def _policy_active_premium(session: Session, policy: Policy, plan: InsurancePlan | None) -> tuple[float, int]:
-    """当前在保人数 × 各自结算价（policy_floor_price，按人的职业类别分档定价），
-    不是 Policy.premium 那个静态列——那一列在真实数据里经常没有被填过（新建保单
-    时不强制录入，实际保费按人动态算），直接拿它当"在保保费合计"会一直显示 0。
-    这里按 policy_dict() 同一套"当前在保人 × 结算价"口径重算一次。"""
+def _policy_cumulative_premium(session: Session, policy: Policy, plan: InsurancePlan | None) -> tuple[float, int]:
+    """该保单从有史以来每个在保人各自生效日起，累计到今天的应收保费（结算价
+    policy_floor_price 口径，按天/按月折算）——不是只看"现在还在保的人"，已经
+    停保的人在他们停保前的在保区间同样要计入累计总额，口径参照
+    policy_premium_consumed()（backend/services/policies.py），只是把客户端
+    sale_price 换成保司结算价 policy_floor_price。"""
     if not plan:
         return 0.0, 0
-    members = session.scalars(select(PolicyMember).where(PolicyMember.policy_id == policy.id, PolicyMember.status == "active"))
+    today = business_today()
     total = 0.0
-    count = 0
-    for member in members:
+    person_ids: set[int] = set()
+    for member in session.scalars(select(PolicyMember).where(PolicyMember.policy_id == policy.id)):
+        billable = billable_date_range(member, member.effective_at.date(), today)
+        if billable is None:
+            continue
+        start, end = billable
         person = session.get(InsuredPerson, member.person_id)
         if not person:
             continue
         snapshot = pricing_snapshot(plan, base_price=plan_price_for_class(session, plan, person.occupation_class))
-        total += float(snapshot.get("policy_floor_price") or 0)
-        count += 1
-    return total, count
+        unit_price = float(snapshot.get("policy_floor_price") or 0)
+        total += period_amount(unit_price, plan.billing_mode, start, end)
+        person_ids.add(person.id)
+    return amount(total), len(person_ids)
 
 
 def insurer_settlement_summary(session: Session, insurer_id: int, user) -> dict:
     plan_ids = set(session.scalars(select(InsurancePlan.id).where(InsurancePlan.insurer_id == insurer_id)))
     if not plan_ids:
-        return {"insurer_id": insurer_id, "total_active_premium": 0.0, "rows": []}
+        return {"insurer_id": insurer_id, "total_cumulative_premium": 0.0, "rows": []}
 
     rows = []
-    total_active_premium = 0.0
+    total_cumulative_premium = 0.0
     policies = session.scalars(select(Policy).where(Policy.plan_id.in_(plan_ids)).order_by(Policy.id.desc()))
     for policy in policies:
         plan = session.get(InsurancePlan, policy.plan_id)
         enterprise = session.get(Enterprise, policy.enterprise_id)
         snapshot = pricing_snapshot(plan) if plan else {}
-        policy_premium, insured_count = _policy_active_premium(session, policy, plan)
+        policy_premium, insured_count = _policy_cumulative_premium(session, policy, plan)
         row = strip_internal_pricing({
             "policy_id": policy.id,
             "policy_no": policy.policy_no,
@@ -62,10 +68,12 @@ def insurer_settlement_summary(session: Session, insurer_id: int, user) -> dict:
             **snapshot,
         }, user)
         rows.append(row)
-        if policy.status == "active":
-            total_active_premium += policy_premium
+        # 累计口径不看 policy.status——保单本身状态变了不影响它历史上已经产生过
+        # 的保费，这笔钱已经实实在在地"发生"过，不能因为保单后来被停用就从
+        # 累计总额里消失。
+        total_cumulative_premium += policy_premium
 
-    return {"insurer_id": insurer_id, "total_active_premium": amount(total_active_premium), "rows": rows}
+    return {"insurer_id": insurer_id, "total_cumulative_premium": amount(total_cumulative_premium), "rows": rows}
 
 
 def _month_bounds(year: int, month: int) -> tuple[date, date]:
@@ -115,7 +123,11 @@ def insurer_monthly_premium_rows(session: Session, insurer_id: int, year: int, m
             rows.append({
                 "person_id": person.id, "person_name": person.name, "id_number": person.id_number,
                 "enterprise_name": enterprise.name if enterprise else "",
-                "policy_no": policy.policy_no, "billable_ratio": round(ratio, 4),
+                "policy_no": policy.policy_no,
+                "effective_at": member.effective_at.date().isoformat(),
+                "terminated_at": member.terminated_at.date().isoformat() if member.terminated_at else None,
+                "billable_days": (end - start).days + 1,
+                "billable_ratio": round(ratio, 4),
                 "unit_price": amount(unit_price), "amount": amount(unit_price * ratio),
             })
     return rows
