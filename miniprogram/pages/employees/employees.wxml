@@ -1,9 +1,7 @@
 <view class="page safe-bottom">
   <view class="row between">
-    <view class="grow">
-      <view class="title">{{positionId?(positionName||'该岗位')+' · 参保员工':'参保员工'}}</view>
-      <text wx:if="{{positionId}}" class="link-btn" bindtap="clearPositionFilter">查看全部员工 →</text>
-    </view>
+    <text wx:if="{{positionId}}" class="link-btn grow" bindtap="clearPositionFilter">{{positionName||'该岗位'}} · 查看全部员工 →</text>
+    <view wx:else class="grow"></view>
     <view wx:if="{{!selectMode}}" class="row" style="flex:none">
       <button class="mini-btn" style="margin-right:12rpx" data-mode="active" bindtap="startSelect">参保</button>
       <button class="mini-btn" data-mode="stopped" bindtap="startSelect">停保</button>
