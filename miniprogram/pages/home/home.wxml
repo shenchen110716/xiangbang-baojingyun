@@ -35,7 +35,7 @@
       <text class="section-title">参保方案</text>
       <view class="row">
         <text class="section-link" style="margin-right:20rpx" bindtap="togglePositionSearch">🔍 搜索</text>
-        <text class="section-link" bindtap="addPosition">+ 新增方案</text>
+        <text class="section-link" bindtap="addPosition">+新增岗位</text>
       </view>
     </view>
     <view wx:if="{{positionSearchVisible}}" class="search">
@@ -62,7 +62,7 @@
       <view class="empty-icon">案</view>
       <view>暂无已审核通过的岗位</view>
       <view class="small">新增岗位并上传视频，等待平台/保司定类后会出现在这里</view>
-      <button class="primary" style="margin-top:24rpx" bindtap="addPosition">+ 新增方案</button>
+      <button class="primary" style="margin-top:24rpx" bindtap="addPosition">+新增岗位</button>
     </view>
     <view wx:if="{{!loading&&positionCards.length&&!filteredPositionCards.length}}" class="empty">
       <view class="empty-icon">🔍</view>
