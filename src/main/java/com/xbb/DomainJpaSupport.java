@@ -31,7 +31,8 @@ public final class DomainJpaSupport {
         HikariDataSource ds = props.initializeDataSourceBuilder().type(HikariDataSource.class).build();
         // 见 xbb-v1-progress.md:测试里每个 @SpringBootTest 类都会被 Spring
         // 测试上下文缓存出独立的 ApplicationContext,连接池默认 10 很容易把
-        // Testcontainers 的 max_connections 打满。
+        // Testcontainers 的 max_connections 打满(域越多越明显,TestcontainersConfig
+        // 里把测试容器的 max_connections 调到了 300 兜底,这里仍然调小池子本身)。
         ds.setMaximumPoolSize(3);
         return ds;
     }

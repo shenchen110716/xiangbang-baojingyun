@@ -11,7 +11,10 @@ public class TestcontainersConfig {
 
     public static final PostgreSQLContainer<?> PG =
             new PostgreSQLContainer<>("postgres:16-alpine")
-                    .withInitScript("db/test-init.sql");
+                    .withInitScript("db/test-init.sql")
+                    // 每加一个域,每个缓存的 Spring 测试上下文就多一个连接池;
+                    // 默认 max_connections=100 在 4 个域之后已经不够用(实测触发过)。
+                    .withCommand("postgres", "-c", "max_connections=300");
 
     static {
         PG.start();
@@ -45,6 +48,13 @@ public class TestcontainersConfig {
         registry.add("xbb.domains.job.flyway.url", PG::getJdbcUrl);
         registry.add("xbb.domains.job.flyway.user", PG::getUsername);
         registry.add("xbb.domains.job.flyway.password", PG::getPassword);
+        // settlement 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.settlement.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.settlement.datasource.username", () -> "settlement_user");
+        registry.add("xbb.domains.settlement.datasource.password", () -> "settlement_pw");
+        registry.add("xbb.domains.settlement.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.settlement.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.settlement.flyway.password", PG::getPassword);
     }
 
     @Bean

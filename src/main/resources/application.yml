@@ -44,3 +44,14 @@ xbb:
         password: ${DB_ADMIN_PASSWORD:postgres}
         schemas: job
         locations: classpath:db/migration/job
+    settlement:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_SETTLEMENT_USER:settlement_user}
+        password: ${DB_SETTLEMENT_PASSWORD:settlement_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: settlement
+        locations: classpath:db/migration/settlement

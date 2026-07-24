@@ -1,0 +1,70 @@
+package com.xbb.settlement;
+
+import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestCodeAccessor;
+import com.xbb.identity.api.IdentityApi;
+import com.xbb.job.api.JobApi;
+import com.xbb.org.api.OrgApi;
+import com.xbb.org.internal.Organization;
+import com.xbb.settlement.internal.Settlement;
+import com.xbb.settlement.internal.SettlementRepository;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+@SpringBootTest
+@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+class JobEventListenerTest {
+
+    @DynamicPropertySource
+    static void postgresProperties(DynamicPropertyRegistry registry) {
+        TestcontainersConfig.registerProperties(registry);
+    }
+
+    @Autowired IdentityApi identityApi;
+    @Autowired TestCodeAccessor codes;
+    @Autowired OrgApi orgApi;
+    @Autowired JobApi jobApi;
+    @Autowired SettlementRepository settlements;
+
+    private long verifiedUser(String phone, String realName, String idNumber) {
+        long userId = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
+        identityApi.verifyRealName(userId, realName, idNumber);
+        return userId;
+    }
+
+    @Test
+    void 应聘录用事件被结算域订阅并生成待结算记录() {
+        long legalRep = verifiedUser("13200000001", "法人九", "110101199001012001");
+        AtomicLong orgIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "九号工厂", "91110000000000061X", legalRep)));
+        long orgId = orgIdHolder.get();
+        orgApi.approve(orgId);
+
+        AtomicLong jobIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                jobIdHolder.set(jobApi.postJob(orgId, "理货员", "仓库理货", 2900, legalRep)));
+        long jobId = jobIdHolder.get();
+
+        long applicant = verifiedUser("13200000002", "应聘者五", "110101199001012002");
+        long applicationId = jobApi.apply(jobId, applicant);
+
+        jobApi.acceptApplication(applicationId, legalRep);
+
+        await().atMost(Duration.ofSeconds(5)).until(() -> settlements.findByApplicationId(applicationId).isPresent());
+        var settlement = settlements.findByApplicationId(applicationId).orElseThrow();
+        assertThat(settlement.getAmountCents()).isEqualTo(2900);
+        assertThat(settlement.getWorkerUserId()).isEqualTo(applicant);
+        assertThat(settlement.getStatus()).isEqualTo(Settlement.Status.PENDING);
+    }
+}

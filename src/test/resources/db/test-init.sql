@@ -2,3 +2,4 @@
 CREATE USER identity_user WITH PASSWORD 'identity_pw';
 CREATE USER org_user WITH PASSWORD 'org_pw';
 CREATE USER job_user WITH PASSWORD 'job_pw';
+CREATE USER settlement_user WITH PASSWORD 'settlement_pw';
