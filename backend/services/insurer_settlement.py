@@ -5,17 +5,36 @@ premium-and-arrears view, not a commission ledger — internal cost/profit
 fields never enter this function's output (strip_internal_pricing handles
 the per-row pricing_snapshot fields that do get included).
 """
+import re
 from calendar import monthrange
-from datetime import date
+from datetime import date, datetime, timezone
 
+from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.business_time import business_today
-from ..models import Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember
+from ..models import Enterprise, InsurancePlan, InsuredPerson, InsurerMonthlySettlement, Policy, PolicyMember, User
 from .accruals import billable_date_range, period_amount
 from .pricing import plan_price_for_class, pricing_snapshot, strip_internal_pricing
-from .serialization import amount
+from .serialization import amount, serialize
+
+_MONTH_PATTERN = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
+
+
+def parse_insurer_month(month: str) -> tuple[int, int, str]:
+    """严格正则而不是 int() 直接转换：int() 会悄悄吃掉首尾空白/控制字符（比如
+    "07\\n" 也能转成 7），一旦校验通过又把原始字符串继续往下传，这些字符就可能
+    被裸拼进文件名/HTTP 响应头。返回值的第三项是用校验后的 (year, month) 重新
+    拼出的规范化字符串，调用方后续所有拼接一律用这个，不用调用方传入的原始值。
+    这里是唯一实现，insurers.py（管理端标记结算）和 insurer_portal.py（保司端
+    查询）都复用这一份，不要各自重新写一遍正则。"""
+    match = _MONTH_PATTERN.match(month)
+    if not match: raise HTTPException(400, "月份格式应为 yyyy-MM")
+    year, month_num = int(match.group(1)), int(match.group(2))
+    if not (2000 <= year <= 2100): raise HTTPException(400, "月份年份超出支持范围")
+    return year, month_num, f"{year:04d}-{month_num:02d}"
 
 
 def _policy_cumulative_premium(session: Session, policy: Policy, plan: InsurancePlan | None) -> tuple[float, int]:
@@ -120,6 +139,11 @@ def insurer_monthly_premium_rows(session: Session, insurer_id: int, year: int, m
             ratio = period_amount(1.0, plan.billing_mode, start, end)
             snapshot = pricing_snapshot(plan, base_price=plan_price_for_class(session, plan, person.occupation_class))
             unit_price = float(snapshot.get("policy_floor_price") or 0)
+            row_amount = amount(unit_price * ratio)
+            # 金额为 0（或因为浮点误差落到 0 以下）的记录对保司没有实际意义，
+            # 只会把明细列表刷得很长，按需求过滤掉，不展示、不导出。
+            if row_amount <= 0:
+                continue
             rows.append({
                 "person_id": person.id, "person_name": person.name, "id_number": person.id_number,
                 "enterprise_name": enterprise.name if enterprise else "",
@@ -128,21 +152,72 @@ def insurer_monthly_premium_rows(session: Session, insurer_id: int, year: int, m
                 "terminated_at": member.terminated_at.date().isoformat() if member.terminated_at else None,
                 "billable_days": (end - start).days + 1,
                 "billable_ratio": round(ratio, 4),
-                "unit_price": amount(unit_price), "amount": amount(unit_price * ratio),
+                "unit_price": amount(unit_price), "amount": row_amount,
             })
     return rows
 
 
+def _settlement_record(session: Session, insurer_id: int, month: str) -> InsurerMonthlySettlement | None:
+    return session.scalar(select(InsurerMonthlySettlement).where(
+        InsurerMonthlySettlement.insurer_id == insurer_id, InsurerMonthlySettlement.month == month))
+
+
 def insurer_monthly_premium_summary(session: Session, insurer_id: int, months: int = 12) -> list[dict]:
-    """最近 months 个自然月（含当月，倒序）的应收总保费汇总。"""
+    """最近 months 个自然月（含当月，倒序）的应收总保费汇总，附带该月是否已经
+    平台标记结算、结算时间——纯记账标记，不影响这里的金额计算本身。"""
     today = business_today()
     result = []
     for i in range(months):
         y, m = _shift_month(today.year, today.month, -i)
+        month_str = f"{y:04d}-{m:02d}"
         rows = insurer_monthly_premium_rows(session, insurer_id, y, m)
+        settlement = _settlement_record(session, insurer_id, month_str)
         result.append({
-            "month": f"{y:04d}-{m:02d}",
+            "month": month_str,
             "total_premium": amount(sum(row["amount"] for row in rows)),
             "insured_count": len({row["person_id"] for row in rows}),
+            "settled": settlement is not None,
+            "settled_at": settlement.settled_at if settlement else None,
         })
     return result
+
+
+def mark_insurer_month_settled(session: Session, insurer_id: int, month: str, admin: User, note: str = "") -> dict:
+    """标记（或更新）某保司某自然月已结算。同一 (insurer_id, month) 只保留一条
+    记录——重复标记时更新 settled_at/settled_by/note，不会插出第二条（唯一约束
+    uq_insurer_monthly_settlement 在数据库层面也兜底这一点）。这只是记账标记，
+    不会改任何保费计算结果、不会触发任何自动化流程。"""
+    existing = _settlement_record(session, insurer_id, month)
+    if existing:
+        existing.settled_at = datetime.now(timezone.utc)
+        existing.settled_by = admin.id
+        existing.note = note
+        session.commit()
+        return serialize(existing)
+    item = InsurerMonthlySettlement(insurer_id=insurer_id, month=month, settled_by=admin.id, note=note)
+    session.add(item)
+    try:
+        session.commit()
+    except IntegrityError:
+        # 并发标记同一 (insurer_id, month)：唯一约束兜底，退化为更新已存在的那条，
+        # 保持接口幂等，而不是把 500 抛给调用方。
+        session.rollback()
+        existing = _settlement_record(session, insurer_id, month)
+        if not existing:
+            raise
+        existing.settled_at = datetime.now(timezone.utc)
+        existing.settled_by = admin.id
+        existing.note = note
+        session.commit()
+        return serialize(existing)
+    session.refresh(item)
+    return serialize(item)
+
+
+def unmark_insurer_month_settled(session: Session, insurer_id: int, month: str) -> bool:
+    existing = _settlement_record(session, insurer_id, month)
+    if not existing:
+        return False
+    session.delete(existing)
+    session.commit()
+    return True

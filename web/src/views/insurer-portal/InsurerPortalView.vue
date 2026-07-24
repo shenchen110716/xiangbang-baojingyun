@@ -9,6 +9,13 @@ import type { Claim, ClaimDocument, Insurer, Invoice, InsuredPerson, Policy, Pos
 import PageCard from '@/components/PageCard.vue'
 import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
 import HelpDrawer from '@/components/HelpDrawer.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
+
+const STATUS_LABELS: Record<string, string> = { active: '在保', pending: '待生效', stopped: '已停保' }
+function statusLabel(status: string) {
+  return STATUS_LABELS[status] || status
+}
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -33,6 +40,10 @@ const positions = ref<WorkPosition[]>([])
 async function loadPositions() {
   positions.value = await listInsurerPositions()
 }
+const pendingPositions = computed(() => positions.value.filter((x) => x.status !== 'approved'))
+const approvedPositions = computed(() => positions.value.filter((x) => x.status === 'approved'))
+const { page: pendingPositionsPage, pageSize: pendingPositionsPageSize, total: pendingPositionsTotal, paged: pendingPositionsPaged } = usePagedList(pendingPositions)
+const { page: approvedPositionsPage, pageSize: approvedPositionsPageSize, total: approvedPositionsTotal, paged: approvedPositionsPaged } = usePagedList(approvedPositions)
 
 const positionVideosVisible = ref(false)
 const positionVideosTarget = ref<WorkPosition | null>(null)
@@ -62,6 +73,7 @@ const policies = ref<Policy[]>([])
 async function loadPolicies() {
   policies.value = await listInsurerPolicies()
 }
+const { page: policiesPage, pageSize: policiesPageSize, total: policiesTotal, paged: policiesPaged } = usePagedList(policies)
 
 async function handlePolicyUpload(policyId: number, file: File) {
   try {
@@ -77,15 +89,19 @@ const settlement = ref<InsurerSettlement | null>(null)
 async function loadSettlement() {
   settlement.value = await getInsurerSettlement()
 }
+const settlementRows = computed(() => settlement.value?.rows || [])
+const { page: settlementRowsPage, pageSize: settlementRowsPageSize, total: settlementRowsTotal, paged: settlementRowsPaged } = usePagedList(settlementRows)
 
 const monthlyPremium = ref<InsurerMonthlyPremium[]>([])
 async function loadMonthlyPremium() {
   monthlyPremium.value = await getInsurerMonthlyPremiumSummary()
 }
+const { page: monthlyPage, pageSize: monthlyPageSize, total: monthlyTotal, paged: monthlyPaged } = usePagedList(monthlyPremium)
 
 const monthlyDetailVisible = ref(false)
 const monthlyDetailMonth = ref('')
 const monthlyDetailRows = ref<InsurerMonthlyPremiumRow[]>([])
+const { page: monthlyDetailPage, pageSize: monthlyDetailPageSize, total: monthlyDetailTotal, paged: monthlyDetailPaged } = usePagedList(monthlyDetailRows)
 const monthlyDetailLoading = ref(false)
 const monthlyDetailExporting = ref(false)
 async function openMonthlyDetail(row: InsurerMonthlyPremium) {
@@ -123,6 +139,7 @@ const invoices = ref<Invoice[]>([])
 async function loadInvoices() {
   invoices.value = await listInsurerInvoices()
 }
+const { page: invoicesPage, pageSize: invoicesPageSize, total: invoicesTotal, paged: invoicesPaged } = usePagedList(invoices)
 
 const insuredList = ref<InsuredPerson[]>([])
 async function loadInsured() {
@@ -134,6 +151,7 @@ const filteredInsuredList = computed(() => {
   if (!q) return insuredList.value
   return insuredList.value.filter((x) => x.name.includes(q) || x.id_number.includes(q))
 })
+const { page: insuredPage, pageSize: insuredPageSize, total: insuredTotal, paged: insuredPaged } = usePagedList(filteredInsuredList)
 
 const flagDialogVisible = ref(false)
 const flagTarget = ref<InsuredPerson | null>(null)
@@ -159,6 +177,7 @@ const claims = ref<Claim[]>([])
 async function loadClaims() {
   claims.value = await listInsurerClaims()
 }
+const { page: claimsPage, pageSize: claimsPageSize, total: claimsTotal, paged: claimsPaged } = usePagedList(claims)
 
 const claimDialogVisible = ref(false)
 const claimTarget = ref<Claim | null>(null)
@@ -263,8 +282,8 @@ function logout() {
     <main class="portal-body" v-loading="loading">
       <el-tabs v-model="tab">
         <el-tab-pane label="岗位核保" name="positions">
-          <PageCard title="名下岗位" :count="positions.length" hint="仅显示已分派到本保司产品线下的岗位">
-            <el-table :data="positions" size="small">
+          <PageCard title="待审核岗位" :count="pendingPositionsTotal" hint="仅显示已分派到本保司产品线下、尚未核保通过的岗位">
+            <el-table :data="pendingPositionsPaged" size="small">
               <el-table-column prop="name" label="岗位名称" min-width="140" />
               <el-table-column prop="actual_employer_name" label="实际用工单位" min-width="160" />
               <el-table-column prop="occupation_class" label="职业类别" width="100" />
@@ -274,31 +293,52 @@ function logout() {
                   <span v-else class="muted">未上传</span>
                 </template>
               </el-table-column>
-              <el-table-column label="状态" width="90">
-                <template #default="{ row }"><el-tag size="small" :type="row.status === 'approved' ? 'success' : 'info'">{{ row.status === 'approved' ? '已核保' : row.status }}</el-tag></template>
-              </el-table-column>
+              <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag size="small" type="info">{{ row.status }}</el-tag></template></el-table-column>
               <el-table-column label="操作" width="160">
                 <template #default="{ row }">
                   <el-button link type="primary" size="small" @click="openPositionVideos(row)">查看视频</el-button>
-                  <el-button v-if="row.status !== 'approved'" link type="primary" size="small" @click="approvePosition(row)">核保通过</el-button>
+                  <el-button link type="primary" size="small" @click="approvePosition(row)">核保通过</el-button>
                 </template>
               </el-table-column>
             </el-table>
-            <el-empty v-if="!positions.length" description="暂无名下岗位" :image-size="60" />
+            <el-empty v-if="!pendingPositionsTotal" description="暂无待审核岗位" :image-size="60" />
+            <TablePagination v-if="pendingPositionsTotal" v-model:page="pendingPositionsPage" v-model:page-size="pendingPositionsPageSize" :total="pendingPositionsTotal" />
+          </PageCard>
+
+          <PageCard title="已审核岗位" :count="approvedPositionsTotal" hint="仅显示已分派到本保司产品线下、已核保通过的岗位">
+            <el-table :data="approvedPositionsPaged" size="small">
+              <el-table-column prop="name" label="岗位名称" min-width="140" />
+              <el-table-column prop="actual_employer_name" label="实际用工单位" min-width="160" />
+              <el-table-column prop="occupation_class" label="职业类别" width="100" />
+              <el-table-column label="岗位视频" width="100">
+                <template #default="{ row }">
+                  <el-tag v-if="row.video_count" size="small" :type="row.latest_video_status === 'approved' ? 'success' : 'info'">{{ row.video_count }} 段</el-tag>
+                  <span v-else class="muted">未上传</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="状态" width="90"><template #default><el-tag size="small" type="success">已核保</el-tag></template></el-table-column>
+              <el-table-column label="操作" width="120">
+                <template #default="{ row }"><el-button link type="primary" size="small" @click="openPositionVideos(row)">查看视频</el-button></template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!approvedPositionsTotal" description="暂无已审核岗位" :image-size="60" />
+            <TablePagination v-if="approvedPositionsTotal" v-model:page="approvedPositionsPage" v-model:page-size="approvedPositionsPageSize" :total="approvedPositionsTotal" />
           </PageCard>
         </el-tab-pane>
 
         <el-tab-pane label="参保管理" name="enrollment">
-          <PageCard title="参保员工" :count="filteredInsuredList.length" hint="只能标注异常原因，不能直接修改参保状态">
+          <PageCard title="参保员工" :count="insuredTotal" hint="只能标注异常原因，不能直接修改参保状态">
             <template #actions>
               <el-input v-model="insuredSearch" placeholder="按姓名/身份证号搜索" clearable style="width: 220px" />
             </template>
-            <el-table :data="filteredInsuredList" size="small">
+            <el-table :data="insuredPaged" size="small">
               <el-table-column prop="name" label="姓名" width="100" />
               <el-table-column label="身份证号" min-width="180">
                 <template #default="{ row }">{{ maskId(row.id_number) }}</template>
               </el-table-column>
-              <el-table-column prop="status" label="状态" width="90" />
+              <el-table-column label="参保时间" width="100"><template #default="{ row }">{{ row.effective_at ? row.effective_at.slice(0, 10) : '—' }}</template></el-table-column>
+              <el-table-column label="停保时间" width="100"><template #default="{ row }">{{ row.terminated_at ? row.terminated_at.slice(0, 10) : '—' }}</template></el-table-column>
+              <el-table-column label="状态" width="90"><template #default="{ row }">{{ statusLabel(row.status) }}</template></el-table-column>
               <el-table-column label="异常标注" min-width="160">
                 <template #default="{ row }">
                   <el-tag v-if="row.insurer_flag_reason" type="danger" size="small">{{ row.insurer_flag_reason }}</el-tag>
@@ -309,11 +349,12 @@ function logout() {
                 <template #default="{ row }"><el-button link type="primary" size="small" @click="openFlagDialog(row)">标注</el-button></template>
               </el-table-column>
             </el-table>
-            <el-empty v-if="!filteredInsuredList.length" :description="insuredSearch ? '没有匹配的员工' : '暂无名下参保员工'" :image-size="60" />
+            <el-empty v-if="!insuredTotal" :description="insuredSearch ? '没有匹配的员工' : '暂无名下参保员工'" :image-size="60" />
+            <TablePagination v-if="insuredTotal" v-model:page="insuredPage" v-model:page-size="insuredPageSize" :total="insuredTotal" />
           </PageCard>
 
-          <PageCard title="名下保单" :count="policies.length">
-            <el-table :data="policies" size="small">
+          <PageCard title="名下保单" :count="policiesTotal">
+            <el-table :data="policiesPaged" size="small">
               <el-table-column prop="policy_no" label="保单号" min-width="160" />
               <el-table-column label="保费" width="100"><template #default="{ row }">{{ row.premium }}</template></el-table-column>
               <el-table-column label="保单文件" min-width="160">
@@ -331,13 +372,14 @@ function logout() {
                 </template>
               </el-table-column>
             </el-table>
-            <el-empty v-if="!policies.length" description="暂无名下保单" :image-size="60" />
+            <el-empty v-if="!policiesTotal" description="暂无名下保单" :image-size="60" />
+            <TablePagination v-if="policiesTotal" v-model:page="policiesPage" v-model:page-size="policiesPageSize" :total="policiesTotal" />
           </PageCard>
         </el-tab-pane>
 
         <el-tab-pane label="理赔管理" name="claims">
-          <PageCard title="名下理赔案件" :count="claims.length" hint="只展示已流转到保司审核中或之后节点的案件">
-            <el-table :data="claims" size="small">
+          <PageCard title="名下理赔案件" :count="claimsTotal" hint="只展示已流转到保司审核中或之后节点的案件">
+            <el-table :data="claimsPaged" size="small">
               <el-table-column prop="claim_no" label="案件号" min-width="160" />
               <el-table-column prop="person_name" label="被保险人" width="100" />
               <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
@@ -348,7 +390,8 @@ function logout() {
                 </template>
               </el-table-column>
             </el-table>
-            <el-empty v-if="!claims.length" description="暂无名下理赔案件" :image-size="60" />
+            <el-empty v-if="!claimsTotal" description="暂无名下理赔案件" :image-size="60" />
+            <TablePagination v-if="claimsTotal" v-model:page="claimsPage" v-model:page-size="claimsPageSize" :total="claimsTotal" />
           </PageCard>
         </el-tab-pane>
 
@@ -362,20 +405,25 @@ function logout() {
             </div>
           </PageCard>
 
-          <PageCard title="按月营收总保费" :count="monthlyPremium.length" hint="按人按天/按月折算，单价为结算价；点击某月查看明细并可导出">
-            <el-table :data="monthlyPremium" size="small">
+          <PageCard title="按月营收总保费" :count="monthlyTotal" hint="按人按天/按月折算，单价为结算价，只列保费大于 0 的月份；点击某月查看明细并可导出">
+            <el-table :data="monthlyPaged" size="small">
               <el-table-column prop="month" label="月份" width="120" />
               <el-table-column label="当月保费合计" width="140"><template #default="{ row }">{{ row.total_premium }}</template></el-table-column>
               <el-table-column label="在保人数" width="100"><template #default="{ row }">{{ row.insured_count }}</template></el-table-column>
+              <el-table-column label="是否已结算" width="110">
+                <template #default="{ row }"><el-tag size="small" :type="row.settled ? 'success' : 'info'">{{ row.settled ? '已结算' : '未结算' }}</el-tag></template>
+              </el-table-column>
+              <el-table-column label="结算时间" width="160"><template #default="{ row }">{{ row.settled_at ? row.settled_at.replace('T', ' ').slice(0, 19) : '—' }}</template></el-table-column>
               <el-table-column label="操作" width="100">
                 <template #default="{ row }"><el-button link type="primary" size="small" @click="openMonthlyDetail(row)">查看明细</el-button></template>
               </el-table-column>
             </el-table>
-            <el-empty v-if="!monthlyPremium.length" description="暂无按月保费数据" :image-size="60" />
+            <el-empty v-if="!monthlyTotal" description="暂无按月保费数据" :image-size="60" />
+            <TablePagination v-if="monthlyTotal" v-model:page="monthlyPage" v-model:page-size="monthlyPageSize" :total="monthlyTotal" />
           </PageCard>
 
-          <PageCard title="保单结算明细" :count="settlement?.rows.length || 0">
-            <el-table :data="settlement?.rows || []" size="small">
+          <PageCard title="保单结算明细" :count="settlementRowsTotal">
+            <el-table :data="settlementRowsPaged" size="small">
               <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
               <el-table-column prop="plan_name" label="产品方案" min-width="140" />
               <el-table-column prop="policy_no" label="保单号" min-width="140" />
@@ -384,13 +432,14 @@ function logout() {
               <el-table-column label="累计保费" width="100"><template #default="{ row }">{{ row.premium }}</template></el-table-column>
               <el-table-column prop="status" label="状态" width="90" />
             </el-table>
-            <el-empty v-if="!settlement?.rows.length" description="暂无结算数据" :image-size="60" />
+            <el-empty v-if="!settlementRowsTotal" description="暂无结算数据" :image-size="60" />
+            <TablePagination v-if="settlementRowsTotal" v-model:page="settlementRowsPage" v-model:page-size="settlementRowsPageSize" :total="settlementRowsTotal" />
           </PageCard>
         </el-tab-pane>
 
         <el-tab-pane label="发票管理" name="invoices">
-          <PageCard title="名下投保单位发票申请" :count="invoices.length">
-            <el-table :data="invoices" size="small">
+          <PageCard title="名下投保单位发票申请" :count="invoicesTotal">
+            <el-table :data="invoicesPaged" size="small">
               <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
               <el-table-column prop="account" label="费用类型" width="100">
                 <template #default="{ row }">{{ row.account === 'premium' ? '保费' : '使用费' }}</template>
@@ -398,7 +447,8 @@ function logout() {
               <el-table-column label="金额" width="100"><template #default="{ row }">{{ row.amount }}</template></el-table-column>
               <el-table-column prop="status" label="状态" width="90" />
             </el-table>
-            <el-empty v-if="!invoices.length" description="暂无发票申请" :image-size="60" />
+            <el-empty v-if="!invoicesTotal" description="暂无发票申请" :image-size="60" />
+            <TablePagination v-if="invoicesTotal" v-model:page="invoicesPage" v-model:page-size="invoicesPageSize" :total="invoicesTotal" />
           </PageCard>
         </el-tab-pane>
 
@@ -497,7 +547,7 @@ function logout() {
     </el-dialog>
 
     <el-dialog v-model="monthlyDetailVisible" :title="`${monthlyDetailMonth} 保费明细`" width="760px">
-      <el-table v-loading="monthlyDetailLoading" :data="monthlyDetailRows" size="small">
+      <el-table v-loading="monthlyDetailLoading" :data="monthlyDetailPaged" size="small">
         <el-table-column prop="person_name" label="姓名" width="90" />
         <el-table-column label="身份证号" min-width="170"><template #default="{ row }">{{ maskId(row.id_number) }}</template></el-table-column>
         <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
@@ -507,7 +557,8 @@ function logout() {
         <el-table-column label="参保天数" width="90"><template #default="{ row }">{{ row.billable_days }}</template></el-table-column>
         <el-table-column label="合计保费" width="100"><template #default="{ row }">{{ row.amount }}</template></el-table-column>
       </el-table>
-      <el-empty v-if="!monthlyDetailLoading && !monthlyDetailRows.length" description="该月暂无应收保费" :image-size="50" />
+      <el-empty v-if="!monthlyDetailLoading && !monthlyDetailTotal" description="该月暂无应收保费" :image-size="50" />
+      <TablePagination v-if="monthlyDetailTotal" v-model:page="monthlyDetailPage" v-model:page-size="monthlyDetailPageSize" :total="monthlyDetailTotal" />
       <template #footer>
         <el-button @click="monthlyDetailVisible = false">关闭</el-button>
         <el-button type="primary" :loading="monthlyDetailExporting" @click="exportMonthlyDetail">导出明细</el-button>

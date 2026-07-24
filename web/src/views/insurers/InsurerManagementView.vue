@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as insurersApi from '@/api/insurers'
-import type { InsurerAccount } from '@/api/insurers'
+import type { InsurerAccount, InsurerMonthlySettlementRow } from '@/api/insurers'
 import type { Insurer } from '@/api/types'
 import PageCard from '@/components/PageCard.vue'
 
@@ -121,6 +121,40 @@ async function resetAccountPassword(item: InsurerAccount) {
   } catch { /* cancelled */ }
 }
 
+const settlementVisible = ref(false)
+const settlementTarget = ref<Insurer | null>(null)
+const settlementRows = ref<InsurerMonthlySettlementRow[]>([])
+const settlementLoading = ref(false)
+async function openSettlement(item: Insurer) {
+  settlementTarget.value = item
+  settlementVisible.value = true
+  settlementLoading.value = true
+  try {
+    settlementRows.value = await insurersApi.getInsurerMonthlySettlement(item.id)
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    settlementLoading.value = false
+  }
+}
+async function toggleSettlement(row: InsurerMonthlySettlementRow) {
+  if (!settlementTarget.value) return
+  try {
+    if (row.settled) {
+      await ElMessageBox.confirm(`确认取消「${row.month}」的结算标记？`, '取消结算', { type: 'warning' })
+      await insurersApi.unmarkInsurerMonthSettled(settlementTarget.value.id, row.month)
+      ElMessage.success('已取消结算标记')
+    } else {
+      const { value } = await ElMessageBox.prompt(`标记「${row.month}」为已结算，可填写备注（选填）`, '标记已结算')
+      await insurersApi.markInsurerMonthSettled(settlementTarget.value.id, row.month, value || '')
+      ElMessage.success('已标记结算')
+    }
+    settlementRows.value = await insurersApi.getInsurerMonthlySettlement(settlementTarget.value.id)
+  } catch (e) {
+    if (e instanceof Error) ElMessage.error(e.message)
+  }
+}
+
 const mergeVisible = ref(false)
 const mergeTarget = ref<number | null>(null)
 const mergeSources = ref<number[]>([])
@@ -174,10 +208,11 @@ async function submitMerge() {
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '启用' : '暂停' }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="180">
+        <el-table-column label="操作" width="240">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="editInsurer(row)">编辑</el-button>
             <el-button link type="primary" size="small" @click="openAccounts(row)">登录账号</el-button>
+            <el-button link type="primary" size="small" @click="openSettlement(row)">月度结算</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -224,6 +259,31 @@ async function submitMerge() {
       <template #footer>
         <el-button @click="accountsVisible = false">关闭</el-button>
         <el-button type="primary" :loading="accountSaving" @click="submitAccount">创建账号</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="settlementVisible" :title="`${settlementTarget?.name || ''} · 按月应收总保费结算`" width="640px">
+      <el-table v-loading="settlementLoading" :data="settlementRows" size="small">
+        <el-table-column prop="month" label="月份" width="100" />
+        <el-table-column label="应收保费" width="120">
+          <template #default="{ row }">{{ row.total_premium.toFixed(2) }}</template>
+        </el-table-column>
+        <el-table-column prop="insured_count" label="参保人数" width="90" />
+        <el-table-column label="是否已结算" width="100">
+          <template #default="{ row }"><el-tag size="small" :type="row.settled ? 'success' : 'info'">{{ row.settled ? '已结算' : '未结算' }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="结算时间" min-width="140">
+          <template #default="{ row }">{{ row.settled_at ? row.settled_at.replace('T', ' ').slice(0, 19) : '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="toggleSettlement(row)">{{ row.settled ? '取消结算' : '标记结算' }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!settlementLoading && !settlementRows.length" description="暂无保费记录" :image-size="50" />
+      <template #footer>
+        <el-button @click="settlementVisible = false">关闭</el-button>
       </template>
     </el-dialog>
 

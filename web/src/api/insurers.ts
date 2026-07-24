@@ -49,3 +49,23 @@ export function setInsurerAccountStatus(accountId: number, status: 'active' | 'p
 export function resetInsurerAccountPassword(accountId: number, password: string) {
   return client.post<InsurerAccount>(`/insurers/accounts/${accountId}/reset-password`, { password }).then((response) => response.data)
 }
+
+export interface InsurerMonthlySettlementRow {
+  month: string
+  total_premium: number
+  insured_count: number
+  settled: boolean
+  settled_at: string | null
+}
+
+export function getInsurerMonthlySettlement(insurerId: number, months = 12) {
+  return client.get<InsurerMonthlySettlementRow[]>(`/insurers/${insurerId}/settlement/monthly`, { params: { months } }).then((response) => response.data)
+}
+
+export function markInsurerMonthSettled(insurerId: number, month: string, note = '') {
+  return client.post(`/insurers/${insurerId}/settlement/${month}`, { note }).then((response) => response.data)
+}
+
+export function unmarkInsurerMonthSettled(insurerId: number, month: string) {
+  return client.delete(`/insurers/${insurerId}/settlement/${month}`).then((response) => response.data)
+}

@@ -62,6 +62,8 @@ export interface InsurerMonthlyPremium {
   month: string
   total_premium: number
   insured_count: number
+  settled: boolean
+  settled_at: string | null
 }
 
 export interface InsurerMonthlyPremiumRow {

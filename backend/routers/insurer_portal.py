@@ -4,7 +4,6 @@ discipline as agent_portal.py: a supplied insurer_id in a query/body is never
 honoured, only the authenticated user's own insurer_id.
 """
 import io
-import re
 from datetime import datetime, timezone
 
 import openpyxl
@@ -16,9 +15,12 @@ from sqlalchemy.orm import Session
 from ..core.db import db
 from ..core.rbac import require_insurer_scope
 from ..core.security import current_user
-from ..models import Insurer, InsuredPerson, User, WorkPosition
+from ..models import Insurer, InsuredPerson, PolicyMember, User, WorkPosition
 from ..schemas.insurer import InsurerProfileIn
-from ..services import insurer_monthly_premium_rows, insurer_monthly_premium_summary, insurer_plan_ids, insurer_settlement_summary, serialize
+from ..services import (
+    effective_person_status, insurer_monthly_premium_rows, insurer_monthly_premium_summary,
+    insurer_plan_ids, insurer_settlement_summary, parse_insurer_month, serialize,
+)
 
 router = APIRouter(prefix="/api/insurer-portal", tags=["insurer-portal"])
 
@@ -54,22 +56,6 @@ def settlement(user: User = Depends(current_user), session: Session = Depends(db
     return insurer_settlement_summary(session, user.insurer_id, user)
 
 
-_MONTH_PATTERN = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
-
-
-def _parse_month(month: str) -> tuple[int, int, str]:
-    # 严格正则而不是 int() 直接转换：int() 会悄悄吃掉首尾空白/控制字符（比如
-    # "07\n" 也能转成 7），一旦校验通过又把原始 month 字符串继续往下传，这些
-    # 字符就会被裸拼进 Excel sheet 名和 Content-Disposition 响应头。这里返回
-    # 的第三项是用校验后的 (year, month) 重新拼出的规范化字符串，后续所有
-    # 拼接一律用这个，不再使用调用方传入的原始 month。
-    match = _MONTH_PATTERN.match(month)
-    if not match: raise HTTPException(400, "月份格式应为 yyyy-MM")
-    year, month_num = int(match.group(1)), int(match.group(2))
-    if not (2000 <= year <= 2100): raise HTTPException(400, "月份年份超出支持范围")
-    return year, month_num, f"{year:04d}-{month_num:02d}"
-
-
 @router.get("/settlement/monthly", dependencies=[Depends(_INSURER)])
 def settlement_monthly(months: int = Query(12, ge=1, le=24), user: User = Depends(current_user), session: Session = Depends(db)):
     return insurer_monthly_premium_summary(session, user.insurer_id, months)
@@ -77,13 +63,13 @@ def settlement_monthly(months: int = Query(12, ge=1, le=24), user: User = Depend
 
 @router.get("/settlement/monthly/{month}", dependencies=[Depends(_INSURER)])
 def settlement_monthly_detail(month: str, user: User = Depends(current_user), session: Session = Depends(db)):
-    year, month_num, _ = _parse_month(month)
+    year, month_num, _ = parse_insurer_month(month)
     return insurer_monthly_premium_rows(session, user.insurer_id, year, month_num)
 
 
 @router.get("/settlement/monthly/{month}/export", dependencies=[Depends(_INSURER)])
 def settlement_monthly_export(month: str, user: User = Depends(current_user), session: Session = Depends(db)):
-    year, month_num, clean_month = _parse_month(month)
+    year, month_num, clean_month = parse_insurer_month(month)
     rows = insurer_monthly_premium_rows(session, user.insurer_id, year, month_num)
     book = openpyxl.Workbook()
     sheet = book.active
@@ -106,6 +92,19 @@ def settlement_monthly_export(month: str, user: User = Depends(current_user), se
     )
 
 
+def _insurer_person_payload(session: Session, item: InsuredPerson) -> dict:
+    # 复用 routers/insured.py::_person_payload 的口径：effective_at/terminated_at
+    # 不是 InsuredPerson 自己的列，要从最近一条 PolicyMember 上取；status 也不是
+    # 直接用原始列，要跑一遍 effective_person_status 才是"待生效"这类展示口径
+    # 该有的真实状态，不然 serialize() 直出的 status 可能是过期值。
+    payload = serialize(item)
+    member = session.scalar(select(PolicyMember).where(PolicyMember.person_id == item.id).order_by(PolicyMember.id.desc()))
+    effective_at, terminated_at = (member.effective_at, member.terminated_at) if member else (None, None)
+    payload["effective_at"], payload["terminated_at"] = effective_at, terminated_at
+    payload["status"] = effective_person_status(item, terminated_at)
+    return payload
+
+
 @router.get("/insured", dependencies=[Depends(_INSURER)])
 def insured_for_review(user: User = Depends(current_user), session: Session = Depends(db)):
     plan_ids = insurer_plan_ids(session, user.insurer_id)
@@ -113,4 +112,4 @@ def insured_for_review(user: User = Depends(current_user), session: Session = De
         return []
     stmt = select(InsuredPerson).join(WorkPosition, InsuredPerson.position_id == WorkPosition.id).where(
         WorkPosition.plan_id.in_(plan_ids)).order_by(InsuredPerson.id.desc())
-    return [serialize(x) for x in session.scalars(stmt)]
+    return [_insurer_person_payload(session, x) for x in session.scalars(stmt)]

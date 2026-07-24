@@ -14,8 +14,11 @@ from ..core.db import db
 from ..core.rbac import require_role
 from ..core.security import current_user, pwd
 from ..models import Insurer, InsurancePlan, InsurerAccountLink, User
-from ..schemas.insurer import InsurerAccountIn, InsurerAccountPasswordResetIn, InsurerEditReviewIn, InsurerIn, InsurerMergeIn, InsurerUpdate
-from ..services import serialize
+from ..schemas.insurer import InsurerAccountIn, InsurerAccountPasswordResetIn, InsurerEditReviewIn, InsurerIn, InsurerMergeIn, InsurerSettlementMarkIn, InsurerUpdate
+from ..services import (
+    insurer_monthly_premium_summary, mark_insurer_month_settled, parse_insurer_month, serialize,
+    unmark_insurer_month_settled,
+)
 
 router = APIRouter(prefix="/api", tags=["insurers"])
 
@@ -146,3 +149,28 @@ def reset_insurer_account_password(account_id: int, data: InsurerAccountPassword
     session.commit()
     audit(session, user, "password_reset", "insurer_account", str(item.id))
     return _account_dict(item)
+
+
+@router.get("/insurers/{item_id}/settlement/monthly", dependencies=[Depends(_ADMIN)])
+def insurer_monthly_settlement_admin(item_id: int, months: int = Query(12, ge=1, le=24), session: Session = Depends(db)):
+    if not session.get(Insurer, item_id): raise HTTPException(404, "保险公司不存在")
+    return insurer_monthly_premium_summary(session, item_id, months)
+
+
+@router.post("/insurers/{item_id}/settlement/{month}", dependencies=[Depends(_ADMIN)])
+def mark_insurer_settlement(item_id: int, month: str, data: InsurerSettlementMarkIn, user: User = Depends(current_user), session: Session = Depends(db)):
+    if not session.get(Insurer, item_id): raise HTTPException(404, "保险公司不存在")
+    _, _, clean_month = parse_insurer_month(month)
+    result = mark_insurer_month_settled(session, item_id, clean_month, user, data.note.strip())
+    audit(session, user, "settle", "insurer_monthly_settlement", f"{item_id}:{clean_month}")
+    return result
+
+
+@router.delete("/insurers/{item_id}/settlement/{month}", dependencies=[Depends(_ADMIN)])
+def unmark_insurer_settlement(item_id: int, month: str, user: User = Depends(current_user), session: Session = Depends(db)):
+    if not session.get(Insurer, item_id): raise HTTPException(404, "保险公司不存在")
+    _, _, clean_month = parse_insurer_month(month)
+    if not unmark_insurer_month_settled(session, item_id, clean_month):
+        raise HTTPException(404, "该月尚未标记结算")
+    audit(session, user, "unsettle", "insurer_monthly_settlement", f"{item_id}:{clean_month}")
+    return {"ok": True}

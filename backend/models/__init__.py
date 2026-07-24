@@ -1,6 +1,6 @@
 from ..core.db import Base
 from .user import User
-from .insurer import Insurer
+from .insurer import Insurer, InsurerMonthlySettlement
 from .enterprise import Enterprise, ActualEmployer, UserEmployerScope
 from .position import WorkPosition, PositionVideo
 from .plan import InsurancePlan, PlanTier
@@ -26,6 +26,7 @@ __all__ = [
     "Base",
     "User",
     "Insurer",
+    "InsurerMonthlySettlement",
     "Enterprise",
     "ActualEmployer",
     "UserEmployerScope",
