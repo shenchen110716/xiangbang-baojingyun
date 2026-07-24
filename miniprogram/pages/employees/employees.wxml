@@ -20,6 +20,7 @@
         <view class="list-meta">{{item.id_masked}}<text wx:if="{{item.phone}}"> · {{item.phone}}</text></view>
         <view class="list-meta">{{item.actual_employer_name||'未关联用工单位'}} · {{item.position_name||'未关联岗位'}}</view>
         <view wx:if="{{item.plan_name}}" class="small" style="margin-top:10rpx">{{item.insurer}} · {{item.plan_name}}</view>
+        <view wx:if="{{item.effective_at_display}}" class="small" style="margin-top:10rpx">参保时间：{{item.effective_at_display}}</view>
         <view wx:if="{{item.terminated_at_display}}" class="small" style="margin-top:10rpx;color:#dc2626">停保时间：{{item.terminated_at_display}}</view>
       </view>
     </view>

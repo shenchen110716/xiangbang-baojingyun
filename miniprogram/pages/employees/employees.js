@@ -57,6 +57,10 @@ Page({
         const pendingBucket = pendingEffective || item.status === 'pending';
         return {
           ...item, initial: String(item.name || '员').slice(0, 1), status_label: pendingBucket ? '待生效' : app.statusText(item.status), status_display: pendingBucket ? 'pending' : item.status, id_masked: this.maskId(item.id_number),
+          // 参保时间（保险生效时间）：和详情页 formatCoverageDate() 同一个
+          // 格式化规则，只要有 effective_at 就带出来，不区分状态——待生效
+          // 的人尤其需要看到"什么时候生效"，不用点进详情才知道。
+          effective_at_display: item.effective_at ? app.formatCoverageDate(item.effective_at, item.effective_mode) : '',
           // 已停保的人在列表里之前只有一个灰色状态标签，看不出具体哪天停的，
           // 要点进详情才知道——审计"停保相关显示"时发现的缺口，这里直接把
           // 停保时间带出来，和详情页 formatCoverageDate() 同一个格式化规则。
