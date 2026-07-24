@@ -1,6 +1,6 @@
 <view class="page safe-bottom">
   <view class="title">{{id?'编辑员工':'新增参保员工'}}</view>
-  <view class="subtitle">选择已审核岗位后，职业类别、保险方案和费率将自动带出</view>
+  <view wx:if="{{!locked}}" class="subtitle">选择已审核岗位后，职业类别、保险方案和费率将自动带出</view>
   <view wx:if="{{loading}}" class="loading">正在加载…</view>
   <view wx:else class="card section">
     <block wx:if="{{!locked}}">
