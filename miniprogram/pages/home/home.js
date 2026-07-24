@@ -12,7 +12,10 @@ Page({
     enterprise: {},
     greeting: '你好',
     today: '',
-    positionCards: []
+    positionCards: [],
+    filteredPositionCards: [],
+    positionSearchVisible: false,
+    positionSearchQuery: ''
   },
   onShow() {
     if (!app.globalData.token) {
@@ -95,8 +98,27 @@ Page({
         dashboard.premium_consumed_total = premiumAccounts.reduce((sum, item) => sum + (item.consumed || 0), 0);
         const positionCards = this.buildPositionCards(positions || [], plans || [], people || []);
         this.setData({ dashboard, user, enterprise: app.globalData.enterprise || {}, positionCards, loading: false });
+        this.applyPositionSearch();
       })
       .catch((error) => { this.setData({ loading: false }); wx.showToast({ title: error.message, icon: 'none' }); });
+  },
+  // 按企业（用工单位）、保险（保司/产品）、岗位名称三个字段做本地过滤，数据
+  // 已经在 load() 里一次性取回，不需要额外请求接口。
+  applyPositionSearch() {
+    const q = (this.data.positionSearchQuery || '').trim().toLowerCase();
+    const filteredPositionCards = q
+      ? this.data.positionCards.filter((item) => `${item.name}${item.actual_employer_name}${item.plan_text}`.toLowerCase().includes(q))
+      : this.data.positionCards;
+    this.setData({ filteredPositionCards });
+  },
+  togglePositionSearch() {
+    const positionSearchVisible = !this.data.positionSearchVisible;
+    this.setData({ positionSearchVisible, positionSearchQuery: '' });
+    this.applyPositionSearch();
+  },
+  searchPositions(e) {
+    this.setData({ positionSearchQuery: e.detail.value });
+    this.applyPositionSearch();
   },
   go(e) { wx.navigateTo({ url: e.currentTarget.dataset.url }); },
   goPosition(e) {

@@ -31,8 +31,17 @@
   </view>
 
   <view class="section">
-    <view class="section-head"><text class="section-title">参保方案</text><text class="section-link" bindtap="addPosition">+ 新增方案</text></view>
-    <view wx:for="{{positionCards}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="goPosition">
+    <view class="section-head">
+      <text class="section-title">参保方案</text>
+      <view class="row">
+        <text class="section-link" style="margin-right:20rpx" bindtap="togglePositionSearch">🔍 搜索</text>
+        <text class="section-link" bindtap="addPosition">+ 新增方案</text>
+      </view>
+    </view>
+    <view wx:if="{{positionSearchVisible}}" class="search">
+      <input class="input" placeholder="按企业、保险、岗位搜索" value="{{positionSearchQuery}}" bindinput="searchPositions" focus="{{positionSearchVisible}}" />
+    </view>
+    <view wx:for="{{filteredPositionCards}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="goPosition">
       <view class="row between">
         <text class="list-title">{{item.name}}</text>
         <view class="row">
@@ -54,6 +63,10 @@
       <view>暂无已审核通过的岗位</view>
       <view class="small">新增岗位并上传视频，等待平台/保司定类后会出现在这里</view>
       <button class="primary" style="margin-top:24rpx" bindtap="addPosition">+ 新增方案</button>
+    </view>
+    <view wx:if="{{!loading&&positionCards.length&&!filteredPositionCards.length}}" class="empty">
+      <view class="empty-icon">🔍</view>
+      <view>没有匹配"{{positionSearchQuery}}"的方案</view>
     </view>
   </view>
   </block>
