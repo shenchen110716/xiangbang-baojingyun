@@ -3,10 +3,6 @@ const app = getApp();
 Page({
   data: {
     loading: true,
-    // 小程序必须先打开首页，登录是进入后的授权行为，不允许首次打开就强制
-    // 拦截跳登录页——未登录时首页照常渲染，只是展示品牌介绍 + 登录入口，
-    // 不请求任何需要鉴权的数据。
-    loggedIn: false,
     dashboard: { active_people: 0, pending_people: 0, premium_balance_total: 0, usage_available: 0, usage_recharged: 0, usage_consumed: 0, claims_open: 0, balance_alerts: [] },
     user: {},
     enterprise: {},
@@ -17,16 +13,21 @@ Page({
     positionSearchVisible: false,
     positionSearchQuery: ''
   },
+  // 小程序必须先打开首页，登录是进入后的授权行为，不允许首次打开就强制
+  // 拦截跳登录页——未登录时首页照常渲染（看板、参保方案卡片都在），只是
+  // 没有数据，不请求任何需要鉴权的接口；真正会调接口的操作（去充值、
+  // 查名单、新增参保/岗位）各自调 requireLogin() 拦截。
+  requireLogin() {
+    if (app.globalData.token) return true;
+    wx.navigateTo({ url: '/pages/login/login' });
+    return false;
+  },
   onShow() {
-    if (!app.globalData.token) {
-      this.setData({ loggedIn: false, loading: false });
-      return;
-    }
-    this.setData({ loggedIn: true });
+    if (!app.globalData.token) { this.setData({ loading: false }); return; }
     this.load();
   },
   onPullDownRefresh() {
-    if (!this.data.loggedIn) { wx.stopPullDownRefresh(); return; }
+    if (!app.globalData.token) { wx.stopPullDownRefresh(); return; }
     this.load().finally(() => wx.stopPullDownRefresh());
   },
   // 每张卡片对应一个已审核通过（status==='approved'）的岗位——职业类别、关联
@@ -133,6 +134,7 @@ Page({
   // 就不猜，交给充值页自己的保司选择器（recharge-request.js 已经支持不传
   // insurer 时自己加载可选项）。
   goRecharge(e) {
+    if (!this.requireLogin()) return;
     const accountType = e.currentTarget.dataset.account === 'premium' ? 'premium' : 'usage';
     const enterpriseId = (this.data.enterprise && this.data.enterprise.id) || (app.globalData.user && app.globalData.user.enterprise_id) || 0;
     let insurerParam = '';
@@ -145,6 +147,7 @@ Page({
     wx.navigateTo({ url: `/pages/recharge-request/recharge-request?enterpriseId=${enterpriseId}&accountType=${accountType}${insurerParam}` });
   },
   goPosition(e) {
+    if (!this.requireLogin()) return;
     app.globalData.pendingEmployeesFilter = { status: '', position_id: Number(e.currentTarget.dataset.id) };
     wx.switchTab({ url: '/pages/employees/employees' });
   },
@@ -153,9 +156,12 @@ Page({
   // 不用像 goPosition 那样先经过参保人员列表这一层。employee-edit 不是
   // tabBar 页面，用 wx.navigateTo 没问题。
   addEnroll(e) {
+    if (!this.requireLogin()) return;
     wx.navigateTo({ url: `/pages/employee-edit/employee-edit?positionId=${e.currentTarget.dataset.id}` });
   },
-  addPosition() { wx.navigateTo({ url: '/pages/position-edit/position-edit' }); },
-  goLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
+  addPosition() {
+    if (!this.requireLogin()) return;
+    wx.navigateTo({ url: '/pages/position-edit/position-edit' });
+  },
   onShareAppMessage() { return app.share('/pages/home/home', 'from=share'); }
 });

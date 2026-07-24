@@ -1,17 +1,4 @@
 <view class="page safe-bottom">
-  <view wx:if="{{!loggedIn}}" class="hero">
-    <view class="hero-title">响帮帮无忧保</view>
-    <view class="hero-sub">企业员工保障服务一站式管理平台</view>
-  </view>
-  <view wx:if="{{!loggedIn}}" class="section">
-    <view class="card notice">
-      <view class="strong">欢迎使用响帮帮无忧保</view>
-      <view class="list-meta">登录后可查看参保员工、理赔进度、资金账户等信息</view>
-    </view>
-    <button class="primary" style="margin-top:20rpx" bindtap="goLogin">登录 / 切换账号</button>
-  </view>
-
-  <block wx:if="{{loggedIn}}">
   <view class="hero">
     <view class="hero-sub">{{today}}</view>
     <view class="hero-title">{{greeting}}，{{user.name||'企业管理员'}} 👋</view>
@@ -69,5 +56,4 @@
       <view>没有匹配"{{positionSearchQuery}}"的方案</view>
     </view>
   </view>
-  </block>
 </view>
