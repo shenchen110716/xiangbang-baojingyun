@@ -14,7 +14,7 @@
   <view wx:if="{{loading}}" class="loading">正在加载员工…</view>
   <view wx:for="{{filtered}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="rowTap">
     <view class="row top">
-      <view wx:if="{{selectMode}}" class="select-box {{selectedIds.indexOf(item.id)>-1?'checked':''}}" data-id="{{item.id}}" catchtap="toggleSelect">{{selectedIds.indexOf(item.id)>-1?'✔':''}}</view>
+      <view wx:if="{{selectMode}}" class="select-box {{selectedIds.indexOf(item.id)>-1?'checked':''}}">{{selectedIds.indexOf(item.id)>-1?'✔':''}}</view>
       <view class="grow">
         <view class="row between"><text class="list-title">{{item.name}}</text><text class="tag {{item.status_display==='pending'?'tag-warning':item.status_display==='active'?'tag-success':'tag-gray'}}">{{item.status_label}}</text></view>
         <view class="list-meta">{{item.id_masked}}<text wx:if="{{item.phone}}"> · {{item.phone}}</text></view>
