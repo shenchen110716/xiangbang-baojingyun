@@ -38,9 +38,11 @@ Page({
   },
   buildPositionCards(positions, plans, people) {
     const planById = new Map(plans.map((plan) => [plan.id, plan]));
+    const positionById = new Map(positions.map((position) => [position.id, position]));
     const activeByPosition = new Map();
     const pendingByPosition = new Map();
     people.forEach((person) => {
+      if (!person.position_id) return;
       const pending = person.status === 'pending' || this.isPendingEffective(person);
       if (pending) {
         pendingByPosition.set(person.position_id, (pendingByPosition.get(person.position_id) || 0) + 1);
@@ -48,8 +50,17 @@ Page({
         activeByPosition.set(person.position_id, (activeByPosition.get(person.position_id) || 0) + 1);
       }
     });
-    return positions
-      .filter((position) => position.status === 'approved')
+    // 卡片默认只展示已审核通过（status==='approved'）的岗位——那才是真正
+    // 能继续新增/减保的入口。但如果某个岗位当前有在保/待生效的人（哪怕岗位
+    // 后来因为编辑被打回待审核，生产数据里已经发现过这种情况），这些人依
+    // 然是真实在保人数，不能因为过滤掉了岗位卡片就从"在保人数"里凭空消
+    // 失——不然几张卡片加起来会比企业实际在保总人数少。这类岗位也一起展示。
+    const positionIds = new Set(positions.filter((position) => position.status === 'approved').map((position) => position.id));
+    activeByPosition.forEach((_count, id) => positionIds.add(id));
+    pendingByPosition.forEach((_count, id) => positionIds.add(id));
+    return Array.from(positionIds)
+      .map((id) => positionById.get(id))
+      .filter(Boolean)
       .map((position) => {
         const plan = position.plan_id ? planById.get(position.plan_id) : null;
         const priceText = plan ? `${plan.insurer} · ${plan.name}` : '尚未关联保司产品';
