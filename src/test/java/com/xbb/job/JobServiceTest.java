@@ -4,6 +4,7 @@ import com.xbb.TestcontainersConfig;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
+import com.xbb.job.internal.Application;
 import com.xbb.job.internal.ApprovedOrgRepository;
 import com.xbb.job.internal.JobVerifiedUserRepository;
 import com.xbb.org.api.OrgApi;
@@ -114,5 +115,47 @@ class JobServiceTest {
         assertThatThrownBy(() -> jobApi.apply(jobId, unverifiedApplicant))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("实名认证");
+    }
+
+    @Test
+    void 法人代表可以录用应聘者() {
+        long legalRep = verifiedUser("13300000010", "法人六", "110101199001013010");
+        long orgId = approvedOrg(legalRep, "六号工厂", "91110000000000056X");
+        long jobId = jobApi.postJob(orgId, "打包工", "仓库打包", 2500, legalRep);
+        long applicant = verifiedUser("13300000011", "应聘者二", "110101199001013011");
+        long applicationId = jobApi.apply(jobId, applicant);
+
+        jobApi.acceptApplication(applicationId, legalRep);
+
+        assertThat(jobApi.findApplication(applicationId).orElseThrow().status())
+                .isEqualTo(Application.Status.ACCEPTED);
+    }
+
+    @Test
+    void 非法人代表不能录用应聘者() {
+        long legalRep = verifiedUser("13300000012", "法人七", "110101199001013012");
+        long orgId = approvedOrg(legalRep, "七号工厂", "91110000000000057X");
+        long jobId = jobApi.postJob(orgId, "分拣工", "仓库分拣", 2400, legalRep);
+        long applicant = verifiedUser("13300000013", "应聘者三", "110101199001013013");
+        long applicationId = jobApi.apply(jobId, applicant);
+        long stranger = verifiedUser("13300000014", "路人二", "110101199001013014");
+
+        assertThatThrownBy(() -> jobApi.acceptApplication(applicationId, stranger))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("法人代表");
+    }
+
+    @Test
+    void 已处理的应聘不能重复处理() {
+        long legalRep = verifiedUser("13300000015", "法人八", "110101199001013015");
+        long orgId = approvedOrg(legalRep, "八号工厂", "91110000000000058X");
+        long jobId = jobApi.postJob(orgId, "客服", "在线客服", 2300, legalRep);
+        long applicant = verifiedUser("13300000016", "应聘者四", "110101199001013016");
+        long applicationId = jobApi.apply(jobId, applicant);
+        jobApi.acceptApplication(applicationId, legalRep);
+
+        assertThatThrownBy(() -> jobApi.rejectApplication(applicationId, legalRep))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("待处理");
     }
 }

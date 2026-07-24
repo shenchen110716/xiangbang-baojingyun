@@ -14,5 +14,11 @@ public interface JobApi {
 
     long apply(long jobId, long applicantUserId);
 
+    void acceptApplication(long applicationId, long callerUserId);
+
+    void rejectApplication(long applicationId, long callerUserId);
+
     Optional<JobView> findJob(long jobId);
+
+    Optional<ApplicationView> findApplication(long applicationId);
 }

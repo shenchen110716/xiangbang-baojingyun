@@ -1,0 +1,1 @@
+ALTER TABLE job.application ADD COLUMN version BIGINT NOT NULL DEFAULT 0;
