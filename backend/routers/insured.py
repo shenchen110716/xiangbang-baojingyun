@@ -28,6 +28,7 @@ from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
 from ..schemas import BulkPersonIn, InsurerFlagIn, PersonIn, PersonUpdate
 from ..services import activate_person_policy, allowed_employer_ids, assert_employer_access, correct_person_policy_dates, effective_person_status, is_enterprise_owner, plan_price_for_class, pricing_snapshot, require_usage_funded, serialize, strip_internal_pricing, terminate_person_policy
+from ..services.insurer_scope import assert_plan_belongs_to_insurer
 from ..services.spreadsheet import MAX_IMPORT_FILE_BYTES, read_import_rows
 from ..services.timeliness_recalc import record_operation
 
@@ -183,8 +184,7 @@ def flag_insured_person(item_id:int,data:InsurerFlagIn,user:User=Depends(current
     item=session.get(InsuredPerson,item_id)
     if not item: raise HTTPException(404,'参保员工不存在')
     position=session.get(WorkPosition,item.position_id) if item.position_id else None
-    plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None
-    if not plan or plan.insurer_id!=user.insurer_id: raise HTTPException(403,'无权标注其他保险公司名下的参保员工')
+    assert_plan_belongs_to_insurer(session,user,position.plan_id if position else None)
     reason=data.reason.strip()
     item.insurer_flag_reason=reason
     item.insurer_flagged_at=datetime.now() if reason else None

@@ -2,11 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-本文件适用于 Claude Code 在“响帮帮保经云”仓库内的所有开发工作。协作协议部分对多代理并行开发是硬约束，改动前务必确认所有权。
+本文件适用于 Claude Code 在“响帮帮无忧保”仓库内的所有开发工作。协作协议部分对多代理并行开发是硬约束，改动前务必确认所有权。
 
 ## 架构总览（先读这一节）
 
-“响帮帮保经云”是保险经纪管理系统，**三端共用同一个 FastAPI 单体后端**：
+“响帮帮无忧保”是保险经纪管理系统，**三端共用同一个 FastAPI 单体后端**：
 
 - **后端** `backend/app.py` 同时承担三件事：① 提供 `/api/*` 业务接口；② 挂载并服务 Vue 管理端构建产物 `web/dist`；③ 为微信小程序提供同一套 `/api`。
 - **Web 管理端** `web/`（Vue 3 + Vite + Element Plus + Pinia + vue-router + ECharts），构建产物落在 `web/dist`，由后端提供。
