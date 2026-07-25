@@ -51,6 +51,13 @@ public class TestcontainersConfig {
         registry.add("xbb.domains.job.flyway.url", PG::getJdbcUrl);
         registry.add("xbb.domains.job.flyway.user", PG::getUsername);
         registry.add("xbb.domains.job.flyway.password", PG::getPassword);
+        // engagement 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.engagement.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.engagement.datasource.username", () -> "engagement_user");
+        registry.add("xbb.domains.engagement.datasource.password", () -> "engagement_pw");
+        registry.add("xbb.domains.engagement.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.engagement.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.engagement.flyway.password", PG::getPassword);
         // settlement 域:同一个容器,不同 schema/用户
         registry.add("xbb.domains.settlement.datasource.url", PG::getJdbcUrl);
         registry.add("xbb.domains.settlement.datasource.username", () -> "settlement_user");

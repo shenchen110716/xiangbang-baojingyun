@@ -40,7 +40,7 @@ class JobService implements JobApi {
             throw new IllegalStateException("只有组织法人代表可以发布岗位");
         }
         Job job = jobs.save(new Job(orgId, title, description, wageCents));
-        events.publishEvent(new JobPosted(job.getId(), orgId, Instant.now()));
+        events.publishEvent(new JobPosted(job.getId(), orgId, wageCents, Instant.now()));
         return job.getId();
     }
 
