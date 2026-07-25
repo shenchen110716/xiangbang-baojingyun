@@ -7,7 +7,9 @@ import java.time.Instant;
 @Table(name = "settlement", schema = "settlement")
 public class Settlement {
 
-    public enum Status { PENDING, PAID, VOIDED }
+    // 不含 PAID——发钱是否成功是资金域的事(结算⊥资金,见 Plan6),本域只有
+    // "算出来了(PENDING)"和"作废(VOIDED)"两种状态,没有权威地知道钱是否已经发出去。
+    public enum Status { PENDING, VOIDED }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -45,11 +47,6 @@ public class Settlement {
         this.jobId = jobId;
         this.workerUserId = workerUserId;
         this.amountCents = amountCents;
-    }
-
-    public void pay() {
-        if (status != Status.PENDING) throw new IllegalStateException("只有待结算状态可以支付");
-        this.status = Status.PAID;
     }
 
     public void voidSettlement(String reason) {

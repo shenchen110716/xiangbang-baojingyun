@@ -22,12 +22,6 @@ class SettlementController {
         return settlementApi.findById(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @PutMapping("/{id}/pay")
-    ResponseEntity<Void> pay(@PathVariable long id) {
-        settlementApi.pay(id);
-        return ResponseEntity.noContent().build();
-    }
-
     @PutMapping("/{id}/void")
     ResponseEntity<Void> voidSettlement(@PathVariable long id, @RequestBody VoidRequest req) {
         settlementApi.voidSettlement(id, req.reason());

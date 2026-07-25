@@ -1,4 +1,4 @@
-package com.xbb.settlement;
+package com.xbb.fund;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.TestcontainersConfig;
@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import({TestcontainersConfig.class, TestCodeAccessor.class})
-class SettlementControllerTest {
+class FundControllerTest {
 
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
@@ -31,22 +31,16 @@ class SettlementControllerTest {
     @Autowired ObjectMapper json;
 
     @Test
-    void 未带token作废被拒绝() throws Exception {
-        mvc.perform(put("/api/settlement/999999/void")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reason\":\"测试\"}"))
+    void 未带token发放被拒绝() throws Exception {
+        mvc.perform(put("/api/fund/payouts/999999/disburse"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void 不存在的结算记录作废返回400() throws Exception {
-        // 结算接口目前是"authenticated 即可操作"的粗粒度鉴权,随便借一个合法登录态即可
-        String token = tokenFor("13100000099");
+    void 不存在的发放记录返回400() throws Exception {
+        String token = tokenFor("13400000099");
 
-        mvc.perform(put("/api/settlement/999999/void")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reason\":\"测试\"}"))
+        mvc.perform(put("/api/fund/payouts/999999/disburse").header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest());
     }
 

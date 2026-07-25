@@ -1,7 +1,6 @@
 package com.xbb.settlement.internal;
 
 import com.xbb.settlement.api.SettlementApi;
-import com.xbb.settlement.api.SettlementPaid;
 import com.xbb.settlement.api.SettlementVoided;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -19,17 +18,6 @@ class SettlementService implements SettlementApi {
     SettlementService(SettlementRepository settlements, ApplicationEventPublisher events) {
         this.settlements = settlements;
         this.events = events;
-    }
-
-    @Override
-    @Transactional("settlementTransactionManager")
-    public void pay(long settlementId) {
-        Settlement settlement = settlements.findById(settlementId)
-                .orElseThrow(() -> new IllegalArgumentException("结算记录不存在"));
-        settlement.pay();
-        settlements.save(settlement);
-        events.publishEvent(new SettlementPaid(
-                settlementId, settlement.getWorkerUserId(), settlement.getAmountCents(), Instant.now()));
     }
 
     @Override

@@ -4,6 +4,7 @@ import com.xbb.TestcontainersConfig;
 import com.xbb.broker.api.BrokerApi;
 import com.xbb.broker.internal.Commission;
 import com.xbb.broker.internal.CommissionRepository;
+import com.xbb.fund.api.FundApi;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
@@ -25,7 +26,7 @@ import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
 @Import({TestcontainersConfig.class, TestCodeAccessor.class})
-class SettlementEventListenerTest {
+class FundEventListenerTest {
 
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
@@ -37,6 +38,7 @@ class SettlementEventListenerTest {
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
     @Autowired SettlementApi settlementApi;
+    @Autowired FundApi fundApi;
     @Autowired BrokerApi brokerApi;
     @Autowired CommissionRepository commissions;
     @Autowired com.xbb.broker.internal.BrokerVerifiedUserRepository verifiedUsers;
@@ -71,15 +73,23 @@ class SettlementEventListenerTest {
         return settlementIdHolder.get();
     }
 
+    private long disburse(long settlementId) {
+        AtomicLong payoutIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                payoutIdHolder.set(fundApi.findBySettlementId(settlementId).orElseThrow().id()));
+        fundApi.disburse(payoutIdHolder.get());
+        return payoutIdHolder.get();
+    }
+
     @Test
-    void 结算支付事件被经纪人域订阅并生成佣金() {
+    void 资金域发放事件被经纪人域订阅并生成佣金() {
         long broker = verifiedUser("13000000020", "孙经纪五", "110101199001011020");
         brokerApi.registerBroker(broker);
         long worker = verifiedUser("13000000021", "工人四", "110101199001011021");
         brokerApi.bindWorker(broker, worker);
 
         long settlementId = settlementFor(worker, "13000000022", "b1", 5000);
-        settlementApi.pay(settlementId);
+        disburse(settlementId);
 
         await().atMost(Duration.ofSeconds(5)).until(() -> commissions.findBySettlementId(settlementId).isPresent());
         var commission = commissions.findBySettlementId(settlementId).orElseThrow();
@@ -93,7 +103,7 @@ class SettlementEventListenerTest {
         long worker = verifiedUser("13000000023", "工人五", "110101199001011023");
         long settlementId = settlementFor(worker, "13000000024", "b2", 4000);
 
-        settlementApi.pay(settlementId);
+        disburse(settlementId);
 
         // 预期结果是"始终没有"而不是"最终出现",象征性等一下确保同步链路已经跑完。
         try { Thread.sleep(500); } catch (InterruptedException ignored) { }
