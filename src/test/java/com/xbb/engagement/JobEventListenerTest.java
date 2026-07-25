@@ -37,7 +37,7 @@ class JobEventListenerTest {
 
     @Test
     void 岗位发布事件被履约域订阅并落地只读副本() {
-        String phone = "15100000003";
+        String phone = "15200000003";
         long legalRep = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
         identityApi.verifyRealName(legalRep, "李法人", "110101199001015003");
 

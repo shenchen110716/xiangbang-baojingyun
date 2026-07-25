@@ -1,6 +1,7 @@
 package com.xbb.fund;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.engagement.api.EngagementApi;
 import com.xbb.fund.internal.Payout;
 import com.xbb.fund.internal.PayoutRepository;
 import com.xbb.identity.TestCodeAccessor;
@@ -34,6 +35,7 @@ class SettlementEventListenerTest {
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
+    @Autowired EngagementApi engagementApi;
     @Autowired PayoutRepository payouts;
 
     private long verifiedUser(String phone, String realName, String idNumber) {
@@ -57,9 +59,12 @@ class SettlementEventListenerTest {
         long jobId = jobIdHolder.get();
 
         long applicant = verifiedUser("15000000002", "应聘者六", "110101199001020002");
-        long applicationId = jobApi.apply(jobId, applicant);
+        AtomicLong applicationIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
+        long applicationId = applicationIdHolder.get();
 
-        jobApi.acceptApplication(applicationId, legalRep);
+        engagementApi.acceptApplication(applicationId, legalRep);
 
         await().atMost(Duration.ofSeconds(5)).until(() -> !payouts.findAll().isEmpty());
         Payout payout = payouts.findAll().stream()

@@ -35,14 +35,14 @@ class OrgEventListenerTest {
 
     @Test
     void 组织审核通过事件被履约域订阅并落地只读副本() {
-        String phone = "15100000002";
+        String phone = "15200000002";
         long legalRepUserId = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
         identityApi.verifyRealName(legalRepUserId, "孙法人", "110101199001015002");
 
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(
-                        Organization.Type.FACTORY, "十一号工厂", "91110000000000081X", legalRepUserId)));
+                        Organization.Type.FACTORY, "十五号工厂", "91110000000000151X", legalRepUserId)));
         long orgId = orgIdHolder.get();
 
         orgApi.approve(orgId);

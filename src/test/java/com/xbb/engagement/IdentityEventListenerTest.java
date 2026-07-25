@@ -31,7 +31,7 @@ class IdentityEventListenerTest {
 
     @Test
     void 实名认证事件被履约域订阅并落地只读副本() {
-        String phone = "15100000001";
+        String phone = "15200000001";
         long userId = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
 
         identityApi.verifyRealName(userId, "钱实名", "110101199001015001");

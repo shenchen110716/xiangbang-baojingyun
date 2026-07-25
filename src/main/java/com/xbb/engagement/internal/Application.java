@@ -1,10 +1,10 @@
-package com.xbb.job.internal;
+package com.xbb.engagement.internal;
 
 import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "application", schema = "job")
+@Table(name = "application", schema = "engagement")
 public class Application {
 
     public enum Status { PENDING, ACCEPTED, REJECTED }

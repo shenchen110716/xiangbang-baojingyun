@@ -1,6 +1,8 @@
 package com.xbb.settlement;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.engagement.api.EngagementApi;
+import com.xbb.engagement.internal.PostedJobRepository;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
@@ -23,7 +25,7 @@ import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
 @Import({TestcontainersConfig.class, TestCodeAccessor.class})
-class JobEventListenerTest {
+class EngagementEventListenerTest {
 
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
@@ -34,6 +36,8 @@ class JobEventListenerTest {
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
+    @Autowired EngagementApi engagementApi;
+    @Autowired PostedJobRepository postedJobs;
     @Autowired SettlementRepository settlements;
 
     private long verifiedUser(String phone, String realName, String idNumber) {
@@ -51,15 +55,16 @@ class JobEventListenerTest {
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
 
-        AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
-                jobIdHolder.set(jobApi.postJob(orgId, "理货员", "仓库理货", 2900, legalRep)));
-        long jobId = jobIdHolder.get();
+        long jobId = jobApi.postJob(orgId, "理货员", "仓库理货", 2900, legalRep);
+        await().atMost(Duration.ofSeconds(5)).until(() -> postedJobs.findById(jobId).isPresent());
 
         long applicant = verifiedUser("13200000002", "应聘者五", "110101199001012002");
-        long applicationId = jobApi.apply(jobId, applicant);
+        AtomicLong applicationIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
+        long applicationId = applicationIdHolder.get();
 
-        jobApi.acceptApplication(applicationId, legalRep);
+        engagementApi.acceptApplication(applicationId, legalRep);
 
         await().atMost(Duration.ofSeconds(5)).until(() -> settlements.findByApplicationId(applicationId).isPresent());
         var settlement = settlements.findByApplicationId(applicationId).orElseThrow();

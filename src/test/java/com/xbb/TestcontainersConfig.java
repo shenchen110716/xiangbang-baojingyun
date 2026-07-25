@@ -14,10 +14,11 @@ public class TestcontainersConfig {
                     .withInitScript("db/test-init.sql")
                     // 每加一个域,每个缓存的 Spring 测试上下文就多一个连接池;
                     // 默认 max_connections=100 在 4 个域之后已经不够用(实测触发过),
-                    // 300 在加到 6 个域(引入 fund 域)之后同样不够用(实测触发过:
+                    // 300 在加到 6 个域(引入 fund 域)之后同样不够用,600 在加到 8 个域
+                    // (引入 engagement 域)之后同样不够用(实测触发过:
                     // "Unable to determine Dialect without JDBC metadata"——表面报错像配置错误,
                     // 实际根因是拿不到连接)。
-                    .withCommand("postgres", "-c", "max_connections=600");
+                    .withCommand("postgres", "-c", "max_connections=900");
 
     static {
         PG.start();

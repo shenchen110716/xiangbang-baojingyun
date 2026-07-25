@@ -35,28 +35,6 @@ class JobController {
         return jobApi.findJob(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @PostMapping("/{id}/apply")
-    ResponseEntity<Map<String, Long>> apply(@AuthenticationPrincipal AuthenticatedUser caller, @PathVariable long id) {
-        long applicationId = jobApi.apply(id, caller.userId());
-        return ResponseEntity.ok(Map.of("id", applicationId));
-    }
-
-    @GetMapping("/application/{id}")
-    ResponseEntity<JobApi.ApplicationView> getApplication(@PathVariable long id) {
-        return jobApi.findApplication(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
-    }
-
-    @PutMapping("/application/{id}/accept")
-    ResponseEntity<Void> acceptApplication(@AuthenticationPrincipal AuthenticatedUser caller, @PathVariable long id) {
-        jobApi.acceptApplication(id, caller.userId());
-        return ResponseEntity.noContent().build();
-    }
-
-    @PutMapping("/application/{id}/reject")
-    ResponseEntity<Void> rejectApplication(@AuthenticationPrincipal AuthenticatedUser caller, @PathVariable long id) {
-        jobApi.rejectApplication(id, caller.userId());
-        return ResponseEntity.noContent().build();
-    }
-
     // 400/409 等错误映射统一收在 com.xbb.web.GlobalExceptionHandler
+    // 报名/录用/拒绝已搬到履约域,见 com.xbb.engagement.internal.EngagementController
 }

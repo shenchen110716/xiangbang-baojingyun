@@ -1,6 +1,6 @@
 package com.xbb.settlement.internal;
 
-import com.xbb.job.api.ApplicationAccepted;
+import com.xbb.engagement.api.ApplicationAccepted;
 import com.xbb.settlement.api.SettlementCalculated;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -12,13 +12,14 @@ import java.time.Instant;
 
 import static org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT;
 
+// 原名 JobEventListener:报名/录用搬到履约域后(Plan7),事件源从 job 换成 engagement。
 @Component
-class JobEventListener {
+class EngagementEventListener {
 
     private final SettlementRepository settlements;
     private final ApplicationEventPublisher events;
 
-    JobEventListener(SettlementRepository settlements, ApplicationEventPublisher events) {
+    EngagementEventListener(SettlementRepository settlements, ApplicationEventPublisher events) {
         this.settlements = settlements;
         this.events = events;
     }

@@ -1,6 +1,7 @@
 package com.xbb.settlement;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.engagement.api.EngagementApi;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
@@ -36,6 +37,7 @@ class SettlementServiceTest {
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
     @Autowired SettlementApi settlementApi;
+    @Autowired EngagementApi engagementApi;
     @Autowired SettlementRepository settlements;
 
     private long verifiedUser(String phone, String realName, String idNumber) {
@@ -58,8 +60,11 @@ class SettlementServiceTest {
         long jobId = jobIdHolder.get();
 
         long applicant = verifiedUser(applicantPhone, "应聘者" + suffix, "1101011990010" + suffix + "002");
-        long applicationId = jobApi.apply(jobId, applicant);
-        jobApi.acceptApplication(applicationId, legalRep);
+        AtomicLong applicationIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
+        long applicationId = applicationIdHolder.get();
+        engagementApi.acceptApplication(applicationId, legalRep);
 
         await().atMost(Duration.ofSeconds(5)).until(() -> settlements.findByApplicationId(applicationId).isPresent());
         return settlements.findByApplicationId(applicationId).orElseThrow().getId();

@@ -4,6 +4,7 @@ import com.xbb.TestcontainersConfig;
 import com.xbb.broker.api.BrokerApi;
 import com.xbb.broker.internal.Commission;
 import com.xbb.broker.internal.CommissionRepository;
+import com.xbb.engagement.api.EngagementApi;
 import com.xbb.fund.api.FundApi;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
@@ -38,6 +39,7 @@ class FundEventListenerTest {
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
     @Autowired SettlementApi settlementApi;
+    @Autowired EngagementApi engagementApi;
     @Autowired FundApi fundApi;
     @Autowired BrokerApi brokerApi;
     @Autowired CommissionRepository commissions;
@@ -64,8 +66,11 @@ class FundEventListenerTest {
                 jobIdHolder.set(jobApi.postJob(orgId, suffix + "号岗位佣金", "描述", wageCents, legalRep)));
         long jobId = jobIdHolder.get();
 
-        long applicationId = jobApi.apply(jobId, applicantUserId);
-        jobApi.acceptApplication(applicationId, legalRep);
+        AtomicLong applicationIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                applicationIdHolder.set(engagementApi.apply(jobId, applicantUserId)));
+        long applicationId = applicationIdHolder.get();
+        engagementApi.acceptApplication(applicationId, legalRep);
 
         AtomicLong settlementIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
