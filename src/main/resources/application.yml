@@ -55,6 +55,17 @@ xbb:
         password: ${DB_ADMIN_PASSWORD:postgres}
         schemas: settlement
         locations: classpath:db/migration/settlement
+    fund:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_FUND_USER:fund_user}
+        password: ${DB_FUND_PASSWORD:fund_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: fund
+        locations: classpath:db/migration/fund
     broker:
       datasource:
         url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
