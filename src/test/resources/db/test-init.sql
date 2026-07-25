@@ -5,3 +5,4 @@ CREATE USER job_user WITH PASSWORD 'job_pw';
 CREATE USER settlement_user WITH PASSWORD 'settlement_pw';
 CREATE USER fund_user WITH PASSWORD 'fund_pw';
 CREATE USER broker_user WITH PASSWORD 'broker_pw';
+CREATE USER profile_user WITH PASSWORD 'profile_pw';
