@@ -71,6 +71,7 @@ class FundEventListenerTest {
                 applicationIdHolder.set(engagementApi.apply(jobId, applicantUserId)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
+        engagementApi.completeApplication(applicationId, legalRep);
 
         AtomicLong settlementIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->

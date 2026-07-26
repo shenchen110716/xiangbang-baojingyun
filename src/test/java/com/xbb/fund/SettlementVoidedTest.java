@@ -66,6 +66,7 @@ class SettlementVoidedTest {
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
+        engagementApi.completeApplication(applicationId, legalRep);
 
         AtomicLong settlementIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->

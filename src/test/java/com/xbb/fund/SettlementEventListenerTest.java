@@ -65,6 +65,7 @@ class SettlementEventListenerTest {
         long applicationId = applicationIdHolder.get();
 
         engagementApi.acceptApplication(applicationId, legalRep);
+        engagementApi.completeApplication(applicationId, legalRep);
 
         await().atMost(Duration.ofSeconds(5)).until(() -> !payouts.findAll().isEmpty());
         Payout payout = payouts.findAll().stream()

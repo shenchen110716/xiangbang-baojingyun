@@ -144,4 +144,77 @@ class EngagementServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("待处理");
     }
+
+    // ---------- 履约完成(Plan9:§5.3 R1"只有完成的履约单可评"的锚点) ----------
+
+    /** 建一条已录用的报名,把法人代表 id 通过 legalRepOut 带回给调用方。 */
+    private long acceptedApplication(String legalRepPhone, String legalRepId, String applicantPhone,
+                                      String applicantId, String orgName, String creditCode,
+                                      AtomicLong legalRepOut) {
+        long legalRep = verifiedUser(legalRepPhone, "法人" + legalRepPhone.substring(8), legalRepId);
+        legalRepOut.set(legalRep);
+        long orgId = approvedOrg(legalRep, orgName, creditCode);
+        long jobId = postedJob(orgId, "普工", 2500, legalRep);
+        long applicant = verifiedUser(applicantPhone, "应聘者" + applicantPhone.substring(8), applicantId);
+        AtomicLong applicationIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
+        long applicationId = applicationIdHolder.get();
+        engagementApi.acceptApplication(applicationId, legalRep);
+        return applicationId;
+    }
+
+    @Test
+    void 已录用的报名可以完成() {
+        AtomicLong legalRep = new AtomicLong();
+        long applicationId = acceptedApplication(
+                "15400000001", "110101199001017001", "15400000002", "110101199001017002",
+                "完成测试一厂", "91110000000000101X", legalRep);
+
+        engagementApi.completeApplication(applicationId, legalRep.get());
+
+        assertThat(engagementApi.findApplication(applicationId).orElseThrow().status())
+                .isEqualTo(Application.Status.COMPLETED);
+    }
+
+    @Test
+    void 未录用的报名不能直接完成() {
+        long legalRep = verifiedUser("15400000003", "法人完二", "110101199001017003");
+        long orgId = approvedOrg(legalRep, "完成测试二厂", "91110000000000102X");
+        long jobId = postedJob(orgId, "普工", 2500, legalRep);
+        long applicant = verifiedUser("15400000004", "应聘者完二", "110101199001017004");
+        AtomicLong applicationIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
+
+        assertThatThrownBy(() -> engagementApi.completeApplication(applicationIdHolder.get(), legalRep))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("已录用");
+    }
+
+    @Test
+    void 已完成的报名不能重复完成() {
+        AtomicLong legalRep = new AtomicLong();
+        long applicationId = acceptedApplication(
+                "15400000005", "110101199001017005", "15400000006", "110101199001017006",
+                "完成测试三厂", "91110000000000103X", legalRep);
+        engagementApi.completeApplication(applicationId, legalRep.get());
+
+        assertThatThrownBy(() -> engagementApi.completeApplication(applicationId, legalRep.get()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("已录用");
+    }
+
+    @Test
+    void 非法人代表不能确认履约完成() {
+        AtomicLong legalRep = new AtomicLong();
+        long applicationId = acceptedApplication(
+                "15400000007", "110101199001017007", "15400000008", "110101199001017008",
+                "完成测试四厂", "91110000000000104X", legalRep);
+        long stranger = verifiedUser("15400000009", "路人完四", "110101199001017009");
+
+        assertThatThrownBy(() -> engagementApi.completeApplication(applicationId, stranger))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("法人代表");
+    }
 }

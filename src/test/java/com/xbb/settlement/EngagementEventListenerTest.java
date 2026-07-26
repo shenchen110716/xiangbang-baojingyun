@@ -65,6 +65,7 @@ class EngagementEventListenerTest {
         long applicationId = applicationIdHolder.get();
 
         engagementApi.acceptApplication(applicationId, legalRep);
+        engagementApi.completeApplication(applicationId, legalRep);
 
         await().atMost(Duration.ofSeconds(5)).until(() -> settlements.findByApplicationId(applicationId).isPresent());
         var settlement = settlements.findByApplicationId(applicationId).orElseThrow();

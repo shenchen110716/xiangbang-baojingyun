@@ -7,7 +7,7 @@ import java.time.Instant;
 @Table(name = "application", schema = "engagement")
 public class Application {
 
-    public enum Status { PENDING, ACCEPTED, REJECTED }
+    public enum Status { PENDING, ACCEPTED, REJECTED, COMPLETED }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -45,6 +45,16 @@ public class Application {
     public void reject() {
         if (status != Status.PENDING) throw new IllegalStateException("只有待处理状态可以处理");
         this.status = Status.REJECTED;
+    }
+
+    /**
+     * 履约完成。这里只是"法人代表确认干完了"这一个状态转换,**没有**到岗/打卡/考勤记录支撑——
+     * 考勤是独立的基础设施,评价飞轮不需要它。有了这个终态,§5.3 R1"只有完成的履约单可评"
+     * 才有可绑定的锚点。
+     */
+    public void complete() {
+        if (status != Status.ACCEPTED) throw new IllegalStateException("只有已录用状态可以完成");
+        this.status = Status.COMPLETED;
     }
 
     public Long getId() { return id; }

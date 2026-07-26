@@ -13,5 +13,8 @@ public interface EngagementApi {
 
     void rejectApplication(long applicationId, long callerUserId);
 
+    /** 履约完成(ACCEPTED → COMPLETED),发布枢纽事件 EngagementCompleted。 */
+    void completeApplication(long applicationId, long callerUserId);
+
     Optional<ApplicationView> findApplication(long applicationId);
 }

@@ -4,6 +4,7 @@ import com.xbb.engagement.api.ApplicationAccepted;
 import com.xbb.engagement.api.ApplicationRejected;
 import com.xbb.engagement.api.ApplicationSubmitted;
 import com.xbb.engagement.api.EngagementApi;
+import com.xbb.engagement.api.EngagementCompleted;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -75,6 +76,25 @@ class EngagementService implements EngagementApi {
         application.reject();
         applications.save(application);
         events.publishEvent(new ApplicationRejected(applicationId, Instant.now()));
+    }
+
+    @Override
+    @Transactional("engagementTransactionManager")
+    public void completeApplication(long applicationId, long callerUserId) {
+        Application application = applications.findById(applicationId)
+                .orElseThrow(() -> new IllegalArgumentException("报名记录不存在"));
+        PostedJob job = postedJobs.findById(application.getJobId())
+                .orElseThrow(() -> new IllegalArgumentException("岗位不存在"));
+        ApprovedOrg org = approvedOrgs.findById(job.getOrgId())
+                .orElseThrow(() -> new IllegalStateException("组织未通过审核"));
+        if (org.getLegalRepUserId() != callerUserId) {
+            throw new IllegalStateException("只有组织法人代表可以确认履约完成");
+        }
+        application.complete();
+        applications.save(application);
+        events.publishEvent(new EngagementCompleted(
+                applicationId, job.getJobId(), application.getApplicantUserId(),
+                job.getOrgId(), job.getWageCents(), Instant.now()));
     }
 
     @Override

@@ -41,5 +41,11 @@ class EngagementController {
         return ResponseEntity.noContent().build();
     }
 
+    @PutMapping("/{id}/complete")
+    ResponseEntity<Void> complete(@AuthenticationPrincipal AuthenticatedUser caller, @PathVariable long id) {
+        engagementApi.completeApplication(id, caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
     // 400/409 等错误映射统一收在 com.xbb.web.GlobalExceptionHandler
 }
