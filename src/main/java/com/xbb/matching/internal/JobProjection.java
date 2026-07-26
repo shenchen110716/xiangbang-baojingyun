@@ -32,6 +32,10 @@ public class JobProjection {
 
     private Double lon;
 
+    /** 招满或被下架后置 false。硬约束"名额未满"落在这一列上(§5.4)。 */
+    @Column(nullable = false)
+    private boolean open = true;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 
@@ -59,7 +63,10 @@ public class JobProjection {
         this.updatedAt = Instant.now();
     }
 
+    public void close() { this.open = false; }
+
     public Long getJobId() { return jobId; }
+    public boolean isOpen() { return open; }
     public long getOrgId() { return orgId; }
     public long getWageCents() { return wageCents; }
     public List<String> getMustTags() { return split(mustTags); }

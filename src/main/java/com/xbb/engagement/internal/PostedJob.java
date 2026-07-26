@@ -16,6 +16,10 @@ public class PostedJob {
     @Column(name = "wage_cents", nullable = false)
     private long wageCents;
 
+    /** 岗位是否还在招。由 JobClosed 事件落下,报名时据此拦截。 */
+    @Column(nullable = false)
+    private boolean open = true;
+
     protected PostedJob() { }
 
     public PostedJob(long jobId, long orgId, long wageCents) {
@@ -24,7 +28,10 @@ public class PostedJob {
         this.wageCents = wageCents;
     }
 
+    public void close() { this.open = false; }
+
     public Long getJobId() { return jobId; }
+    public boolean isOpen() { return open; }
     public long getOrgId() { return orgId; }
     public long getWageCents() { return wageCents; }
 }

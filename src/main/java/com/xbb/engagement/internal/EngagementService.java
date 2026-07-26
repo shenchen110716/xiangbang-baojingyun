@@ -5,6 +5,7 @@ import com.xbb.engagement.api.ApplicationRejected;
 import com.xbb.engagement.api.ApplicationSubmitted;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.engagement.api.EngagementCompleted;
+import com.xbb.job.api.JobApi;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,16 +21,20 @@ class EngagementService implements EngagementApi {
     private final EngagementApprovedOrgRepository approvedOrgs;
     private final EngagementVerifiedUserRepository verifiedUsers;
     private final SignedAgreementRepository signedAgreements;
+    /** 名额扣减必须回到岗位域(§4.2"名额扣减在本域闭环"),这里只负责触发。 */
+    private final JobApi jobApi;
     private final ApplicationEventPublisher events;
 
     EngagementService(ApplicationRepository applications, PostedJobRepository postedJobs,
                        EngagementApprovedOrgRepository approvedOrgs, EngagementVerifiedUserRepository verifiedUsers,
-                       SignedAgreementRepository signedAgreements, ApplicationEventPublisher events) {
+                       SignedAgreementRepository signedAgreements, JobApi jobApi,
+                       ApplicationEventPublisher events) {
         this.applications = applications;
         this.postedJobs = postedJobs;
         this.approvedOrgs = approvedOrgs;
         this.verifiedUsers = verifiedUsers;
         this.signedAgreements = signedAgreements;
+        this.jobApi = jobApi;
         this.events = events;
     }
 
@@ -39,7 +44,11 @@ class EngagementService implements EngagementApi {
         if (verifiedUsers.findById(applicantUserId).isEmpty()) {
             throw new IllegalStateException("需要完成实名认证才能报名");
         }
-        postedJobs.findById(jobId).orElseThrow(() -> new IllegalArgumentException("岗位不存在"));
+        PostedJob postedJob = postedJobs.findById(jobId)
+                .orElseThrow(() -> new IllegalArgumentException("岗位不存在"));
+        if (!postedJob.isOpen()) {
+            throw new IllegalStateException("岗位已关闭,不能报名");
+        }
         Application application = applications.save(new Application(jobId, applicantUserId));
         events.publishEvent(new ApplicationSubmitted(application.getId(), jobId, applicantUserId, Instant.now()));
         return application.getId();
@@ -57,6 +66,13 @@ class EngagementService implements EngagementApi {
         if (org.getLegalRepUserId() != callerUserId) {
             throw new IllegalStateException("只有组织法人代表可以处理应聘");
         }
+        // **先扣名额再落录用**。两个域各自独立 DataSource,这两步落在两个事务里,
+        // 做不到原子,所以顺序决定了失败时倒向哪边:
+        // 先扣名额失败 → 名额白扣一个,岗位显得比实际满(少招,是运营问题);
+        // 先录用失败 → 录了人却没扣名额(超招,同一个坑两个人、付两份钱)。
+        // 少招可以补,超招是钱。名额不足/岗位已关会在这里直接抛出,录用不会发生。
+        jobApi.fillSlot(job.getJobId());
+
         application.accept();
         applications.save(application);
         events.publishEvent(new ApplicationAccepted(

@@ -1,5 +1,6 @@
 package com.xbb.engagement.internal;
 
+import com.xbb.job.api.JobClosed;
 import com.xbb.job.api.JobPosted;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -23,5 +24,16 @@ class JobEventListener {
     @Transactional(transactionManager = "engagementTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(JobPosted event) {
         postedJobs.save(new PostedJob(event.jobId(), event.orgId(), event.wageCents()));
+    }
+
+    @TransactionalEventListener(phase = AFTER_COMMIT)
+    @Transactional(transactionManager = "engagementTransactionManager", propagation = Propagation.REQUIRES_NEW)
+    void on(JobClosed event) {
+        // 岗位可能还没投影过来(事件乱序/投影丢失),那就没什么可关的——
+        // 不新建一条"已关闭"的空投影,那会让后续 JobPosted 覆盖成 open。
+        postedJobs.findById(event.jobId()).ifPresent(job -> {
+            job.close();
+            postedJobs.save(job);
+        });
     }
 }

@@ -1,5 +1,6 @@
 package com.xbb.matching.internal;
 
+import com.xbb.job.api.JobClosed;
 import com.xbb.job.api.JobPosted;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -25,5 +26,15 @@ class JobEventListener {
                 .orElseGet(() -> new JobProjection(event.jobId(), event.orgId(), event.wageCents()));
         projection.updateBasics(event.orgId(), event.wageCents());
         jobs.save(projection);
+    }
+
+    @TransactionalEventListener(phase = AFTER_COMMIT)
+    @Transactional(transactionManager = "matchingTransactionManager", propagation = Propagation.REQUIRES_NEW)
+    void on(JobClosed event) {
+        // 投影还没建就没什么可关的;不新建"已关闭"的空投影,那会被随后的 JobPosted 覆盖回 open
+        jobs.findById(event.jobId()).ifPresent(job -> {
+            job.close();
+            jobs.save(job);
+        });
     }
 }

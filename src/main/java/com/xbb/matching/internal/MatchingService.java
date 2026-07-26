@@ -76,7 +76,7 @@ class MatchingService implements MatchingApi {
         WorkerSnapshot workerSnapshot = toSnapshot(worker);
 
         List<Candidate> candidates = new ArrayList<>();
-        for (JobProjection job : pool(page -> jobs.findAll(page).getContent(), "岗位")) {
+        for (JobProjection job : pool(page -> jobs.findByOpenTrue(page).getContent(), "岗位")) {
             JobSnapshot jobSnapshot = toSnapshot(job);
             if (!scorer.passesHardConstraints(workerSnapshot, jobSnapshot)) continue;
             MatchScorer.Score score = scorer.score(workerSnapshot, jobSnapshot, Side.WORKER);
