@@ -43,3 +43,12 @@ INSERT INTO fund.escrow_account (account_type, balance_cents) VALUES
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA fund TO fund_user;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA fund TO fund_user;
+
+-- 信用分只读副本(担保策略要用,不跨域查评价域)
+CREATE TABLE fund.worker_credit (
+    user_id    BIGINT PRIMARY KEY,
+    score      DOUBLE PRECISION NOT NULL,
+    updated_at TIMESTAMPTZ      NOT NULL DEFAULT now()
+);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA fund TO fund_user;

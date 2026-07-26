@@ -128,6 +128,13 @@ public class TestcontainersConfig {
         registry.add("xbb.domains.talent.flyway.url", PG::getJdbcUrl);
         registry.add("xbb.domains.talent.flyway.user", PG::getUsername);
         registry.add("xbb.domains.talent.flyway.password", PG::getPassword);
+        // notification 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.notification.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.notification.datasource.username", () -> "notification_user");
+        registry.add("xbb.domains.notification.datasource.password", () -> "notification_pw");
+        registry.add("xbb.domains.notification.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.notification.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.notification.flyway.password", PG::getPassword);
     }
 
     /**

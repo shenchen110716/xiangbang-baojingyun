@@ -4,6 +4,9 @@ import com.xbb.fund.api.AccountType;
 import com.xbb.fund.api.DisbursementStatus;
 import com.xbb.fund.api.FundApi;
 import com.xbb.fund.api.FundsDisbursed;
+import com.xbb.fund.api.GuaranteeContext;
+import com.xbb.fund.api.GuaranteeDecision;
+import com.xbb.fund.api.GuaranteePolicy;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,17 +21,25 @@ class FundService implements FundApi {
     private final DisbursementRepository disbursements;
     private final DisbursementChannel channel;
     private final EscrowService escrow;
+    private final GuaranteePolicy guaranteePolicy;
+    private final WorkerCreditRepository credits;
     private final ApplicationEventPublisher events;
 
     FundService(PayoutRepository payouts, DisbursementRepository disbursements,
                  DisbursementChannel channel, EscrowService escrow,
+                 GuaranteePolicy guaranteePolicy, WorkerCreditRepository credits,
                  ApplicationEventPublisher events) {
         this.payouts = payouts;
         this.disbursements = disbursements;
         this.channel = channel;
         this.escrow = escrow;
+        this.guaranteePolicy = guaranteePolicy;
+        this.credits = credits;
         this.events = events;
     }
+
+    /** 新人起始信用分,和评价域 CreditCalculator.NEW_USER_SCORE 一致。 */
+    private static final int NEW_USER_CREDIT = 60;
 
     @Override
     @Transactional("fundTransactionManager")
@@ -99,6 +110,16 @@ class FundService implements FundApi {
     @Transactional(transactionManager = "fundTransactionManager", readOnly = true)
     public long balanceOf(AccountType accountType) {
         return escrow.balanceOf(accountType);
+    }
+
+    @Override
+    @Transactional(transactionManager = "fundTransactionManager", readOnly = true)
+    public GuaranteeDecision decideGuarantee(long userId, long jobId, long jobSalaryCents) {
+        int creditScore = credits.findById(userId)
+                .map(c -> (int) Math.round(c.getScore()))
+                .orElse(NEW_USER_CREDIT);
+        return guaranteePolicy.decide(
+                new GuaranteeContext(userId, jobId, creditScore, jobSalaryCents, 0));
     }
 
     @Override
