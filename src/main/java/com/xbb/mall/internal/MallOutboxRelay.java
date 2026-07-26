@@ -3,7 +3,7 @@ package com.xbb.mall.internal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.AbstractOutboxRelay;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.xbb.OutboxEventRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +19,7 @@ public class MallOutboxRelay extends AbstractOutboxRelay<MallOutboxEvent> {
     }
 
     @Override
-    protected JpaRepository<MallOutboxEvent, Long> outbox() {
+    protected OutboxEventRepository<MallOutboxEvent> outbox() {
         return outbox;
     }
 

@@ -49,6 +49,10 @@ public abstract class AbstractOutboxEvent {
     @Column(name = "published_at")
     private Instant publishedAt;
 
+    /** 到这个时刻之前不再重投(退避)。为空表示随时可投。 */
+    @Column(name = "next_attempt_at")
+    private Instant nextAttemptAt;
+
     protected AbstractOutboxEvent() { }
 
     protected AbstractOutboxEvent(String eventId, String eventType, String payload) {
@@ -61,16 +65,36 @@ public abstract class AbstractOutboxEvent {
         this.status = Status.PUBLISHED;
         this.publishedAt = at;
         this.lastError = null;
+        this.nextAttemptAt = null;
     }
 
     /**
-     * 投递失败:记次数与原因,**状态留在可重试**。
+     * 投递失败:记次数与原因,**状态留在可重试**,并按退避推迟下一次。
      * 不把它置成终态——终态意味着放弃,而资金链路上的事件不该被悄悄放弃。
      */
-    public void markAttemptFailed(String error) {
+    public void markAttemptFailed(String error, Instant nextAttemptAt) {
         this.attemptCount++;
         this.lastError = error != null && error.length() > 500 ? error.substring(0, 500) : error;
         this.status = Status.FAILED;
+        this.nextAttemptAt = nextAttemptAt;
+    }
+
+    /**
+     * 人工重放:清掉退避与失败计数,让它立刻重新排队。
+     *
+     * <p>不是"重新投递"——失败的行本来就一直在重试队列里。这里做的是
+     * **确认问题已修复**:归零之后它不再被算作卡死事件,退避也从头开始。
+     */
+    public void resetForReplay() {
+        this.attemptCount = 0;
+        this.lastError = null;
+        this.status = Status.PENDING;
+        this.nextAttemptAt = null;
+    }
+
+    /** 重试到这个次数还没成功,就不是"下游抖了一下"了,需要人看一眼。 */
+    public boolean isStuck(int threshold) {
+        return status == Status.FAILED && attemptCount >= threshold;
     }
 
     public Long getId() { return id; }
@@ -81,4 +105,5 @@ public abstract class AbstractOutboxEvent {
     public int getAttemptCount() { return attemptCount; }
     public String getLastError() { return lastError; }
     public Instant getPublishedAt() { return publishedAt; }
+    public Instant getNextAttemptAt() { return nextAttemptAt; }
 }

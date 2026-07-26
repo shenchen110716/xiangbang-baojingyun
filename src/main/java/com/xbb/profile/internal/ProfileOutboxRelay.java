@@ -3,7 +3,7 @@ package com.xbb.profile.internal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.AbstractOutboxRelay;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.xbb.OutboxEventRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +19,7 @@ public class ProfileOutboxRelay extends AbstractOutboxRelay<ProfileOutboxEvent> 
     }
 
     @Override
-    protected JpaRepository<ProfileOutboxEvent, Long> outbox() {
+    protected OutboxEventRepository<ProfileOutboxEvent> outbox() {
         return outbox;
     }
 

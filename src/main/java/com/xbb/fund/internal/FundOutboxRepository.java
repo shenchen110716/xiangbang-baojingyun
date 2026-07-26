@@ -1,14 +1,13 @@
 package com.xbb.fund.internal;
 
 import com.xbb.AbstractOutboxEvent;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.xbb.OutboxEventRepository;
 import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 
-public interface FundOutboxRepository extends JpaRepository<FundOutboxEvent, Long> {
+public interface FundOutboxRepository extends OutboxEventRepository<FundOutboxEvent> {
 
-    List<FundOutboxEvent> findByStatusInOrderByIdAsc(List<AbstractOutboxEvent.Status> statuses);
 
     /**
      * 取一批待投递的行并**锁住**。
@@ -23,6 +22,7 @@ public interface FundOutboxRepository extends JpaRepository<FundOutboxEvent, Lon
     @Query(value = """
             SELECT * FROM fund.outbox_event
             WHERE status <> 'PUBLISHED'
+              AND (next_attempt_at IS NULL OR next_attempt_at <= now())
             ORDER BY id
             LIMIT 100
             FOR UPDATE SKIP LOCKED

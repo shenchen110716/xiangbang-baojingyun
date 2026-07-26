@@ -3,9 +3,10 @@ package com.xbb;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -19,7 +20,7 @@ import java.util.List;
  * <p><b>消费方必须用 {@code @EventListener} 而不是
  * {@code @TransactionalEventListener(AFTER_COMMIT)}</b>:中继在自己的事务里 publish,
  * AFTER_COMMIT 的监听器要等中继事务提交后才跑,那时 outbox 行已被标成 PUBLISHED,
- * 消费方再抛异常事件照样永久丢失——outbox 就白做了。
+ * 消费方再抛异常事件照样永久丢失——outbox 就白做了。这条由 OutboxContractTests 守着。
  */
 public abstract class AbstractOutboxRelay<T extends AbstractOutboxEvent> {
 
@@ -28,12 +29,58 @@ public abstract class AbstractOutboxRelay<T extends AbstractOutboxEvent> {
     private final ApplicationEventPublisher events;
     private final ObjectMapper json;
 
+    /** 第一次失败后的退避时长,之后指数增长(见 {@link OutboxBackoff})。 */
+    @Value("${xbb.outbox.retry.base-ms:5000}")
+    private long retryBaseMillis;
+
+    /**
+     * 重试到这个次数还没成功,就升级成 ERROR 日志。
+     *
+     * <p>这是**告警接入点**:WARN 会被日常噪音淹没,而"一条事件反复投不出去"
+     * 在资金链路上意味着有人的钱或佣金还没到账,必须有人看见。
+     */
+    @Value("${xbb.outbox.stuck-threshold:5}")
+    private int stuckThreshold;
+
     protected AbstractOutboxRelay(ApplicationEventPublisher events, ObjectMapper json) {
         this.events = events;
         this.json = json;
     }
 
-    protected abstract JpaRepository<T, Long> outbox();
+    protected abstract OutboxEventRepository<T> outbox();
+
+    /** 域名。从包名推出来(com.xbb.fund.internal → fund),省得每个子类再写一遍。 */
+    public String domain() {
+        String pkg = getClass().getPackageName();
+        String tail = pkg.substring("com.xbb.".length());
+        return tail.contains(".") ? tail.substring(0, tail.indexOf('.')) : tail;
+    }
+
+    /** 运维视图:反复投不出去、需要人看的事件。 */
+    public List<StuckEvent> stuck() {
+        return outbox().findStuck(AbstractOutboxEvent.Status.FAILED, stuckThreshold).stream()
+                .map(e -> new StuckEvent(domain(), e.getEventId(), e.getEventType(),
+                        e.getAttemptCount(), e.getLastError(), e.getNextAttemptAt()))
+                .toList();
+    }
+
+    /**
+     * 人工重放:确认问题已修复后,把失败计数与退避清零,让它立刻重新排队。
+     *
+     * @return 是否找到了这条事件
+     */
+    public boolean replay(String eventId) {
+        return outbox().findByEventId(eventId).map(event -> {
+            event.resetForReplay();
+            outbox().save(event);
+            log.info("outbox 事件已人工重放。domain={} eventId={}", domain(), eventId);
+            return true;
+        }).orElse(false);
+    }
+
+    /** 一条卡死的事件,给运维看的最小信息量:是什么、卡了多久、为什么。 */
+    public record StuckEvent(String domain, String eventId, String eventType,
+                              int attemptCount, String lastError, Instant nextAttemptAt) { }
 
     /** 子类在覆写方法上加事务与调度注解后调用本方法。 */
     protected int relayPending(List<T> pending) {
@@ -45,13 +92,25 @@ public abstract class AbstractOutboxRelay<T extends AbstractOutboxEvent> {
                 published++;
             } catch (Exception e) {
                 // 失败不抛出:一条投递失败不该让整批回滚,更不该让它从表里消失。
-                event.markAttemptFailed(e.getMessage());
-                log.warn("outbox 投递失败,将重试。eventId={} type={} 第 {} 次 原因={}",
-                        event.getEventId(), event.getEventType(), event.getAttemptCount(), e.toString());
+                Duration delay = OutboxBackoff.delayAfter(
+                        event.getAttemptCount() + 1, Duration.ofMillis(retryBaseMillis));
+                event.markAttemptFailed(e.getMessage(), Instant.now().plus(delay));
+                report(event, e, delay);
             }
             outbox().save(event);
         }
         return published;
+    }
+
+    private void report(T event, Exception cause, Duration delay) {
+        if (event.isStuck(stuckThreshold)) {
+            log.error("outbox 事件反复投递失败,已达 {} 次,需要人工介入。"
+                            + "eventId={} type={} 最近一次原因={}",
+                    event.getAttemptCount(), event.getEventId(), event.getEventType(), cause.toString());
+        } else {
+            log.warn("outbox 投递失败,{} 后重试。eventId={} type={} 第 {} 次 原因={}",
+                    delay, event.getEventId(), event.getEventType(), event.getAttemptCount(), cause.toString());
+        }
     }
 
     /**
@@ -63,8 +122,7 @@ public abstract class AbstractOutboxRelay<T extends AbstractOutboxEvent> {
         return json.readValue(event.getPayload(), type);
     }
 
-    /** 待投递 = 还没投出去的 + 投失败的。失败不是终态,资金链路上的事件不该被悄悄放弃。 */
-    protected static List<AbstractOutboxEvent.Status> retryable() {
-        return List.of(AbstractOutboxEvent.Status.PENDING, AbstractOutboxEvent.Status.FAILED);
+    protected int stuckThreshold() {
+        return stuckThreshold;
     }
 }

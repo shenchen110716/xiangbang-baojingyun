@@ -225,7 +225,7 @@ class SettlementOutboxReliabilityTest {
 
         // 手工把行退回可重试状态,模拟"标记已发布的那次提交没落地"导致的重投
         SettlementOutboxEvent row = outboxRowOf(applicationId);
-        row.markAttemptFailed("模拟重投");
+        row.markAttemptFailed("模拟重投", java.time.Instant.now());
         outbox.save(row);
 
         relay.publishPending();

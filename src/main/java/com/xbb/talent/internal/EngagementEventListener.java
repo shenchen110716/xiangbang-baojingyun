@@ -32,10 +32,10 @@ class EngagementEventListener {
     void on(EngagementCompleted event) {
         // 投递语义是至少一次,而这里是累加——同一单数两次,人才库排序就被刷高了。
         // 按履约单去重,不是按事件 id:同一单即便换个 eventId 重发也只该计一次。
-        if (counted.existsById(event.applicationId())) {
+        // 认领由数据库裁决(见 claim 的注释),先查后插在并发下挡不住。
+        if (counted.claim(event.applicationId(), event.workerUserId()) == 0) {
             return;
         }
-        counted.save(new CountedEngagement(event.applicationId(), event.workerUserId()));
 
         TalentProfile profile = profiles.findById(event.workerUserId())
                 .orElseGet(() -> new TalentProfile(event.workerUserId()));

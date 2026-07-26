@@ -44,6 +44,9 @@ class TalentServiceTest {
     @Autowired AgreementApi agreementApi;
     @Autowired ProfileApi profileApi;
     @Autowired TalentApi talentApi;
+    @Autowired com.xbb.talent.internal.CountedEngagementRepository counted;
+    @Autowired @org.springframework.beans.factory.annotation.Qualifier("talentTransactionManager")
+    org.springframework.transaction.PlatformTransactionManager talentTx;
     @Autowired ApplicationEventPublisher events;
 
     private long registeredUser(String phone) {
@@ -131,6 +134,11 @@ class TalentServiceTest {
 
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(talentApi.findTalent(worker).orElseThrow().completedEngagements())
+                        .withFailMessage("本单 applicationId=%s;该工人被计入的履约单=%s",
+                                applicationId,
+                                counted.findAll().stream()
+                                        .filter(c -> c.getUserId() == worker)
+                                        .map(c -> String.valueOf(c.getApplicationId())).toList())
                         .isEqualTo(1));
         assertThat(talentApi.findTalent(worker).orElseThrow().lastActiveAt()).isNotNull();
     }
@@ -204,5 +212,29 @@ class TalentServiceTest {
 
         assertThat(afterFirst).isEqualTo(1);
         assertThat(talentApi.findTalent(worker).orElseThrow().completedEngagements()).isEqualTo(1);
+    }
+
+    /**
+     * 钉住并发下的去重。之前是"先 existsById 再 save",而本实体主键是手工赋的,
+     * Spring Data 的 save() 走 merge = upsert,**永远不会撞主键**——
+     * 于是两个并发投递双双通过检查、双双"插入成功",履约次数被加了两次。
+     * 这个 bug 只在全量跑时偶发,单跑必过,查起来很贵。
+     */
+    @Test
+    void 同一履约单只能被认领一次() {
+        long applicationId = 9_700_501L;
+        long worker = 9_700_502L;
+
+        // @Modifying 需要事务;认领本身在监听器里也是跑在事务内的
+        var tx = new org.springframework.transaction.support.TransactionTemplate(talentTx);
+
+        int first = tx.execute(status -> counted.claim(applicationId, worker));
+        int second = tx.execute(status -> counted.claim(applicationId, worker));
+        // 换个人来认领同一单也不行:决定"这单数过了"的是履约单本身
+        int byOther = tx.execute(status -> counted.claim(applicationId, 9_700_503L));
+
+        assertThat(first).isEqualTo(1);
+        assertThat(second).isZero();
+        assertThat(byOther).isZero();
     }
 }

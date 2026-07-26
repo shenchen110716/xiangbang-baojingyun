@@ -1,17 +1,14 @@
 package com.xbb.settlement.internal;
 
 import com.xbb.AbstractOutboxEvent;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.xbb.OutboxEventRepository;
 import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
-import java.util.Optional;
 
-public interface SettlementOutboxRepository extends JpaRepository<SettlementOutboxEvent, Long> {
+public interface SettlementOutboxRepository extends OutboxEventRepository<SettlementOutboxEvent> {
 
-    List<SettlementOutboxEvent> findByStatusInOrderByIdAsc(List<AbstractOutboxEvent.Status> statuses);
 
-    Optional<SettlementOutboxEvent> findByEventId(String eventId);
 
     /**
      * 取一批待投递的行并**锁住**。
@@ -26,6 +23,7 @@ public interface SettlementOutboxRepository extends JpaRepository<SettlementOutb
     @Query(value = """
             SELECT * FROM settlement.outbox_event
             WHERE status <> 'PUBLISHED'
+              AND (next_attempt_at IS NULL OR next_attempt_at <= now())
             ORDER BY id
             LIMIT 100
             FOR UPDATE SKIP LOCKED

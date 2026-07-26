@@ -1,14 +1,13 @@
 package com.xbb.engagement.internal;
 
 import com.xbb.AbstractOutboxEvent;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.xbb.OutboxEventRepository;
 import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 
-public interface EngagementOutboxRepository extends JpaRepository<EngagementOutboxEvent, Long> {
+public interface EngagementOutboxRepository extends OutboxEventRepository<EngagementOutboxEvent> {
 
-    List<EngagementOutboxEvent> findByStatusInOrderByIdAsc(List<AbstractOutboxEvent.Status> statuses);
 
     /**
      * 取一批待投递的行并**锁住**。
@@ -23,6 +22,7 @@ public interface EngagementOutboxRepository extends JpaRepository<EngagementOutb
     @Query(value = """
             SELECT * FROM engagement.outbox_event
             WHERE status <> 'PUBLISHED'
+              AND (next_attempt_at IS NULL OR next_attempt_at <= now())
             ORDER BY id
             LIMIT 100
             FOR UPDATE SKIP LOCKED

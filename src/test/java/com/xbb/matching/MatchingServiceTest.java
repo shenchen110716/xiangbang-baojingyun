@@ -100,12 +100,16 @@ class MatchingServiceTest {
         long userId = worker("15300000012", List.of("质检"), 30000, LAT, LON);
         jobProfile(8021L, List.of("质检"), List.of(), LAT, LON);
 
-        List<MatchingApi.MatchView> result = matchingApi.recommendJobsForWorker(userId, 5);
+        List<MatchingApi.MatchView> result = matchingApi.recommendJobsForWorker(userId, 50);
 
-        MatchingApi.MatchView top = result.get(0);
-        assertThat(top.reason()).isNotBlank();
+        // 断言**本用例造的这个岗位**的理由,而不是"排第一的那个":
+        // 库是共享的,别的用例造的岗位随时可能挤到前面,那样断言的就不是这里想验的东西了
+        MatchingApi.MatchView mine = result.stream()
+                .filter(view -> view.targetId() == 8021L)
+                .findFirst().orElseThrow(() -> new AssertionError("本用例的岗位没被推荐出来"));
+        assertThat(mine.reason()).isNotBlank();
         // 取贡献最高的两个维度,用 · 连接
-        assertThat(top.reason()).contains("·");
+        assertThat(mine.reason()).contains("·");
     }
 
     @Test

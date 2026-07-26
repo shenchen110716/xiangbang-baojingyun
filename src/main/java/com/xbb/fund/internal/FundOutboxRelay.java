@@ -3,7 +3,7 @@ package com.xbb.fund.internal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.AbstractOutboxRelay;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.xbb.OutboxEventRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +19,7 @@ public class FundOutboxRelay extends AbstractOutboxRelay<FundOutboxEvent> {
     }
 
     @Override
-    protected JpaRepository<FundOutboxEvent, Long> outbox() {
+    protected OutboxEventRepository<FundOutboxEvent> outbox() {
         return outbox;
     }
 
