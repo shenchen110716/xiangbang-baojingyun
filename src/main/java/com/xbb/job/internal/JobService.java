@@ -1,12 +1,14 @@
 package com.xbb.job.internal;
 
 import com.xbb.job.api.JobApi;
+import com.xbb.job.api.WageAnomaly;
 import com.xbb.job.api.JobPosted;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -14,6 +16,7 @@ class JobService implements JobApi {
 
     private final JobRepository jobs;
     private final ApprovedOrgRepository approvedOrgs;
+    private final WageAnomalyDetector anomalyDetector = new WageAnomalyDetector();
     private final ApplicationEventPublisher events;
 
     JobService(JobRepository jobs, ApprovedOrgRepository approvedOrgs, ApplicationEventPublisher events) {
@@ -33,6 +36,13 @@ class JobService implements JobApi {
         Job job = jobs.save(new Job(orgId, title, description, wageCents));
         events.publishEvent(new JobPosted(job.getId(), orgId, wageCents, Instant.now()));
         return job.getId();
+    }
+
+    @Override
+    @Transactional(transactionManager = "jobTransactionManager", readOnly = true)
+    public Optional<WageAnomaly> checkWageAnomaly(long orgId, long wageCents) {
+        List<Long> history = jobs.findByOrgId(orgId).stream().map(Job::getWageCents).toList();
+        return anomalyDetector.detect(wageCents, history);
     }
 
     @Override

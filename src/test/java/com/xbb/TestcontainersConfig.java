@@ -114,6 +114,13 @@ public class TestcontainersConfig {
         registry.add("xbb.domains.agreement.flyway.url", PG::getJdbcUrl);
         registry.add("xbb.domains.agreement.flyway.user", PG::getUsername);
         registry.add("xbb.domains.agreement.flyway.password", PG::getPassword);
+        // voice 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.voice.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.voice.datasource.username", () -> "voice_user");
+        registry.add("xbb.domains.voice.datasource.password", () -> "voice_pw");
+        registry.add("xbb.domains.voice.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.voice.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.voice.flyway.password", PG::getPassword);
     }
 
     /**

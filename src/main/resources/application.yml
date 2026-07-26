@@ -132,3 +132,14 @@ xbb:
         password: ${DB_ADMIN_PASSWORD:postgres}
         schemas: agreement
         locations: classpath:db/migration/agreement
+    voice:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_VOICE_USER:voice_user}
+        password: ${DB_VOICE_PASSWORD:voice_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: voice
+        locations: classpath:db/migration/voice

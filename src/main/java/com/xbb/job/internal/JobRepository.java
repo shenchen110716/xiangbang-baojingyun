@@ -2,4 +2,9 @@ package com.xbb.job.internal;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-interface JobRepository extends JpaRepository<Job, Long> { }
+import java.util.List;
+
+interface JobRepository extends JpaRepository<Job, Long> {
+
+    List<Job> findByOrgId(long orgId);
+}

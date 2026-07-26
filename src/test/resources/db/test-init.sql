@@ -10,3 +10,4 @@ CREATE USER profile_user WITH PASSWORD 'profile_pw';
 CREATE USER matching_user WITH PASSWORD 'matching_pw';
 CREATE USER review_user WITH PASSWORD 'review_pw';
 CREATE USER agreement_user WITH PASSWORD 'agreement_pw';
+CREATE USER voice_user WITH PASSWORD 'voice_pw';
