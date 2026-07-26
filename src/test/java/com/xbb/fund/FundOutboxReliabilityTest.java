@@ -36,7 +36,9 @@ class FundOutboxReliabilityTest {
 
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
-        TestcontainersConfig.registerProperties(registry);
+        // 独占数据库:别的测试上下文的后台中继一直在跑,共享库里做不到
+        // "没人投递之前下游拿不到"这个前提(详见 registerIsolatedProperties)
+        TestcontainersConfig.registerIsolatedProperties(registry);
     }
 
     @TestConfiguration

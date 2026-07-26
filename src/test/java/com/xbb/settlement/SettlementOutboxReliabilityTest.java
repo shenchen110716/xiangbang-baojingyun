@@ -5,6 +5,7 @@ import com.xbb.TestcontainersConfig;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.engagement.api.EngagementCompleted;
+import com.xbb.engagement.internal.EngagementOutboxRelay;
 import com.xbb.fund.internal.PayoutRepository;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
@@ -57,7 +58,9 @@ class SettlementOutboxReliabilityTest {
 
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
-        TestcontainersConfig.registerProperties(registry);
+        // 独占数据库:别的测试上下文的后台中继一直在跑,共享库里做不到
+        // "没人投递之前下游拿不到"这个前提(详见 registerIsolatedProperties)
+        TestcontainersConfig.registerIsolatedProperties(registry);
     }
 
     /** 一个可以按开关罢工的下游消费方,用来制造"投递失败"。 */
@@ -89,6 +92,8 @@ class SettlementOutboxReliabilityTest {
     @Autowired SettlementRepository settlements;
     @Autowired SettlementOutboxRepository outbox;
     @Autowired SettlementOutboxRelay relay;
+    // 履约完成事件本身也走 outbox 了,本类关掉了后台中继,得自己把它推过来
+    @Autowired EngagementOutboxRelay engagementRelay;
     // spy 而非 mock:默认仍走真实实现,只在需要制造故障的那条用例里临时打桩
     @SpyBean PayoutRepository payouts;
     @Autowired ApplicationEventPublisher events;
@@ -130,6 +135,8 @@ class SettlementOutboxReliabilityTest {
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
                 agreementApi.sign(applicationId, worker, "SMS"));
         engagementApi.completeApplication(applicationId, legalRep);
+        // 把 EngagementCompleted 投给结算域,结算域才会写自己的 outbox 行
+        engagementRelay.publishPending();
         return applicationId;
     }
 

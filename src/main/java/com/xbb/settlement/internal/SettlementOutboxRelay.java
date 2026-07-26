@@ -38,6 +38,6 @@ public class SettlementOutboxRelay extends AbstractOutboxRelay<SettlementOutboxE
 
     @Transactional("settlementTransactionManager")
     public int publishPending() {
-        return relayPending(outbox.findByStatusInOrderByIdAsc(retryable()));
+        return relayPending(outbox.lockPendingBatch());
     }
 }

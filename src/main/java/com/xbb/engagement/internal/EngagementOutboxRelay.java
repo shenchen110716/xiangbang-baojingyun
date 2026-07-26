@@ -1,4 +1,4 @@
-package com.xbb.fund.internal;
+package com.xbb.engagement.internal;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.AbstractOutboxRelay;
@@ -9,17 +9,18 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
-public class FundOutboxRelay extends AbstractOutboxRelay<FundOutboxEvent> {
+public class EngagementOutboxRelay extends AbstractOutboxRelay<EngagementOutboxEvent> {
 
-    private final FundOutboxRepository outbox;
+    private final EngagementOutboxRepository outbox;
 
-    FundOutboxRelay(FundOutboxRepository outbox, ApplicationEventPublisher events, ObjectMapper json) {
+    EngagementOutboxRelay(EngagementOutboxRepository outbox, ApplicationEventPublisher events,
+                           ObjectMapper json) {
         super(events, json);
         this.outbox = outbox;
     }
 
     @Override
-    protected JpaRepository<FundOutboxEvent, Long> outbox() {
+    protected JpaRepository<EngagementOutboxEvent, Long> outbox() {
         return outbox;
     }
 
@@ -28,7 +29,7 @@ public class FundOutboxRelay extends AbstractOutboxRelay<FundOutboxEvent> {
         publishPending();
     }
 
-    @Transactional("fundTransactionManager")
+    @Transactional("engagementTransactionManager")
     public int publishPending() {
         return relayPending(outbox.lockPendingBatch());
     }

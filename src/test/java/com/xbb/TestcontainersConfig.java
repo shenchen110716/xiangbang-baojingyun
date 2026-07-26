@@ -4,7 +4,14 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.awaitility.Awaitility;
 import org.testcontainers.containers.PostgreSQLContainer;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.List;
 
 @TestConfiguration(proxyBeanMethods = false)
 public class TestcontainersConfig {
@@ -26,8 +33,26 @@ public class TestcontainersConfig {
                     .withSharedMemorySize(1024L * 1024 * 1024)
                     .withCommand("postgres", "-c", "max_connections=1200");
 
+    /** 独占 outbox 表的测试用的库,见 {@link #registerIsolatedProperties}。 */
+    private static final String ISOLATED_DB = "xbb_outbox_isolated";
+
     static {
         PG.start();
+        createIsolatedDatabase();
+        // 跨域事件改走 outbox 之后,投递是真异步的:"下游那行还没出现"是合法的中间态,
+        // 不是失败。而 untilAsserted 默认只吞 AssertionError,orElseThrow 这类
+        // NoSuchElementException 会直接炸穿等待循环。让它一并重试到超时为止。
+        Awaitility.ignoreExceptionsByDefault();
+    }
+
+    private static void createIsolatedDatabase() {
+        try (Connection connection = DriverManager.getConnection(
+                     PG.getJdbcUrl(), PG.getUsername(), PG.getPassword());
+             Statement statement = connection.createStatement()) {
+            statement.execute("CREATE DATABASE " + ISOLATED_DB);
+        } catch (SQLException e) {
+            throw new IllegalStateException("建隔离库失败", e);
+        }
     }
 
     /**
@@ -36,150 +61,54 @@ public class TestcontainersConfig {
      * 因此这里只提供可复用的注册逻辑,每个测试类需自带一个 {@code @DynamicPropertySource}
      * 方法调用本方法(见 SchemaIsolationTests 等)。
      */
+    /** 二十个域全在同一个容器里,靠 schema + 独立受限用户隔离。 */
+    private static final List<String> DOMAINS = List.of(
+            "identity", "org", "job", "engagement", "settlement", "fund", "broker", "profile",
+            "matching", "review", "agreement", "voice", "talent", "notification", "content",
+            "collab", "reimbursement", "mall", "ops", "reporting");
+
+    /**
+     * 供测试类的 {@code @DynamicPropertySource} 调用。
+     *
+     * <p>注意:outbox 中继间隔**不在这里设**。{@code @DynamicPropertySource} 的优先级高于
+     * {@code @SpringBootTest(properties=...)},放这里的话单个测试类想覆盖也覆盖不掉。
+     * 默认值放在 src/test/resources/application.properties,那里优先级最低,可被覆盖。
+     */
     public static void registerProperties(DynamicPropertyRegistry registry) {
-        // 注意:outbox 中继间隔**不在这里设**。@DynamicPropertySource 的优先级高于
-        // @SpringBootTest(properties=...),放这里的话单个测试类想覆盖也覆盖不掉。
-        // 默认值放在 src/test/resources/application.properties,那里优先级最低,可被覆盖。
-        // identity 域:应用运行时用受限用户,Flyway 用管理员
-        registry.add("xbb.domains.identity.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.identity.datasource.username", () -> "identity_user");
-        registry.add("xbb.domains.identity.datasource.password", () -> "identity_pw");
-        registry.add("xbb.domains.identity.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.identity.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.identity.flyway.password", PG::getPassword);
-        // org 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.org.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.org.datasource.username", () -> "org_user");
-        registry.add("xbb.domains.org.datasource.password", () -> "org_pw");
-        registry.add("xbb.domains.org.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.org.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.org.flyway.password", PG::getPassword);
-        // job 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.job.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.job.datasource.username", () -> "job_user");
-        registry.add("xbb.domains.job.datasource.password", () -> "job_pw");
-        registry.add("xbb.domains.job.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.job.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.job.flyway.password", PG::getPassword);
-        // engagement 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.engagement.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.engagement.datasource.username", () -> "engagement_user");
-        registry.add("xbb.domains.engagement.datasource.password", () -> "engagement_pw");
-        registry.add("xbb.domains.engagement.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.engagement.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.engagement.flyway.password", PG::getPassword);
-        // settlement 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.settlement.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.settlement.datasource.username", () -> "settlement_user");
-        registry.add("xbb.domains.settlement.datasource.password", () -> "settlement_pw");
-        registry.add("xbb.domains.settlement.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.settlement.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.settlement.flyway.password", PG::getPassword);
-        // fund 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.fund.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.fund.datasource.username", () -> "fund_user");
-        registry.add("xbb.domains.fund.datasource.password", () -> "fund_pw");
-        registry.add("xbb.domains.fund.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.fund.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.fund.flyway.password", PG::getPassword);
-        // broker 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.broker.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.broker.datasource.username", () -> "broker_user");
-        registry.add("xbb.domains.broker.datasource.password", () -> "broker_pw");
-        registry.add("xbb.domains.broker.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.broker.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.broker.flyway.password", PG::getPassword);
-        // profile 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.profile.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.profile.datasource.username", () -> "profile_user");
-        registry.add("xbb.domains.profile.datasource.password", () -> "profile_pw");
-        registry.add("xbb.domains.profile.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.profile.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.profile.flyway.password", PG::getPassword);
-        // matching 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.matching.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.matching.datasource.username", () -> "matching_user");
-        registry.add("xbb.domains.matching.datasource.password", () -> "matching_pw");
-        registry.add("xbb.domains.matching.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.matching.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.matching.flyway.password", PG::getPassword);
-        // review 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.review.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.review.datasource.username", () -> "review_user");
-        registry.add("xbb.domains.review.datasource.password", () -> "review_pw");
-        registry.add("xbb.domains.review.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.review.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.review.flyway.password", PG::getPassword);
-        // agreement 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.agreement.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.agreement.datasource.username", () -> "agreement_user");
-        registry.add("xbb.domains.agreement.datasource.password", () -> "agreement_pw");
-        registry.add("xbb.domains.agreement.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.agreement.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.agreement.flyway.password", PG::getPassword);
-        // voice 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.voice.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.voice.datasource.username", () -> "voice_user");
-        registry.add("xbb.domains.voice.datasource.password", () -> "voice_pw");
-        registry.add("xbb.domains.voice.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.voice.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.voice.flyway.password", PG::getPassword);
-        // talent 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.talent.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.talent.datasource.username", () -> "talent_user");
-        registry.add("xbb.domains.talent.datasource.password", () -> "talent_pw");
-        registry.add("xbb.domains.talent.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.talent.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.talent.flyway.password", PG::getPassword);
-        // notification 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.notification.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.notification.datasource.username", () -> "notification_user");
-        registry.add("xbb.domains.notification.datasource.password", () -> "notification_pw");
-        registry.add("xbb.domains.notification.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.notification.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.notification.flyway.password", PG::getPassword);
-        // content 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.content.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.content.datasource.username", () -> "content_user");
-        registry.add("xbb.domains.content.datasource.password", () -> "content_pw");
-        registry.add("xbb.domains.content.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.content.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.content.flyway.password", PG::getPassword);
-        // collab 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.collab.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.collab.datasource.username", () -> "collab_user");
-        registry.add("xbb.domains.collab.datasource.password", () -> "collab_pw");
-        registry.add("xbb.domains.collab.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.collab.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.collab.flyway.password", PG::getPassword);
-        // reimbursement 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.reimbursement.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.reimbursement.datasource.username", () -> "reimbursement_user");
-        registry.add("xbb.domains.reimbursement.datasource.password", () -> "reimbursement_pw");
-        registry.add("xbb.domains.reimbursement.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.reimbursement.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.reimbursement.flyway.password", PG::getPassword);
-        // mall 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.mall.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.mall.datasource.username", () -> "mall_user");
-        registry.add("xbb.domains.mall.datasource.password", () -> "mall_pw");
-        registry.add("xbb.domains.mall.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.mall.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.mall.flyway.password", PG::getPassword);
-        // ops 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.ops.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.ops.datasource.username", () -> "ops_user");
-        registry.add("xbb.domains.ops.datasource.password", () -> "ops_pw");
-        registry.add("xbb.domains.ops.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.ops.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.ops.flyway.password", PG::getPassword);
-        // reporting 域:同一个容器,不同 schema/用户
-        registry.add("xbb.domains.reporting.datasource.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.reporting.datasource.username", () -> "reporting_user");
-        registry.add("xbb.domains.reporting.datasource.password", () -> "reporting_pw");
-        registry.add("xbb.domains.reporting.flyway.url", PG::getJdbcUrl);
-        registry.add("xbb.domains.reporting.flyway.user", PG::getUsername);
-        registry.add("xbb.domains.reporting.flyway.password", PG::getPassword);
+        registerProperties(registry, PG.getJdbcUrl());
+    }
+
+    /**
+     * 把二十个域指向**另一个数据库**,用于需要独占 outbox 表的测试。
+     *
+     * <p>为什么需要:测试里各个 Spring 上下文会被缓存复用,它们的定时中继线程在整个 JVM
+     * 生命期里一直跑,而 outbox 表是共享的。于是"本类关掉中继、由测试自己驱动投递"
+     * 根本不成立——别的上下文的中继会抢先投递(或者用 SKIP LOCKED 把行锁走,
+     * 让本类的中继直接跳过)。要断言"没人投递之前下游拿不到",只能真正独占这些表。
+     *
+     * <p>用户是集群级的,所以新库只要建出来,各域的 Flyway(管理员身份)会自己建 schema 并授权。
+     */
+    public static void registerIsolatedProperties(DynamicPropertyRegistry registry) {
+        registerProperties(registry, isolatedJdbcUrl());
+    }
+
+    private static void registerProperties(DynamicPropertyRegistry registry, String jdbcUrl) {
+        for (String domain : DOMAINS) {
+            // 应用运行时用受限用户,Flyway 用管理员
+            registry.add("xbb.domains." + domain + ".datasource.url", () -> jdbcUrl);
+            registry.add("xbb.domains." + domain + ".datasource.username", () -> domain + "_user");
+            registry.add("xbb.domains." + domain + ".datasource.password", () -> domain + "_pw");
+            registry.add("xbb.domains." + domain + ".flyway.url", () -> jdbcUrl);
+            registry.add("xbb.domains." + domain + ".flyway.user", PG::getUsername);
+            registry.add("xbb.domains." + domain + ".flyway.password", PG::getPassword);
+        }
+    }
+
+    private static String isolatedJdbcUrl() {
+        String url = PG.getJdbcUrl();
+        int dbStart = url.lastIndexOf('/') + 1;
+        int dbEnd = url.indexOf('?', dbStart);
+        return url.substring(0, dbStart) + ISOLATED_DB + (dbEnd < 0 ? "" : url.substring(dbEnd));
     }
 
     /**

@@ -1,17 +1,14 @@
-package com.xbb.settlement.internal;
+package com.xbb.engagement.internal;
 
 import com.xbb.AbstractOutboxEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
-import java.util.Optional;
 
-public interface SettlementOutboxRepository extends JpaRepository<SettlementOutboxEvent, Long> {
+public interface EngagementOutboxRepository extends JpaRepository<EngagementOutboxEvent, Long> {
 
-    List<SettlementOutboxEvent> findByStatusInOrderByIdAsc(List<AbstractOutboxEvent.Status> statuses);
-
-    Optional<SettlementOutboxEvent> findByEventId(String eventId);
+    List<EngagementOutboxEvent> findByStatusInOrderByIdAsc(List<AbstractOutboxEvent.Status> statuses);
 
     /**
      * 取一批待投递的行并**锁住**。
@@ -24,11 +21,11 @@ public interface SettlementOutboxRepository extends JpaRepository<SettlementOutb
      * <p>LIMIT 一批:积压很多时不该把它们塞进同一个事务,那会长时间占着连接和锁。
      */
     @Query(value = """
-            SELECT * FROM settlement.outbox_event
+            SELECT * FROM engagement.outbox_event
             WHERE status <> 'PUBLISHED'
             ORDER BY id
             LIMIT 100
             FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
-    List<SettlementOutboxEvent> lockPendingBatch();
+    List<EngagementOutboxEvent> lockPendingBatch();
 }

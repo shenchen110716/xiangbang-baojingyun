@@ -39,7 +39,12 @@ class DomainEventListener {
                 event.agreementId());
     }
 
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:该事件由履约域的 outbox 中继投递。
+     * AFTER_COMMIT 的监听器要等中继事务提交后才跑,那时 outbox 行已是 PUBLISHED,
+     * 这里再抛异常事件就永久丢了(理由详见 AbstractOutboxRelay)。
+     */
+    @EventListener
     @Transactional(transactionManager = "notificationTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(EngagementCompleted event) {
         notifications.deliver(event.workerUserId(), NotificationType.ENGAGEMENT_COMPLETED,

@@ -5,6 +5,7 @@ import com.xbb.engagement.api.ApplicationRejected;
 import com.xbb.engagement.api.ApplicationSubmitted;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.engagement.api.EngagementCompleted;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.job.api.JobApi;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -23,11 +24,14 @@ class EngagementService implements EngagementApi {
     private final SignedAgreementRepository signedAgreements;
     /** 名额扣减必须回到岗位域(§4.2"名额扣减在本域闭环"),这里只负责触发。 */
     private final JobApi jobApi;
+    private final EngagementOutboxRepository outbox;
+    private final ObjectMapper json;
     private final ApplicationEventPublisher events;
 
     EngagementService(ApplicationRepository applications, PostedJobRepository postedJobs,
                        EngagementApprovedOrgRepository approvedOrgs, EngagementVerifiedUserRepository verifiedUsers,
                        SignedAgreementRepository signedAgreements, JobApi jobApi,
+                       EngagementOutboxRepository outbox, ObjectMapper json,
                        ApplicationEventPublisher events) {
         this.applications = applications;
         this.postedJobs = postedJobs;
@@ -35,7 +39,18 @@ class EngagementService implements EngagementApi {
         this.verifiedUsers = verifiedUsers;
         this.signedAgreements = signedAgreements;
         this.jobApi = jobApi;
+        this.outbox = outbox;
+        this.json = json;
         this.events = events;
+    }
+
+    private String serialize(Object event) {
+        try {
+            return json.writeValueAsString(event);
+        } catch (Exception e) {
+            // 序列化不了就别让"履约完成"落库成功——事件发不出去,工资单就永远不会生成
+            throw new IllegalStateException("事件无法序列化: " + event, e);
+        }
     }
 
     @Override
@@ -119,9 +134,14 @@ class EngagementService implements EngagementApi {
         }
         application.complete();
         applications.save(application);
-        events.publishEvent(EngagementCompleted.of(
+
+        // 事件与履约状态**同事务落库**,再由中继投递(§9.1)。这条事件扇出五个下游,
+        // 一个都不自愈——丢了就不会再有第二次"这单干完了",工资单永远不生成。
+        EngagementCompleted completed = EngagementCompleted.of(
                 applicationId, job.getJobId(), application.getApplicantUserId(),
-                job.getOrgId(), job.getWageCents(), Instant.now()));
+                job.getOrgId(), job.getWageCents(), Instant.now());
+        outbox.save(new EngagementOutboxEvent(
+                completed.eventId(), EngagementCompleted.class.getName(), serialize(completed)));
     }
 
     @Override

@@ -3,6 +3,7 @@ package com.xbb.talent;
 import com.xbb.TestcontainersConfig;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
+import com.xbb.engagement.api.EngagementCompleted;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
@@ -12,6 +13,7 @@ import com.xbb.profile.api.ProfileApi;
 import com.xbb.talent.api.TalentApi;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -42,6 +44,7 @@ class TalentServiceTest {
     @Autowired AgreementApi agreementApi;
     @Autowired ProfileApi profileApi;
     @Autowired TalentApi talentApi;
+    @Autowired ApplicationEventPublisher events;
 
     private long registeredUser(String phone) {
         return identityApi.loginByPhone(phone, codes.issue(phone)).userId();
@@ -171,5 +174,27 @@ class TalentServiceTest {
     private static int indexOf(List<TalentApi.TalentView> list, long userId) {
         for (int i = 0; i < list.size(); i++) if (list.get(i).userId() == userId) return i;
         return -1;
+    }
+
+    /**
+     * 事件改走 outbox 之后投递语义是**至少一次**,而累计履约次数是累加的——
+     * 同一单数两次,人才库的排序(以及候选池截断时留下谁)就被刷高了。
+     * 按履约单去重,不是按 eventId:同一单换个 eventId 重发也只该计一次。
+     */
+    @Test
+    void 同一履约单重复投递只计一次履约次数() {
+        long worker = 9_700_001L;
+        long applicationId = 9_700_101L;
+
+        events.publishEvent(EngagementCompleted.of(
+                applicationId, 9_700_201L, worker, 9_700_301L, 30_000, java.time.Instant.now()));
+        int afterFirst = talentApi.findTalent(worker).orElseThrow().completedEngagements();
+
+        // 换一个 eventId 重发同一单,模拟中继重投
+        events.publishEvent(EngagementCompleted.of(
+                applicationId, 9_700_201L, worker, 9_700_301L, 30_000, java.time.Instant.now()));
+
+        assertThat(afterFirst).isEqualTo(1);
+        assertThat(talentApi.findTalent(worker).orElseThrow().completedEngagements()).isEqualTo(1);
     }
 }

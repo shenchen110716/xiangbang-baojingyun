@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.engagement.api.EngagementCompleted;
 import com.xbb.settlement.api.SettlementCalculated;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,12 +34,19 @@ class EngagementEventListener {
     }
 
     // 同步(非 @Async)AFTER_COMMIT,理由见 org.internal.IdentityEventListener 的注释(审计修复)。
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:该事件由履约域的 outbox 中继投递。
+     * AFTER_COMMIT 的监听器要等中继事务提交后才跑,那时 outbox 行已是 PUBLISHED,
+     * 这里再抛异常事件就永久丢了(理由详见 AbstractOutboxRelay)。
+     */
+    @EventListener
     @Transactional(transactionManager = "settlementTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(EngagementCompleted event) {
-        // 幂等(§9.1:消费方按 eventId 去重)。EngagementCompleted 可能被重投,
-        // 重复处理会生成第二条结算记录——那是真金白银的重复。
-        if (outbox.findByEventId(event.eventId()).isPresent()) return;
+        // 幂等键用**业务键**(履约单)而不是 eventId:定义"这单算过工资了"的是履约单,
+        // 不是某一次投递的编号。按 eventId 去重只挡得住同一次投递的重试,
+        // 换个 eventId 的重投会撞上 settlement.application_id 的唯一约束——
+        // 而撞约束会让中继永远重试、事件卡死(表上那条约束是最后一道防线,不是幂等手段)。
+        if (settlements.findByApplicationId(event.applicationId()).isPresent()) return;
 
         Settlement settlement = settlements.save(new Settlement(
                 event.applicationId(), event.jobId(), event.workerUserId(), event.wageCents()));
