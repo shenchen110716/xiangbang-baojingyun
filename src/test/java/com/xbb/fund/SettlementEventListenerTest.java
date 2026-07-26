@@ -6,6 +6,7 @@ import com.xbb.engagement.api.EngagementApi;
 import com.xbb.fund.internal.Payout;
 import com.xbb.fund.internal.PayoutRepository;
 import com.xbb.identity.TestCodeAccessor;
+import com.xbb.settlement.internal.SettlementOutboxRelay;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
 import com.xbb.org.api.OrgApi;
@@ -37,6 +38,7 @@ class SettlementEventListenerTest {
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
     @Autowired EngagementApi engagementApi;
+    @Autowired SettlementOutboxRelay outboxRelay;
     @Autowired AgreementApi agreementApi;
     @Autowired PayoutRepository payouts;
 
@@ -70,6 +72,8 @@ class SettlementEventListenerTest {
         // 协议签署是履约完成的前置门禁(§6.2),没签不让完成
         agreementApi.sign(applicationId, applicant, "SMS");
         engagementApi.completeApplication(applicationId, legalRep);
+        // outbox:结算事件先落库,由中继投递到下游(生产由调度驱动,测试显式推进)
+        outboxRelay.publishPending();
 
         await().atMost(Duration.ofSeconds(5)).until(() -> !payouts.findAll().isEmpty());
         Payout payout = payouts.findAll().stream()

@@ -6,6 +6,7 @@ import com.xbb.engagement.api.EngagementApi;
 import com.xbb.fund.api.AccountType;
 import com.xbb.fund.api.FundApi;
 import com.xbb.identity.TestCodeAccessor;
+import com.xbb.settlement.internal.SettlementOutboxRelay;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
 import com.xbb.org.api.OrgApi;
@@ -40,6 +41,7 @@ class SettlementVoidedTest {
     @Autowired JobApi jobApi;
     @Autowired SettlementApi settlementApi;
     @Autowired EngagementApi engagementApi;
+    @Autowired SettlementOutboxRelay outboxRelay;
     @Autowired AgreementApi agreementApi;
     @Autowired FundApi fundApi;
 
@@ -72,6 +74,8 @@ class SettlementVoidedTest {
         // 协议签署是履约完成的前置门禁(§6.2),没签不让完成
         agreementApi.sign(applicationId, applicant, "SMS");
         engagementApi.completeApplication(applicationId, legalRep);
+        // outbox:结算事件先落库,由中继投递到下游(生产由调度驱动,测试显式推进)
+        outboxRelay.publishPending();
 
         AtomicLong settlementIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->

@@ -6,6 +6,7 @@ import com.xbb.engagement.api.EngagementApi;
 import com.xbb.fund.api.AccountType;
 import com.xbb.fund.api.FundApi;
 import com.xbb.identity.TestCodeAccessor;
+import com.xbb.settlement.internal.SettlementOutboxRelay;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
 import com.xbb.notification.api.NotificationApi;
@@ -43,6 +44,7 @@ class NotificationTest {
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
     @Autowired EngagementApi engagementApi;
+    @Autowired SettlementOutboxRelay outboxRelay;
     @Autowired AgreementApi agreementApi;
     @Autowired SettlementApi settlementApi;
     @Autowired FundApi fundApi;
@@ -95,6 +97,8 @@ class NotificationTest {
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
                 agreementApi.sign(ids[0], ids[2], "SMS"));
         engagementApi.completeApplication(ids[0], ids[1]);
+        // outbox:结算事件先落库,由中继投递到下游(生产由调度驱动,测试显式推进)
+        outboxRelay.publishPending();
 
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
                 assertThat(notificationApi.inbox(ids[2], 20))
@@ -109,6 +113,8 @@ class NotificationTest {
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
                 agreementApi.sign(ids[0], ids[2], "SMS"));
         engagementApi.completeApplication(ids[0], ids[1]);
+        // outbox:结算事件先落库,由中继投递到下游(生产由调度驱动,测试显式推进)
+        outboxRelay.publishPending();
 
         AtomicLong payoutHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {

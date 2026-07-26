@@ -103,7 +103,7 @@ class EngagementService implements EngagementApi {
         }
         application.complete();
         applications.save(application);
-        events.publishEvent(new EngagementCompleted(
+        events.publishEvent(EngagementCompleted.of(
                 applicationId, job.getJobId(), application.getApplicantUserId(),
                 job.getOrgId(), job.getWageCents(), Instant.now()));
     }
