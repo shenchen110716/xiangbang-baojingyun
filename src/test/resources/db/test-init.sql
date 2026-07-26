@@ -8,3 +8,4 @@ CREATE USER fund_user WITH PASSWORD 'fund_pw';
 CREATE USER broker_user WITH PASSWORD 'broker_pw';
 CREATE USER profile_user WITH PASSWORD 'profile_pw';
 CREATE USER matching_user WITH PASSWORD 'matching_pw';
+CREATE USER review_user WITH PASSWORD 'review_pw';

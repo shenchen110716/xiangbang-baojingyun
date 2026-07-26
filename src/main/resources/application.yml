@@ -110,3 +110,14 @@ xbb:
         password: ${DB_ADMIN_PASSWORD:postgres}
         schemas: matching
         locations: classpath:db/migration/matching
+    review:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_REVIEW_USER:review_user}
+        password: ${DB_REVIEW_PASSWORD:review_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: review
+        locations: classpath:db/migration/review
