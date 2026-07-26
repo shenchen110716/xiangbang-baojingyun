@@ -31,7 +31,8 @@ class VoiceSessionService implements VoiceApi {
     private final JobApi jobApi;
     private final Clock clock;
 
-    VoiceSessionService(VoiceJobSessionRepository sessions, JobApi jobApi, Clock clock) {
+    VoiceSessionService(VoiceJobSessionRepository sessions, JobApi jobApi,
+                         Clock clock) {
         this.sessions = sessions;
         this.jobApi = jobApi;
         this.clock = clock;

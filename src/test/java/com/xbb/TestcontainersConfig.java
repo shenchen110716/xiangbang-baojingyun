@@ -135,6 +135,48 @@ public class TestcontainersConfig {
         registry.add("xbb.domains.notification.flyway.url", PG::getJdbcUrl);
         registry.add("xbb.domains.notification.flyway.user", PG::getUsername);
         registry.add("xbb.domains.notification.flyway.password", PG::getPassword);
+        // content 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.content.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.content.datasource.username", () -> "content_user");
+        registry.add("xbb.domains.content.datasource.password", () -> "content_pw");
+        registry.add("xbb.domains.content.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.content.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.content.flyway.password", PG::getPassword);
+        // collab 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.collab.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.collab.datasource.username", () -> "collab_user");
+        registry.add("xbb.domains.collab.datasource.password", () -> "collab_pw");
+        registry.add("xbb.domains.collab.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.collab.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.collab.flyway.password", PG::getPassword);
+        // reimbursement 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.reimbursement.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.reimbursement.datasource.username", () -> "reimbursement_user");
+        registry.add("xbb.domains.reimbursement.datasource.password", () -> "reimbursement_pw");
+        registry.add("xbb.domains.reimbursement.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.reimbursement.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.reimbursement.flyway.password", PG::getPassword);
+        // mall 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.mall.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.mall.datasource.username", () -> "mall_user");
+        registry.add("xbb.domains.mall.datasource.password", () -> "mall_pw");
+        registry.add("xbb.domains.mall.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.mall.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.mall.flyway.password", PG::getPassword);
+        // ops 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.ops.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.ops.datasource.username", () -> "ops_user");
+        registry.add("xbb.domains.ops.datasource.password", () -> "ops_pw");
+        registry.add("xbb.domains.ops.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.ops.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.ops.flyway.password", PG::getPassword);
+        // reporting 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.reporting.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.reporting.datasource.username", () -> "reporting_user");
+        registry.add("xbb.domains.reporting.datasource.password", () -> "reporting_pw");
+        registry.add("xbb.domains.reporting.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.reporting.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.reporting.flyway.password", PG::getPassword);
     }
 
     /**

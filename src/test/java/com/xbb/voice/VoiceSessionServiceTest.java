@@ -51,8 +51,8 @@ class VoiceSessionServiceTest {
 
     @TestConfiguration
     static class MovableClockConfig {
-        // 不能叫 voiceClock:和生产的 bean 同名会触发 BeanDefinitionOverrideException。
-        // @Primary 决定注入优先级,不需要靠同名覆盖。
+        // 不能和生产的 bean 同名(会触发 BeanDefinitionOverrideException),
+        // 靠 @Primary 决定注入优先级。
         @Bean @Primary
         Clock testMovableClock() { return new MovableClock(); }
     }

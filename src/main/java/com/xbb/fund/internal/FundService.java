@@ -107,6 +107,12 @@ class FundService implements FundApi {
     }
 
     @Override
+    @Transactional("fundTransactionManager")
+    public void spendFromAccount(AccountType accountType, long amountCents, String reason) {
+        escrow.debit(accountType, amountCents, reason);
+    }
+
+    @Override
     @Transactional(transactionManager = "fundTransactionManager", readOnly = true)
     public long balanceOf(AccountType accountType) {
         return escrow.balanceOf(accountType);

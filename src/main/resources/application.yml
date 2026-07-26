@@ -165,3 +165,69 @@ xbb:
         password: ${DB_ADMIN_PASSWORD:postgres}
         schemas: notification
         locations: classpath:db/migration/notification
+    content:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_CONTENT_USER:content_user}
+        password: ${DB_CONTENT_PASSWORD:content_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: content
+        locations: classpath:db/migration/content
+    collab:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_COLLAB_USER:collab_user}
+        password: ${DB_COLLAB_PASSWORD:collab_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: collab
+        locations: classpath:db/migration/collab
+    reimbursement:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_REIMBURSEMENT_USER:reimbursement_user}
+        password: ${DB_REIMBURSEMENT_PASSWORD:reimbursement_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: reimbursement
+        locations: classpath:db/migration/reimbursement
+    mall:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_MALL_USER:mall_user}
+        password: ${DB_MALL_PASSWORD:mall_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: mall
+        locations: classpath:db/migration/mall
+    ops:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_OPS_USER:ops_user}
+        password: ${DB_OPS_PASSWORD:ops_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: ops
+        locations: classpath:db/migration/ops
+    reporting:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_REPORTING_USER:reporting_user}
+        password: ${DB_REPORTING_PASSWORD:reporting_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: reporting
+        locations: classpath:db/migration/reporting

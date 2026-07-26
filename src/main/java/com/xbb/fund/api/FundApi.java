@@ -34,6 +34,12 @@ public interface FundApi {
     long balanceOf(AccountType accountType);
 
     /**
+     * 从指定监管账户出账(报销打款等)。**资金域是唯一动钱者**——
+     * 别的域只能调这个接口发起,不能自己记账扣余额(§4.1 决策#1)。
+     */
+    void spendFromAccount(AccountType accountType, long amountCents, String reason);
+
+    /**
      * 担保决策(§8)。**只产出决策不扣款**——§8.2"策略只做决策,不碰钱;
      * 资金域仍是唯一执行者"。信用分取自本域订阅评价域得到的只读副本;
      * 没有信用记录时按新人 60 分处理("0 分等于把新人判死刑")。
