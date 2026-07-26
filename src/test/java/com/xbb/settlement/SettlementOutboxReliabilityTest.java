@@ -49,7 +49,8 @@ import static org.mockito.Mockito.reset;
  * <p>注意本类没有"等一会儿看看有没有到"的写法:中继在测试里被调大到不会自动跑
  * (见 TestcontainersConfig),投递完全由测试显式驱动,因此每条断言都是确定的。
  */
-@SpringBootTest
+// 关掉后台中继:本类要断言"中继跑之前下游拿不到",投递必须完全由测试驱动
+@SpringBootTest(properties = "xbb.outbox.relay.interval-ms=3600000")
 @Import({TestcontainersConfig.class, TestCodeAccessor.class,
         SettlementOutboxReliabilityTest.BreakableConsumerConfig.class})
 class SettlementOutboxReliabilityTest {

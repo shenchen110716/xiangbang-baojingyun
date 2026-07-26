@@ -6,6 +6,7 @@ import com.xbb.engagement.api.EngagementCompleted;
 import com.xbb.fund.api.FundsDisbursed;
 import com.xbb.notification.api.NotificationType;
 import com.xbb.review.api.CreditScoreChanged;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,7 +48,12 @@ class DomainEventListener {
                 event.applicationId());
     }
 
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:该事件由资金域的 outbox 中继投递,
+     * 中继在自己的事务里 publish——用 AFTER_COMMIT 的话本方法要等中继事务提交后才跑,
+     * 那时 outbox 行已是 PUBLISHED,这里再抛异常事件就永久丢了。
+     */
+    @EventListener
     @Transactional(transactionManager = "notificationTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(FundsDisbursed event) {
         // 最该通知的一条。金额按分转元,别让用户看到"30000"以为是三万

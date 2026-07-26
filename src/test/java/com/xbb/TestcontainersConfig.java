@@ -37,9 +37,9 @@ public class TestcontainersConfig {
      * 方法调用本方法(见 SchemaIsolationTests 等)。
      */
     public static void registerProperties(DynamicPropertyRegistry registry) {
-        // 后台 outbox 中继在测试里必须关掉:否则"断言事件尚未投递"这类用例会随
-        // 调度时机随机通过或失败(flaky 的典型来源)。测试显式调用 relay 来推进。
-        registry.add("xbb.outbox.relay.interval-ms", () -> "3600000");
+        // 注意:outbox 中继间隔**不在这里设**。@DynamicPropertySource 的优先级高于
+        // @SpringBootTest(properties=...),放这里的话单个测试类想覆盖也覆盖不掉。
+        // 默认值放在 src/test/resources/application.properties,那里优先级最低,可被覆盖。
         // identity 域:应用运行时用受限用户,Flyway 用管理员
         registry.add("xbb.domains.identity.datasource.url", PG::getJdbcUrl);
         registry.add("xbb.domains.identity.datasource.username", () -> "identity_user");

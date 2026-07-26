@@ -7,7 +7,7 @@ import com.xbb.fund.api.FundsDisbursed;
 import com.xbb.fund.api.GuaranteeContext;
 import com.xbb.fund.api.GuaranteeDecision;
 import com.xbb.fund.api.GuaranteePolicy;
-import org.springframework.context.ApplicationEventPublisher;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,19 +23,30 @@ class FundService implements FundApi {
     private final EscrowService escrow;
     private final GuaranteePolicy guaranteePolicy;
     private final WorkerCreditRepository credits;
-    private final ApplicationEventPublisher events;
+    private final FundOutboxRepository outbox;
+    private final ObjectMapper json;
 
     FundService(PayoutRepository payouts, DisbursementRepository disbursements,
                  DisbursementChannel channel, EscrowService escrow,
                  GuaranteePolicy guaranteePolicy, WorkerCreditRepository credits,
-                 ApplicationEventPublisher events) {
+                 FundOutboxRepository outbox, ObjectMapper json) {
         this.payouts = payouts;
         this.disbursements = disbursements;
         this.channel = channel;
         this.escrow = escrow;
         this.guaranteePolicy = guaranteePolicy;
         this.credits = credits;
-        this.events = events;
+        this.outbox = outbox;
+        this.json = json;
+    }
+
+    private String serialize(Object event) {
+        try {
+            return json.writeValueAsString(event);
+        } catch (Exception e) {
+            // 序列化不了就别让这笔发放"成功"——事件发不出去,下游的佣金和账目就永远缺一笔
+            throw new IllegalStateException("事件无法序列化: " + event, e);
+        }
     }
 
     /** 新人起始信用分,和评价域 CreditCalculator.NEW_USER_SCORE 一致。 */
@@ -87,8 +98,13 @@ class FundService implements FundApi {
 
             payout.disburse();
             payouts.save(payout);
-            events.publishEvent(new FundsDisbursed(
-                    payout.getId(), payout.getSettlementId(), payout.getPayeeUserId(), amount, Instant.now()));
+            // 事件与账本变动**同事务落库**,再由中继投递。丢了这条事件的后果不会自愈:
+            // 不会再有第二次"这笔钱发过了"的事件,佣金和盈亏账就永远少一笔。
+            outbox.save(new FundOutboxEvent(
+                    java.util.UUID.randomUUID().toString(),
+                    FundsDisbursed.class.getName(),
+                    serialize(new FundsDisbursed(payout.getId(), payout.getSettlementId(),
+                            payout.getPayeeUserId(), amount, Instant.now()))));
         } catch (DisbursementChannel.ChannelException e) {
             escrow.credit(AccountType.USER_FUNDS, amount, "代发失败冲正 payout#" + payout.getId());
             disbursement.markFailed(e.getMessage());

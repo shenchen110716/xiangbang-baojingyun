@@ -4,6 +4,7 @@ import com.xbb.broker.api.CommissionGenerated;
 import com.xbb.fund.api.FundsDisbursed;
 import com.xbb.mall.api.OrderSettlementTriggered;
 import com.xbb.reporting.api.ReportingApi;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +26,12 @@ class DomainEventListener {
     }
 
     /** 工资发放:对工人是收入,对平台是直接成本。 */
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:该事件由资金域的 outbox 中继投递,
+     * 中继在自己的事务里 publish——用 AFTER_COMMIT 的话本方法要等中继事务提交后才跑,
+     * 那时 outbox 行已是 PUBLISHED,这里再抛异常事件就永久丢了。
+     */
+    @EventListener
     @Transactional(transactionManager = "reportingTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(FundsDisbursed event) {
         reporting.record(ReportingApi.Dimension.WORKER, event.payeeUserId(),
