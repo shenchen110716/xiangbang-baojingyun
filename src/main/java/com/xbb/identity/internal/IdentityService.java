@@ -4,7 +4,7 @@ import com.xbb.identity.api.IdentityApi;
 import com.xbb.identity.api.UserRegistered;
 import com.xbb.identity.api.UserVerified;
 import com.xbb.security.JwtService;
-import org.springframework.context.ApplicationEventPublisher;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,14 +21,25 @@ class IdentityService implements IdentityApi {
     private final UserRepository users;
     private final VerificationCodeService codes;
     private final JwtService jwt;
-    private final ApplicationEventPublisher events;
+    private final IdentityOutboxRepository outbox;
+    private final ObjectMapper json;
 
     IdentityService(UserRepository users, VerificationCodeService codes,
-                    JwtService jwt, ApplicationEventPublisher events) {
+                    JwtService jwt, IdentityOutboxRepository outbox, ObjectMapper json) {
         this.users = users;
         this.codes = codes;
         this.jwt = jwt;
-        this.events = events;
+        this.outbox = outbox;
+        this.json = json;
+    }
+
+    private String serialize(Object event) {
+        try {
+            return json.writeValueAsString(event);
+        } catch (Exception e) {
+            // 序列化不了就别让这步业务成功——事件发不出去,下游永远补不回来
+            throw new IllegalStateException("事件无法序列化: " + event, e);
+        }
     }
 
     @Override
@@ -46,8 +57,12 @@ class IdentityService implements IdentityApi {
             return new LoginResult(u.getId(), jwt.issue(u.getId()), false);
         }
         User created = users.save(new User(phone, generateInviteCode()));
-        events.publishEvent(new UserRegistered(
-                created.getId(), created.getPhone(), created.getInviteCode(), Instant.now()));
+        // 目前没有订阅者,但仍走 outbox:一个类里留两套发事件的机制,
+        // 下一个人加订阅时很难判断该用哪套。
+        UserRegistered registered = new UserRegistered(
+                created.getId(), created.getPhone(), created.getInviteCode(), Instant.now());
+        outbox.save(new IdentityOutboxEvent(java.util.UUID.randomUUID().toString(),
+                UserRegistered.class.getName(), serialize(registered)));
         return new LoginResult(created.getId(), jwt.issue(created.getId()), true);
     }
 
@@ -71,7 +86,11 @@ class IdentityService implements IdentityApi {
         }
         u.verify(realName, idNumber);
         users.save(u);
-        events.publishEvent(new UserVerified(userId, realName, Instant.now()));
+        // 事件与实名状态同事务落库,再由中继投递。丢了这条,各域的实名副本里就永远
+        // 没有这个人——他报不了名也发不了岗,而且不会有第二次实名事件来补。
+        UserVerified verified = new UserVerified(userId, realName, Instant.now());
+        outbox.save(new IdentityOutboxEvent(java.util.UUID.randomUUID().toString(),
+                UserVerified.class.getName(), serialize(verified)));
     }
 
     private String generateInviteCode() {

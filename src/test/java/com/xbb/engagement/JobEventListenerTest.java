@@ -42,17 +42,17 @@ class JobEventListenerTest {
         identityApi.verifyRealName(legalRep, "李法人", "110101199001015003");
 
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "十二号工厂", "91110000000000082X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
 
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "包装工", "产线包装", 2900, legalRep)));
         long jobId = jobIdHolder.get();
 
-        await().atMost(Duration.ofSeconds(5)).until(() -> postedJobs.findById(jobId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> postedJobs.findById(jobId).isPresent());
         var posted = postedJobs.findById(jobId).orElseThrow();
         assertThat(posted.getOrgId()).isEqualTo(orgId);
         assertThat(posted.getWageCents()).isEqualTo(2900);

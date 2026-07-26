@@ -40,14 +40,14 @@ class OrgEventListenerTest {
         identityApi.verifyRealName(legalRepUserId, "孙法人", "110101199001015002");
 
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(
                         Organization.Type.FACTORY, "十五号工厂", "91110000000000151X", legalRepUserId)));
         long orgId = orgIdHolder.get();
 
         orgApi.approve(orgId);
 
-        await().atMost(Duration.ofSeconds(5)).until(() -> approvedOrgs.findById(orgId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> approvedOrgs.findById(orgId).isPresent());
         var approved = approvedOrgs.findById(orgId).orElseThrow();
         assertThat(approved.getLegalRepUserId()).isEqualTo(legalRepUserId);
     }

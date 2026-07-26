@@ -57,14 +57,14 @@ class MatchingServiceTest {
         long userId = registeredUser(phone);
         profileApi.submitTags(userId, tags);
         profileApi.setWorkerPreference(userId, expectedWage, lat, lon);
-        await().atMost(Duration.ofSeconds(5)).until(() -> workerProjections.findById(userId)
+        await().atMost(Duration.ofSeconds(15)).until(() -> workerProjections.findById(userId)
                 .filter(p -> p.getExpectedWageCents() != null).isPresent());
         return userId;
     }
 
     private void jobProfile(long jobId, List<String> must, List<String> nice, double lat, double lon) {
         profileApi.setJobProfile(jobId, must, nice, lat, lon);
-        await().atMost(Duration.ofSeconds(5)).until(() -> jobProjections.findById(jobId)
+        await().atMost(Duration.ofSeconds(15)).until(() -> jobProjections.findById(jobId)
                 .filter(p -> p.getLat() != null).isPresent());
     }
 
@@ -130,7 +130,7 @@ class MatchingServiceTest {
         for (int i = 0; i < 5; i++) {
             long jobId = 8200L + i;
             profileApi.setJobProfile(jobId, List.of(), List.of(), LAT, LON);
-            await().atMost(Duration.ofSeconds(5)).until(() -> jobProjections.findById(jobId).isPresent());
+            await().atMost(Duration.ofSeconds(15)).until(() -> jobProjections.findById(jobId).isPresent());
         }
 
         List<MatchingApi.MatchView> result = matchingApi.recommendJobsForWorker(userId, 10);

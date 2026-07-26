@@ -52,19 +52,19 @@ class SettlementEventListenerTest {
     void 结算已算出金额后资金域生成待发放记录() {
         long legalRep = verifiedUser("15000000001", "法人十", "110101199001020001");
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "十号工厂", "91110000000000071X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
 
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "分拣员", "仓库分拣", 3100, legalRep)));
         long jobId = jobIdHolder.get();
 
         long applicant = verifiedUser("15000000002", "应聘者六", "110101199001020002");
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
         long applicationId = applicationIdHolder.get();
 
@@ -75,7 +75,7 @@ class SettlementEventListenerTest {
         // outbox:结算事件先落库,由中继投递到下游(生产由调度驱动,测试显式推进)
         outboxRelay.publishPending();
 
-        await().atMost(Duration.ofSeconds(5)).until(() -> !payouts.findAll().isEmpty());
+        await().atMost(Duration.ofSeconds(15)).until(() -> !payouts.findAll().isEmpty());
         Payout payout = payouts.findAll().stream()
                 .filter(p -> p.getPayeeUserId() == applicant)
                 .findFirst().orElseThrow();

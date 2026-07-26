@@ -61,18 +61,18 @@ class NotificationTest {
                              String workerIdNumber, String orgName, String creditCode) {
         long legalRep = verifiedUser(legalRepPhone, "法人" + legalRepPhone.substring(8), legalRepId);
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "普工", "描述", 30_000, legalRep)));
         long jobId = jobIdHolder.get();
 
         long worker = verifiedUser(workerPhone, "工人" + workerPhone.substring(8), workerIdNumber);
         AtomicLong appHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 appHolder.set(engagementApi.apply(jobId, worker)));
         long applicationId = appHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
@@ -84,7 +84,7 @@ class NotificationTest {
         long[] ids = accepted("16100000001", "110101199001027001",
                 "16100000002", "110101199001027002", "通知一厂", "91110000000000191X");
 
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(notificationApi.inbox(ids[2], 20))
                         .extracting(NotificationApi.NotificationView::type)
                         .contains(NotificationType.AGREEMENT_PENDING));
@@ -94,13 +94,13 @@ class NotificationTest {
     void 履约完成后工人收到可评价通知() {
         long[] ids = accepted("16100000003", "110101199001027003",
                 "16100000004", "110101199001027004", "通知二厂", "91110000000000192X");
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 agreementApi.sign(ids[0], ids[2], "SMS"));
         engagementApi.completeApplication(ids[0], ids[1]);
         // outbox:结算事件先落库,由中继投递到下游(生产由调度驱动,测试显式推进)
         outboxRelay.publishPending();
 
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(notificationApi.inbox(ids[2], 20))
                         .extracting(NotificationApi.NotificationView::type)
                         .contains(NotificationType.ENGAGEMENT_COMPLETED));
@@ -110,21 +110,21 @@ class NotificationTest {
     void 工资发放后工人收到到账通知且金额按元展示() {
         long[] ids = accepted("16100000005", "110101199001027005",
                 "16100000006", "110101199001027006", "通知三厂", "91110000000000193X");
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 agreementApi.sign(ids[0], ids[2], "SMS"));
         engagementApi.completeApplication(ids[0], ids[1]);
         // outbox:结算事件先落库,由中继投递到下游(生产由调度驱动,测试显式推进)
         outboxRelay.publishPending();
 
         AtomicLong payoutHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
             long settlementId = settlementApi.findByApplicationId(ids[0]).orElseThrow().id();
             payoutHolder.set(fundApi.findBySettlementId(settlementId).orElseThrow().id());
         });
         fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "备资");
         fundApi.disburse(payoutHolder.get());
 
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
             List<NotificationApi.NotificationView> inbox = notificationApi.inbox(ids[2], 20);
             assertThat(inbox).extracting(NotificationApi.NotificationView::type)
                     .contains(NotificationType.WAGE_DISBURSED);
@@ -139,7 +139,7 @@ class NotificationTest {
     void 同一事件重复投递只产生一条通知() {
         long[] ids = accepted("16100000007", "110101199001027007",
                 "16100000008", "110101199001027008", "通知四厂", "91110000000000194X");
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(notificationApi.inbox(ids[2], 20)).isNotEmpty());
 
         long countBefore = notificationApi.inbox(ids[2], 50).stream()
@@ -153,7 +153,7 @@ class NotificationTest {
     void 未读数与标记已读() {
         long[] ids = accepted("16100000009", "110101199001027009",
                 "16100000010", "110101199001027010", "通知五厂", "91110000000000195X");
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(notificationApi.unreadCount(ids[2])).isPositive());
 
         long id = notificationApi.inbox(ids[2], 20).get(0).id();
@@ -167,7 +167,7 @@ class NotificationTest {
     void 不能标记别人的通知为已读() {
         long[] ids = accepted("16100000011", "110101199001027011",
                 "16100000012", "110101199001027012", "通知六厂", "91110000000000196X");
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(notificationApi.inbox(ids[2], 20)).isNotEmpty());
         long id = notificationApi.inbox(ids[2], 20).get(0).id();
 

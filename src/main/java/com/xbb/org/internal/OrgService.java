@@ -1,7 +1,7 @@
 package com.xbb.org.internal;
 
 import com.xbb.org.api.*;
-import org.springframework.context.ApplicationEventPublisher;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,13 +13,24 @@ class OrgService implements OrgApi {
 
     private final OrganizationRepository orgs;
     private final VerifiedUserRepository verifiedUsers;
-    private final ApplicationEventPublisher events;
+    private final OrgOutboxRepository outbox;
+    private final ObjectMapper json;
 
     OrgService(OrganizationRepository orgs, VerifiedUserRepository verifiedUsers,
-               ApplicationEventPublisher events) {
+               OrgOutboxRepository outbox, ObjectMapper json) {
         this.orgs = orgs;
         this.verifiedUsers = verifiedUsers;
-        this.events = events;
+        this.outbox = outbox;
+        this.json = json;
+    }
+
+    private String serialize(Object event) {
+        try {
+            return json.writeValueAsString(event);
+        } catch (Exception e) {
+            // 序列化不了就别让这步业务成功——事件发不出去,下游永远补不回来
+            throw new IllegalStateException("事件无法序列化: " + event, e);
+        }
     }
 
     @Override
@@ -29,7 +40,10 @@ class OrgService implements OrgApi {
             throw new IllegalStateException("法人代表未实名认证");
         }
         Organization org = orgs.save(new Organization(type, name, creditCode, legalRepUserId));
-        events.publishEvent(new OrganizationSubmitted(org.getId(), legalRepUserId, Instant.now()));
+        // 同 identity:暂无订阅者,但不在一个类里并存两套发事件的机制。
+        OrganizationSubmitted submitted = new OrganizationSubmitted(org.getId(), legalRepUserId, Instant.now());
+        outbox.save(new OrgOutboxEvent(java.util.UUID.randomUUID().toString(),
+                OrganizationSubmitted.class.getName(), serialize(submitted)));
         return org.getId();
     }
 
@@ -39,7 +53,9 @@ class OrgService implements OrgApi {
         Organization org = orgs.findById(orgId).orElseThrow(() -> new IllegalArgumentException("组织不存在"));
         org.approve();
         orgs.save(org);
-        events.publishEvent(new OrganizationApproved(orgId, org.getLegalRepUserId(), Instant.now()));
+        OrganizationApproved approved = new OrganizationApproved(orgId, org.getLegalRepUserId(), Instant.now());
+        outbox.save(new OrgOutboxEvent(java.util.UUID.randomUUID().toString(),
+                OrganizationApproved.class.getName(), serialize(approved)));
     }
 
     @Override
@@ -48,7 +64,9 @@ class OrgService implements OrgApi {
         Organization org = orgs.findById(orgId).orElseThrow(() -> new IllegalArgumentException("组织不存在"));
         org.reject();
         orgs.save(org);
-        events.publishEvent(new OrganizationRejected(orgId, Instant.now()));
+        OrganizationRejected rejected = new OrganizationRejected(orgId, Instant.now());
+        outbox.save(new OrgOutboxEvent(java.util.UUID.randomUUID().toString(),
+                OrganizationRejected.class.getName(), serialize(rejected)));
     }
 
     @Override

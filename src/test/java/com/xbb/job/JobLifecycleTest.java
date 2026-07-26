@@ -6,6 +6,7 @@ import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
 import com.xbb.job.api.JobClosed;
+import com.xbb.job.api.JobPosted;
 import com.xbb.job.internal.Job;
 import com.xbb.matching.api.MatchingApi;
 import com.xbb.matching.internal.WorkerProjection;
@@ -15,17 +16,12 @@ import com.xbb.org.internal.Organization;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,27 +35,12 @@ import static org.awaitility.Awaitility.await;
  * 于是招满的岗位会一直被推荐、一直能报名。
  */
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class, JobLifecycleTest.ClosedEventRecorder.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class})
 class JobLifecycleTest {
 
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
         TestcontainersConfig.registerProperties(registry);
-    }
-
-    /** 记下关闭事件,用来验证"重复关闭不重复发事件"。 */
-    @TestConfiguration
-    static class ClosedEventRecorder {
-
-        static final List<JobClosed> received = new CopyOnWriteArrayList<>();
-
-        @Bean
-        Recorder jobClosedRecorder() { return new Recorder(); }
-
-        static class Recorder {
-            @TransactionalEventListener(fallbackExecution = true)
-            void on(JobClosed event) { received.add(event); }
-        }
     }
 
     @Autowired IdentityApi identityApi;
@@ -69,6 +50,8 @@ class JobLifecycleTest {
     @Autowired EngagementApi engagementApi;
     @Autowired MatchingApi matchingApi;
     @Autowired WorkerProjectionRepository workerProjections;
+    @Autowired com.xbb.job.internal.JobOutboxRepository outbox;
+    @Autowired org.springframework.context.ApplicationEventPublisher events;
 
     private long verifiedUser(String phone, String realName, String idNumber) {
         long userId = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
@@ -78,7 +61,7 @@ class JobLifecycleTest {
 
     private long approvedOrg(long legalRep, String orgName, String creditCode) {
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
@@ -87,14 +70,14 @@ class JobLifecycleTest {
 
     private long postJob(long orgId, int headcount, long legalRep) {
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "普工", "描述", 30_000, headcount, legalRep)));
         return jobIdHolder.get();
     }
 
     private long apply(long jobId, long worker) {
         AtomicLong holder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> holder.set(engagementApi.apply(jobId, worker)));
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> holder.set(engagementApi.apply(jobId, worker)));
         return holder.get();
     }
 
@@ -151,7 +134,7 @@ class JobLifecycleTest {
         jobApi.closeJob(jobId, legalRep);
 
         // 关闭事件要先流到履约域的投影
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThatThrownBy(() -> engagementApi.apply(jobId, worker))
                         .isInstanceOf(IllegalStateException.class)
                         .hasMessageContaining("岗位已关闭"));
@@ -181,9 +164,12 @@ class JobLifecycleTest {
         jobApi.closeJob(jobId, legalRep);
 
         assertThat(jobApi.findJob(jobId).orElseThrow().status()).isEqualTo(Job.Status.CLOSED);
-        // 重试/重复点击都会走到这里,但下游不该看到同一个岗位关闭三次
-        assertThat(ClosedEventRecorder.received.stream().filter(e -> e.jobId() == jobId).count())
-                .isEqualTo(1);
+        // 重试/重复点击都会走到这里,但下游不该看到同一个岗位关闭三次。
+        // 直接数 outbox 行:事件是在关闭那一刻同事务写进去的,数它比等异步投递确定得多。
+        assertThat(outbox.findAll().stream()
+                .filter(row -> JobClosed.class.getName().equals(row.getEventType()))
+                .filter(row -> row.getPayload().contains("\"jobId\":" + jobId))
+                .count()).isEqualTo(1);
     }
 
     @Test
@@ -197,7 +183,7 @@ class JobLifecycleTest {
         workerProjections.save(new WorkerProjection(seeker, Map.of("普工", 1.0), 30_000L, 31.0, 121.0));
 
         // 关之前两个都能被推出来
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(matchingApi.recommendJobsForWorker(seeker, 50))
                         .extracting(MatchingApi.MatchView::targetId)
                         .contains(openJob, doomedJob));
@@ -205,12 +191,37 @@ class JobLifecycleTest {
         jobApi.closeJob(doomedJob, legalRep);
 
         // §5.4:硬约束不满足**直接不出现**,不是降权
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(matchingApi.recommendJobsForWorker(seeker, 50))
                         .extracting(MatchingApi.MatchView::targetId)
                         .contains(openJob)
                         .doesNotContain(doomedJob));
 
         workerProjections.deleteById(seeker);
+    }
+
+    /**
+     * 投递是至少一次的:JobPosted 会在 JobClosed 之后被重投。
+     * 履约域的投影原本是 `save(new PostedJob(...))` 直接覆盖整行,
+     * 那样 open 会被重置回 true——**关掉的岗位复活,工人又能报名进来**。
+     */
+    @Test
+    void 重投的岗位发布事件不会让已关闭的岗位复活() {
+        long legalRep = verifiedUser("16300000013", "法人13", "110101199001029013");
+        long orgId = approvedOrg(legalRep, "名额七厂", "91110000000000227X");
+        long jobId = postJob(orgId, 5, legalRep);
+        long worker = verifiedUser("16300000014", "工人14", "110101199001029014");
+
+        jobApi.closeJob(jobId, legalRep);
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                assertThatThrownBy(() -> engagementApi.apply(jobId, worker))
+                        .hasMessageContaining("岗位已关闭"));
+
+        // 模拟中继重投:同一条 JobPosted 再发一次
+        events.publishEvent(new JobPosted(jobId, orgId, 30_000, 5, java.time.Instant.now()));
+
+        assertThatThrownBy(() -> engagementApi.apply(jobId, worker))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("岗位已关闭");
     }
 }

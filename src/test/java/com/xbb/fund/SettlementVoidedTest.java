@@ -55,19 +55,19 @@ class SettlementVoidedTest {
     void 结算被作废后待发放记录自动取消() {
         long legalRep = verifiedUser("15000000003", "法人十一", "110101199001021001");
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "十一号工厂", "91110000000000081X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
 
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "打包员", "仓库打包", 2700, legalRep)));
         long jobId = jobIdHolder.get();
 
         long applicant = verifiedUser("15000000004", "应聘者七", "110101199001021002");
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
@@ -78,18 +78,18 @@ class SettlementVoidedTest {
         outboxRelay.publishPending();
 
         AtomicLong settlementIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 settlementIdHolder.set(settlementApi.findByApplicationId(applicationId).orElseThrow().id()));
         long settlementId = settlementIdHolder.get();
 
         AtomicLong payoutIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 payoutIdHolder.set(fundApi.findBySettlementId(settlementId).orElseThrow().id()));
         long payoutId = payoutIdHolder.get();
 
         settlementApi.voidSettlement(settlementId, "岗位取消");
 
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(fundApi.findById(payoutId).orElseThrow().status())
                         .isEqualTo(com.xbb.fund.internal.Payout.Status.CANCELLED));
 

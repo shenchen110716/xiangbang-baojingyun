@@ -35,7 +35,7 @@ class IdentityEventListenerTest {
 
         identityApi.verifyRealName(userId, "钱经纪", "110101199001011001");
 
-        await().atMost(Duration.ofSeconds(5)).until(() -> verifiedUsers.findById(userId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> verifiedUsers.findById(userId).isPresent());
         assertThat(verifiedUsers.findById(userId)).isPresent();
     }
 }

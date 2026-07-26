@@ -34,7 +34,7 @@ class BrokerServiceTest {
     private long verifiedUser(String phone, String realName, String idNumber) {
         long userId = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
         identityApi.verifyRealName(userId, realName, idNumber);
-        await().atMost(Duration.ofSeconds(5)).until(() -> verifiedUsers.findById(userId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> verifiedUsers.findById(userId).isPresent());
         return userId;
     }
 

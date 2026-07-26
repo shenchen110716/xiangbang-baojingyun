@@ -58,19 +58,19 @@ class ReviewServiceTest {
                                         String orgName, String creditCode) {
         long legalRep = verifiedUser(legalRepPhone, "法人" + legalRepPhone.substring(8), legalRepId);
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
 
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "普工", "描述", 30000, legalRep)));
         long jobId = jobIdHolder.get();
 
         long worker = verifiedUser(workerPhone, "工人" + workerPhone.substring(8), workerId);
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, worker)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
@@ -78,7 +78,7 @@ class ReviewServiceTest {
         agreementApi.sign(applicationId, worker, "SMS");
         engagementApi.completeApplication(applicationId, legalRep);
 
-        await().atMost(Duration.ofSeconds(5)).until(() -> completedEngagements.findById(applicationId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> completedEngagements.findById(applicationId).isPresent());
         return new long[]{applicationId, legalRep, worker};
     }
 

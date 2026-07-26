@@ -32,7 +32,7 @@ class IdentityVerifyTest {
 
     @Autowired IdentityApi identityApi;
     @Autowired TestCodeAccessor codes;
-    @Autowired ApplicationEvents events;
+    @Autowired com.xbb.identity.internal.IdentityOutboxRepository outbox;
 
     @Test
     void 实名成功后置verified并发出事件() {
@@ -41,10 +41,14 @@ class IdentityVerifyTest {
 
         identityApi.verifyRealName(userId, "张三", "110101199001011234");
 
-        assertThat(events.stream(UserVerified.class))
-                .anySatisfy(evt -> {
-                    assertThat(evt.userId()).isEqualTo(userId);
-                    assertThat(evt.realName()).isEqualTo("张三");
+        // 事件不再同步发布,而是与实名状态**同事务**写进 outbox,由中继投递。
+        // ApplicationEvents 只录得到测试线程里发的事件,录不到中继线程发的,
+        // 所以这里断言真正的契约:事件行已经落库了。
+        assertThat(outbox.findAll())
+                .filteredOn(row -> UserVerified.class.getName().equals(row.getEventType()))
+                .anySatisfy(row -> {
+                    assertThat(row.getPayload()).contains("\"userId\":" + userId).contains("张三");
+                    assertThat(row.getStatus()).isNotNull();
                 });
         assertThat(identityApi.findVerifiedUser(userId).orElseThrow().verified()).isTrue();
     }

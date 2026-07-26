@@ -43,7 +43,7 @@ class ReportingServiceTest {
 
         mallApi.pay(orderId);
 
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(reportingApi.profitAndLoss(ReportingApi.Dimension.ORG, Map.of()))
                         .anySatisfy(pl -> {
                             assertThat(pl.dimensionId()).isEqualTo(merchantId);
@@ -62,7 +62,7 @@ class ReportingServiceTest {
                     10_000, "场次", 5, null);
             mallApi.pay(mallApi.placeOrder(pid, 61L));
         }
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(reportingApi.profitAndLoss(ReportingApi.Dimension.ORG, Map.of()))
                         .extracting(ReportingApi.ProfitLoss::dimensionId)
                         .contains(merchantA, merchantB, merchantC));
@@ -86,7 +86,7 @@ class ReportingServiceTest {
                 80_000, "场次", 5, null);
         mallApi.pay(mallApi.placeOrder(pid, 62L));
 
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(reportingApi.profitAndLoss(ReportingApi.Dimension.ORG, Map.of()))
                         .anyMatch(p -> p.dimensionId() == merchantId));
 
@@ -103,7 +103,7 @@ class ReportingServiceTest {
         long pid = mallApi.publishProduct(merchantId, "票", ProductSettlementMode.INSTANT,
                 10_000, "场次", 5, null);
         mallApi.pay(mallApi.placeOrder(pid, 63L));
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(reportingApi.profitAndLoss(ReportingApi.Dimension.ORG, Map.of()))
                         .anyMatch(p -> p.dimensionId() == merchantId));
 
@@ -121,7 +121,7 @@ class ReportingServiceTest {
         long orderId = mallApi.placeOrder(pid, 64L);
         mallApi.pay(orderId);
 
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(reportingApi.profitAndLoss(ReportingApi.Dimension.ORG, Map.of()))
                         .anyMatch(p -> p.dimensionId() == merchantId));
 

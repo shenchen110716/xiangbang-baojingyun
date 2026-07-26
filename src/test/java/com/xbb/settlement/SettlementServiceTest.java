@@ -51,19 +51,19 @@ class SettlementServiceTest {
     private long pendingSettlement(String legalRepPhone, String applicantPhone, String suffix, long wageCents) {
         long legalRep = verifiedUser(legalRepPhone, "法人" + suffix, "1101011990010" + suffix + "001");
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, suffix + "号工厂", "9111000000000" + suffix + "9X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
 
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, suffix + "号岗位", "描述", wageCents, legalRep)));
         long jobId = jobIdHolder.get();
 
         long applicant = verifiedUser(applicantPhone, "应聘者" + suffix, "1101011990010" + suffix + "002");
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
@@ -71,7 +71,7 @@ class SettlementServiceTest {
         agreementApi.sign(applicationId, applicant, "SMS");
         engagementApi.completeApplication(applicationId, legalRep);
 
-        await().atMost(Duration.ofSeconds(5)).until(() -> settlements.findByApplicationId(applicationId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> settlements.findByApplicationId(applicationId).isPresent());
         return settlements.findByApplicationId(applicationId).orElseThrow().getId();
     }
 

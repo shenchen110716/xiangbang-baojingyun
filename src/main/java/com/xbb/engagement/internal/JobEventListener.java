@@ -2,6 +2,7 @@ package com.xbb.engagement.internal;
 
 import com.xbb.job.api.JobClosed;
 import com.xbb.job.api.JobPosted;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,14 +20,29 @@ class JobEventListener {
         this.postedJobs = postedJobs;
     }
 
-    // 同步(非 @Async)AFTER_COMMIT,理由见 org.internal.IdentityEventListener 的注释。
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:该事件由发布方的 outbox 中继投递。
+     * AFTER_COMMIT 的监听器要等中继事务提交后才跑,那时 outbox 行已是 PUBLISHED,
+     * 这里再抛异常事件就永久丢了(理由详见 AbstractOutboxRelay)。
+     */
+    @EventListener
     @Transactional(transactionManager = "engagementTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(JobPosted event) {
-        postedJobs.save(new PostedJob(event.jobId(), event.orgId(), event.wageCents()));
+        // **不能直接 new 一个覆盖整行**:那会把 open 重置回 true。
+        // 投递是至少一次的,JobPosted 在 JobClosed 之后重投一次,已关闭的岗位就复活了,
+        // 工人又能报名进来。所以是"有则更新、无则新建"。
+        PostedJob job = postedJobs.findById(event.jobId())
+                .orElseGet(() -> new PostedJob(event.jobId(), event.orgId(), event.wageCents()));
+        job.updateBasics(event.orgId(), event.wageCents());
+        postedJobs.save(job);
     }
 
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:该事件由发布方的 outbox 中继投递。
+     * AFTER_COMMIT 的监听器要等中继事务提交后才跑,那时 outbox 行已是 PUBLISHED,
+     * 这里再抛异常事件就永久丢了(理由详见 AbstractOutboxRelay)。
+     */
+    @EventListener
     @Transactional(transactionManager = "engagementTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(JobClosed event) {
         // 岗位可能还没投影过来(事件乱序/投影丢失),那就没什么可关的——

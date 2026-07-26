@@ -30,6 +30,12 @@ public class PostedJob {
 
     public void close() { this.open = false; }
 
+    /** 只更新岗位基础信息,**不碰 open**——重投的 JobPosted 不该让已关闭的岗位复活。 */
+    public void updateBasics(long orgId, long wageCents) {
+        this.orgId = orgId;
+        this.wageCents = wageCents;
+    }
+
     public Long getJobId() { return jobId; }
     public boolean isOpen() { return open; }
     public long getOrgId() { return orgId; }

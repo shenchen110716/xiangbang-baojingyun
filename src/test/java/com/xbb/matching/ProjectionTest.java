@@ -54,7 +54,7 @@ class ProjectionTest {
         profileApi.submitTags(userId, List.of("普工", "叉车"));
         profileApi.setWorkerPreference(userId, 30000, 31.2304, 121.4737);
 
-        await().atMost(Duration.ofSeconds(5)).until(() -> workerProjections.findById(userId)
+        await().atMost(Duration.ofSeconds(15)).until(() -> workerProjections.findById(userId)
                 .filter(p -> p.getExpectedWageCents() != null).isPresent());
         WorkerProjection projection = workerProjections.findById(userId).orElseThrow();
         assertThat(projection.getTags()).containsOnlyKeys("普工", "叉车");
@@ -70,7 +70,7 @@ class ProjectionTest {
 
         profileApi.submitTags(userId, List.of("质检"));
 
-        await().atMost(Duration.ofSeconds(5)).until(() -> workerProjections.findById(userId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> workerProjections.findById(userId).isPresent());
         WorkerProjection projection = workerProjections.findById(userId).orElseThrow();
         assertThat(projection.getTags()).containsOnlyKeys("质检");
         // 维度缺失是正常的冷启动状态,不是错误——评分函数必须容忍
@@ -84,12 +84,12 @@ class ProjectionTest {
         long legalRep = identityApi.loginByPhone(legalRepPhone, codes.issue(legalRepPhone)).userId();
         identityApi.verifyRealName(legalRep, "法人信用", "110101199001022001");
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "信用测试厂", "91110000000000131X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "普工", "描述", 30000, legalRep)));
         long jobId = jobIdHolder.get();
 
@@ -97,7 +97,7 @@ class ProjectionTest {
         long worker = identityApi.loginByPhone(workerPhone, codes.issue(workerPhone)).userId();
         identityApi.verifyRealName(worker, "工人信用", "110101199001022002");
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, worker)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
@@ -106,7 +106,7 @@ class ProjectionTest {
         engagementApi.completeApplication(applicationId, legalRep);
 
         // 履约完成 → 评价域算信用分 → CreditScoreChanged → 匹配域投影
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(workerProjections.findById(worker).orElseThrow().getCreditScore()).isNotNull());
         assertThat(workerProjections.findById(worker).orElseThrow().getCreditScore()).isBetween(0.0, 100.0);
     }
@@ -118,24 +118,24 @@ class ProjectionTest {
         identityApi.verifyRealName(legalRep, "周法人", "110101199001016001");
 
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "匹配测试工厂", "91110000000000091X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
 
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "叉车工", "仓库叉车", 32000, legalRep)));
         long jobId = jobIdHolder.get();
 
         // JobPosted 先落地基本信息
-        await().atMost(Duration.ofSeconds(5)).until(() -> jobProjections.findById(jobId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> jobProjections.findById(jobId).isPresent());
         assertThat(jobProjections.findById(jobId).orElseThrow().getWageCents()).isEqualTo(32000);
 
         // JobProfileUpdated 再补上标签与坐标,不覆盖薪资
         profileApi.setJobProfile(jobId, List.of("叉车"), List.of("普工"), 31.2304, 121.4737);
 
-        await().atMost(Duration.ofSeconds(5)).until(() -> jobProjections.findById(jobId)
+        await().atMost(Duration.ofSeconds(15)).until(() -> jobProjections.findById(jobId)
                 .filter(p -> p.getLat() != null).isPresent());
         JobProjection projection = jobProjections.findById(jobId).orElseThrow();
         assertThat(projection.getMustTags()).containsExactly("叉车");

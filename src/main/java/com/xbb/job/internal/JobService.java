@@ -4,7 +4,7 @@ import com.xbb.job.api.JobApi;
 import com.xbb.job.api.WageAnomaly;
 import com.xbb.job.api.JobClosed;
 import com.xbb.job.api.JobPosted;
-import org.springframework.context.ApplicationEventPublisher;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,12 +18,23 @@ class JobService implements JobApi {
     private final JobRepository jobs;
     private final ApprovedOrgRepository approvedOrgs;
     private final WageAnomalyDetector anomalyDetector = new WageAnomalyDetector();
-    private final ApplicationEventPublisher events;
+    private final JobOutboxRepository outbox;
+    private final ObjectMapper json;
 
-    JobService(JobRepository jobs, ApprovedOrgRepository approvedOrgs, ApplicationEventPublisher events) {
+    JobService(JobRepository jobs, ApprovedOrgRepository approvedOrgs, JobOutboxRepository outbox, ObjectMapper json) {
         this.jobs = jobs;
         this.approvedOrgs = approvedOrgs;
-        this.events = events;
+        this.outbox = outbox;
+        this.json = json;
+    }
+
+    private String serialize(Object event) {
+        try {
+            return json.writeValueAsString(event);
+        } catch (Exception e) {
+            // 序列化不了就别让这步业务成功——事件发不出去,下游永远补不回来
+            throw new IllegalStateException("事件无法序列化: " + event, e);
+        }
     }
 
     @Override
@@ -38,7 +49,9 @@ class JobService implements JobApi {
                          int headcount, long callerUserId) {
         requireLegalRep(orgId, callerUserId, "发布岗位");
         Job job = jobs.save(new Job(orgId, title, description, wageCents, headcount));
-        events.publishEvent(new JobPosted(job.getId(), orgId, wageCents, headcount, Instant.now()));
+        JobPosted posted = new JobPosted(job.getId(), orgId, wageCents, headcount, Instant.now());
+        outbox.save(new JobOutboxEvent(java.util.UUID.randomUUID().toString(),
+                JobPosted.class.getName(), serialize(posted)));
         return job.getId();
     }
 
@@ -54,8 +67,9 @@ class JobService implements JobApi {
             return;
         }
         jobs.save(job);
-        events.publishEvent(JobClosed.of(jobId, job.getOrgId(),
-                JobClosed.Reason.CLOSED_BY_ORG, Instant.now()));
+        JobClosed closed = JobClosed.of(jobId, job.getOrgId(),
+                JobClosed.Reason.CLOSED_BY_ORG, Instant.now());
+        outbox.save(new JobOutboxEvent(closed.eventId(), JobClosed.class.getName(), serialize(closed)));
     }
 
     @Override
@@ -65,8 +79,9 @@ class JobService implements JobApi {
         boolean justFilled = job.fillOneSlot(Instant.now());
         jobs.save(job);
         if (justFilled) {
-            events.publishEvent(JobClosed.of(jobId, job.getOrgId(),
-                    JobClosed.Reason.HEADCOUNT_FILLED, Instant.now()));
+            JobClosed closed = JobClosed.of(jobId, job.getOrgId(),
+                    JobClosed.Reason.HEADCOUNT_FILLED, Instant.now());
+            outbox.save(new JobOutboxEvent(closed.eventId(), JobClosed.class.getName(), serialize(closed)));
         }
     }
 

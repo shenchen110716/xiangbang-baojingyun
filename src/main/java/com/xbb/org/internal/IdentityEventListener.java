@@ -1,6 +1,7 @@
 package com.xbb.org.internal;
 
 import com.xbb.identity.api.UserVerified;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,8 +25,12 @@ class IdentityEventListener {
     //    在原始 HTTP 请求返回前就完成,竞态窗口基本消失;写入失败会让原始请求收到
     //    错误而不是静默丢失——用可见的失败换掉不可见的数据不一致,这台机器上没有做
     //    真正的持久化重试(outbox),那需要额外的 spring-modulith-events-jdbc 基础设施,
-    //    留给之后视需要再加。
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:该事件由发布方的 outbox 中继投递。
+     * AFTER_COMMIT 的监听器要等中继事务提交后才跑,那时 outbox 行已是 PUBLISHED,
+     * 这里再抛异常事件就永久丢了(理由详见 AbstractOutboxRelay)。
+     */
+    @EventListener
     @Transactional(transactionManager = "orgTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(UserVerified event) {
         verifiedUsers.save(new VerifiedUser(event.userId(), event.realName(), event.occurredAt()));

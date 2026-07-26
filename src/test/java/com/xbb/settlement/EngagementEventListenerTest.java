@@ -52,17 +52,21 @@ class EngagementEventListenerTest {
     void 应聘录用事件被结算域订阅并生成待结算记录() {
         long legalRep = verifiedUser("13200000001", "法人九", "110101199001012001");
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "九号工厂", "91110000000000061X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
 
-        long jobId = jobApi.postJob(orgId, "理货员", "仓库理货", 2900, legalRep);
-        await().atMost(Duration.ofSeconds(5)).until(() -> postedJobs.findById(jobId).isPresent());
+        // 岗位域的组织副本也是异步落地的,发岗前得等它到位
+        AtomicLong jobIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                jobIdHolder.set(jobApi.postJob(orgId, "理货员", "仓库理货", 2900, legalRep)));
+        long jobId = jobIdHolder.get();
+        await().atMost(Duration.ofSeconds(15)).until(() -> postedJobs.findById(jobId).isPresent());
 
         long applicant = verifiedUser("13200000002", "应聘者五", "110101199001012002");
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
         long applicationId = applicationIdHolder.get();
 
@@ -71,7 +75,7 @@ class EngagementEventListenerTest {
         agreementApi.sign(applicationId, applicant, "SMS");
         engagementApi.completeApplication(applicationId, legalRep);
 
-        await().atMost(Duration.ofSeconds(5)).until(() -> settlements.findByApplicationId(applicationId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> settlements.findByApplicationId(applicationId).isPresent());
         var settlement = settlements.findByApplicationId(applicationId).orElseThrow();
         assertThat(settlement.getAmountCents()).isEqualTo(2900);
         assertThat(settlement.getWorkerUserId()).isEqualTo(applicant);

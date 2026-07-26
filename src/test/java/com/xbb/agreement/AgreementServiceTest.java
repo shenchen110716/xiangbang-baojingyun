@@ -52,24 +52,24 @@ class AgreementServiceTest {
                                         String workerIdNumber, String orgName, String creditCode) {
         long legalRep = verifiedUser(legalRepPhone, "法人" + legalRepPhone.substring(8), legalRepId);
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
 
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "普工", "描述", 30000, legalRep)));
         long jobId = jobIdHolder.get();
 
         long worker = verifiedUser(workerPhone, "工人" + workerPhone.substring(8), workerIdNumber);
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, worker)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
 
-        await().atMost(Duration.ofSeconds(5)).until(() ->
+        await().atMost(Duration.ofSeconds(15)).until(() ->
                 agreementApi.findByApplicationId(applicationId).isPresent());
         return new long[]{applicationId, legalRep, worker};
     }
@@ -179,7 +179,7 @@ class AgreementServiceTest {
                 "15800000018", "110101199001024018", "协议九厂", "91110000000000149X");
 
         agreementApi.sign(ids[0], ids[2], "FACE");
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 engagementApi.completeApplication(ids[0], ids[1]));
 
         assertThat(engagementApi.findApplication(ids[0]).orElseThrow().status())

@@ -62,7 +62,7 @@ class TalentServiceTest {
 
         profileApi.submitTags(userId, List.of("叉车", "质检"));
 
-        await().atMost(Duration.ofSeconds(5)).until(() -> talentApi.findTalent(userId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> talentApi.findTalent(userId).isPresent());
         TalentApi.TalentView view = talentApi.findTalent(userId).orElseThrow();
         assertThat(view.tags()).containsOnlyKeys("叉车", "质检");
     }
@@ -71,7 +71,7 @@ class TalentServiceTest {
     void 按标签检索命中() {
         long userId = registeredUser("16000000002");
         profileApi.submitTags(userId, List.of("焊工"));
-        await().atMost(Duration.ofSeconds(5)).until(() -> talentApi.findTalent(userId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> talentApi.findTalent(userId).isPresent());
 
         List<TalentApi.TalentView> found = talentApi.search(List.of("焊工"), 20);
 
@@ -84,7 +84,7 @@ class TalentServiceTest {
         profileApi.submitTags(twoTags, List.of("电工", "注塑"));
         long oneTag = registeredUser("16000000004");
         profileApi.submitTags(oneTag, List.of("电工"));
-        await().atMost(Duration.ofSeconds(5)).until(() ->
+        await().atMost(Duration.ofSeconds(15)).until(() ->
                 talentApi.findTalent(twoTags).isPresent() && talentApi.findTalent(oneTag).isPresent());
 
         List<TalentApi.TalentView> found = talentApi.search(List.of("电工", "注塑"), 20);
@@ -105,27 +105,27 @@ class TalentServiceTest {
         // 走完整链路:入驻 → 发岗 → 报名 → 录用 → 签协议 → 完成
         long legalRep = verifiedUser("16000000005", "法人才库", "110101199001026005");
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "人才库厂", "91110000000000181X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "普工", "描述", 30000, legalRep)));
         long jobId = jobIdHolder.get();
 
         long worker = verifiedUser("16000000006", "工人才库", "110101199001026006");
         profileApi.submitTags(worker, List.of("普工"));
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, worker)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 agreementApi.sign(applicationId, worker, "SMS"));
         engagementApi.completeApplication(applicationId, legalRep);
 
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(talentApi.findTalent(worker).orElseThrow().completedEngagements())
                         .isEqualTo(1));
         assertThat(talentApi.findTalent(worker).orElseThrow().lastActiveAt()).isNotNull();
@@ -138,29 +138,29 @@ class TalentServiceTest {
         profileApi.submitTags(experienced, List.of("仓管"));
         long fresh = registeredUser("16000000008");
         profileApi.submitTags(fresh, List.of("仓管"));
-        await().atMost(Duration.ofSeconds(5)).until(() ->
+        await().atMost(Duration.ofSeconds(15)).until(() ->
                 talentApi.findTalent(experienced).isPresent() && talentApi.findTalent(fresh).isPresent());
 
         // 给 experienced 造一次真实的履约完成
         long legalRep = verifiedUser("16000000009", "法人仓管", "110101199001026009");
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "仓管厂", "91110000000000182X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "仓管", "描述", 30000, legalRep)));
         long jobId = jobIdHolder.get();
         identityApi.verifyRealName(experienced, "老仓管", "110101199001026007");
         AtomicLong appHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 appHolder.set(engagementApi.apply(jobId, experienced)));
         engagementApi.acceptApplication(appHolder.get(), legalRep);
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 agreementApi.sign(appHolder.get(), experienced, "SMS"));
         engagementApi.completeApplication(appHolder.get(), legalRep);
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(talentApi.findTalent(experienced).orElseThrow().completedEngagements())
                         .isGreaterThan(0));
 

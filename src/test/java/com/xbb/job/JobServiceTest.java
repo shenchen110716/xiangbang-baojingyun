@@ -44,11 +44,11 @@ class JobServiceTest {
 
     private long approvedOrg(long legalRepUserId, String name, String creditCode) {
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, name, creditCode, legalRepUserId)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
-        await().atMost(Duration.ofSeconds(5)).until(() -> approvedOrgs.findById(orgId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> approvedOrgs.findById(orgId).isPresent());
         return orgId;
     }
 
@@ -79,7 +79,7 @@ class JobServiceTest {
     void 未审核组织发布岗位被拒() {
         long legalRep = verifiedUser("13300000004", "法人三", "110101199001013004");
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.SERVICE_STATION, "三号服务站", "91110000000000053X", legalRep)));
         long orgId = orgIdHolder.get();
         // 故意不 approve

@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 经纪人佣金不生成、盈亏账少一笔、工人收不到到账通知,而且不会再有第二次发放事件补上。
  */
 // 关掉后台中继,投递完全由测试驱动;默认值在 src/test/resources/application.properties
-@SpringBootTest(properties = "xbb.outbox.relay.interval-ms=3600000")
+@SpringBootTest(properties = "xbb.outbox.relay.fund.interval-ms=3600000")
 @Import({TestcontainersConfig.class, TestCodeAccessor.class,
         FundOutboxReliabilityTest.BreakableConsumerConfig.class})
 class FundOutboxReliabilityTest {

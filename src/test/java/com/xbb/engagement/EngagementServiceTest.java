@@ -48,25 +48,29 @@ class EngagementServiceTest {
     private long verifiedUser(String phone, String realName, String idNumber) {
         long userId = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
         identityApi.verifyRealName(userId, realName, idNumber);
-        await().atMost(Duration.ofSeconds(5)).until(() -> verifiedUsers.findById(userId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> verifiedUsers.findById(userId).isPresent());
         return userId;
     }
 
     private long approvedOrg(long legalRepUserId, String name, String creditCode) {
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, name, creditCode, legalRepUserId)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
-        await().atMost(Duration.ofSeconds(5)).until(() -> approvedOrgs.findById(orgId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> approvedOrgs.findById(orgId).isPresent());
         return orgId;
     }
 
     private long postedJob(long orgId, String title, long wageCents, long callerUserId) {
-        long jobId = jobApi.postJob(orgId, title, "描述", wageCents, callerUserId);
+        // 岗位域的组织副本同样是异步落地的,发岗前得等它到位,否则报"组织未通过审核"
+        AtomicLong jobIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                jobIdHolder.set(jobApi.postJob(orgId, title, "描述", wageCents, callerUserId)));
+        long jobId = jobIdHolder.get();
         // engagement 的岗位副本靠订阅 JobPosted 事件异步落地,先等它出现,
         // 否则 apply()/acceptApplication() 会因为查不到本域的 posted_job 而误报"岗位不存在"。
-        await().atMost(Duration.ofSeconds(5)).until(() -> postedJobs.findById(jobId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> postedJobs.findById(jobId).isPresent());
         return jobId;
     }
 
@@ -78,7 +82,7 @@ class EngagementServiceTest {
         long applicant = verifiedUser("13300000006", "应聘者一", "110101199001013006");
 
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
 
         assertThat(applicationIdHolder.get()).isPositive();
@@ -103,7 +107,7 @@ class EngagementServiceTest {
         long jobId = postedJob(orgId, "打包工", 2500, legalRep);
         long applicant = verifiedUser("13300000011", "应聘者二", "110101199001013011");
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
         long applicationId = applicationIdHolder.get();
 
@@ -120,7 +124,7 @@ class EngagementServiceTest {
         long jobId = postedJob(orgId, "分拣工", 2400, legalRep);
         long applicant = verifiedUser("13300000013", "应聘者三", "110101199001013013");
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
         long applicationId = applicationIdHolder.get();
         long stranger = verifiedUser("13300000014", "路人二", "110101199001013014");
@@ -137,7 +141,7 @@ class EngagementServiceTest {
         long jobId = postedJob(orgId, "客服", 2300, legalRep);
         long applicant = verifiedUser("13300000016", "应聘者四", "110101199001013016");
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
@@ -159,12 +163,12 @@ class EngagementServiceTest {
         long jobId = postedJob(orgId, "普工", 2500, legalRep);
         long applicant = verifiedUser(applicantPhone, "应聘者" + applicantPhone.substring(8), applicantId);
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
         // 协议签署是履约完成的前置门禁(§6.2)
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 agreementApi.sign(applicationId, applicant, "SMS"));
         return applicationId;
     }
@@ -189,7 +193,7 @@ class EngagementServiceTest {
         long jobId = postedJob(orgId, "普工", 2500, legalRep);
         long applicant = verifiedUser("15400000004", "应聘者完二", "110101199001017004");
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
 
         assertThatThrownBy(() -> engagementApi.completeApplication(applicationIdHolder.get(), legalRep))

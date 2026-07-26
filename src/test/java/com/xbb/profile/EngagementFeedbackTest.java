@@ -59,13 +59,13 @@ class EngagementFeedbackTest {
                                        List<String> workerTags) {
         long legalRep = verifiedUser(legalRepPhone, "法人" + legalRepPhone.substring(8), legalRepId);
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
 
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "岗位", "描述", 30000, legalRep)));
         long jobId = jobIdHolder.get();
         profileApi.setJobProfile(jobId, jobMust, jobNice, 31.0, 121.0);
@@ -74,7 +74,7 @@ class EngagementFeedbackTest {
         profileApi.submitTags(worker, workerTags);
 
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, worker)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
@@ -90,7 +90,7 @@ class EngagementFeedbackTest {
                 "15600000002", "110101199001023002", "反哺一厂", "91110000000000121X",
                 List.of("叉车"), List.of(), List.of("叉车"));
 
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
             ProfileApi.ProfileTagView tag = profileApi.getProfile(worker).stream()
                     .filter(t -> t.tagName().equals("叉车")).findFirst().orElseThrow();
             assertThat(tag.source()).isEqualTo("ENGAGEMENT_VERIFIED");
@@ -105,7 +105,7 @@ class EngagementFeedbackTest {
                 "15600000004", "110101199001023004", "反哺二厂", "91110000000000122X",
                 List.of("叉车"), List.of(), List.of("叉车", "电工"));
 
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
             List<ProfileApi.ProfileTagView> profile = profileApi.getProfile(worker);
             assertThat(profile).filteredOn(t -> t.tagName().equals("叉车"))
                     .allSatisfy(t -> assertThat(t.source()).isEqualTo("ENGAGEMENT_VERIFIED"));
@@ -121,7 +121,7 @@ class EngagementFeedbackTest {
                 List.of("质检"), List.of(), List.of("质检"));
 
         // 置信度变了下游必须知道,否则技能维度还在用旧的 0.4 算
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(workerProjections.findById(worker).orElseThrow().getTags().get("质检"))
                         .isEqualTo(1.0));
     }
@@ -130,12 +130,12 @@ class EngagementFeedbackTest {
     void 反哺不会把工人已填的期望薪资与坐标清空() {
         long legalRep = verifiedUser("15600000007", "法人反四", "110101199001023007");
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "反哺四厂", "91110000000000124X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "岗位", "描述", 30000, legalRep)));
         long jobId = jobIdHolder.get();
         profileApi.setJobProfile(jobId, List.of("焊工"), List.of(), 31.0, 121.0);
@@ -145,7 +145,7 @@ class EngagementFeedbackTest {
         profileApi.setWorkerPreference(worker, 42000, 31.5, 121.5);
 
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, worker)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
@@ -154,7 +154,7 @@ class EngagementFeedbackTest {
         engagementApi.completeApplication(applicationId, legalRep);
 
         // 反哺发的 ProfileUpdated 是整行覆盖投影的,载荷里漏带偏好会静默清空已填数据
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(workerProjections.findById(worker).orElseThrow().getTags().get("焊工")).isEqualTo(1.0));
         assertThat(workerProjections.findById(worker).orElseThrow().getExpectedWageCents()).isEqualTo(42000);
         assertThat(workerProjections.findById(worker).orElseThrow().getLat()).isEqualTo(31.5);

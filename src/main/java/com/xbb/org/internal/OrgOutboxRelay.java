@@ -1,4 +1,4 @@
-package com.xbb.fund.internal;
+package com.xbb.org.internal;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.AbstractOutboxRelay;
@@ -9,29 +9,29 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
-public class FundOutboxRelay extends AbstractOutboxRelay<FundOutboxEvent> {
+public class OrgOutboxRelay extends AbstractOutboxRelay<OrgOutboxEvent> {
 
-    private final FundOutboxRepository outbox;
+    private final OrgOutboxRepository outbox;
 
-    FundOutboxRelay(FundOutboxRepository outbox, ApplicationEventPublisher events, ObjectMapper json) {
+    OrgOutboxRelay(OrgOutboxRepository outbox, ApplicationEventPublisher events, ObjectMapper json) {
         super(events, json);
         this.outbox = outbox;
     }
 
     @Override
-    protected JpaRepository<FundOutboxEvent, Long> outbox() {
+    protected JpaRepository<OrgOutboxEvent, Long> outbox() {
         return outbox;
     }
 
     // 每个域可单独调间隔,默认回落到全局值。需要"由测试自己驱动投递"的用例
     // 只关掉它关心的那一个中继——全关掉的话连搭建前置数据都跑不动了。
     @Scheduled(fixedDelayString =
-            "${xbb.outbox.relay.fund.interval-ms:${xbb.outbox.relay.interval-ms:5000}}")
+            "${xbb.outbox.relay.org.interval-ms:${xbb.outbox.relay.interval-ms:5000}}")
     public void relayScheduled() {
         publishPending();
     }
 
-    @Transactional("fundTransactionManager")
+    @Transactional("orgTransactionManager")
     public int publishPending() {
         return relayPending(outbox.lockPendingBatch());
     }

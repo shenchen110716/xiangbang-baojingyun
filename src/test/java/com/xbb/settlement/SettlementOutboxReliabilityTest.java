@@ -51,7 +51,7 @@ import static org.mockito.Mockito.reset;
  * (见 TestcontainersConfig),投递完全由测试显式驱动,因此每条断言都是确定的。
  */
 // 关掉后台中继:本类要断言"中继跑之前下游拿不到",投递必须完全由测试驱动
-@SpringBootTest(properties = "xbb.outbox.relay.interval-ms=3600000")
+@SpringBootTest(properties = "xbb.outbox.relay.settlement.interval-ms=3600000")
 @Import({TestcontainersConfig.class, TestCodeAccessor.class,
         SettlementOutboxReliabilityTest.BreakableConsumerConfig.class})
 class SettlementOutboxReliabilityTest {
@@ -116,23 +116,23 @@ class SettlementOutboxReliabilityTest {
                                      String workerId, String orgName, String creditCode, long wageCents) {
         long legalRep = verifiedUser(legalRepPhone, "法人" + legalRepPhone.substring(8), legalRepId);
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
 
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "普工", "描述", wageCents, legalRep)));
         long jobId = jobIdHolder.get();
 
         long worker = verifiedUser(workerPhone, "工人" + workerPhone.substring(8), workerId);
         AtomicLong appHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 appHolder.set(engagementApi.apply(jobId, worker)));
         long applicationId = appHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 agreementApi.sign(applicationId, worker, "SMS"));
         engagementApi.completeApplication(applicationId, legalRep);
         // 把 EngagementCompleted 投给结算域,结算域才会写自己的 outbox 行

@@ -53,7 +53,7 @@ class FundEventListenerTest {
     private long verifiedUser(String phone, String realName, String idNumber) {
         long userId = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
         identityApi.verifyRealName(userId, realName, idNumber);
-        await().atMost(Duration.ofSeconds(5)).until(() -> verifiedUsers.findById(userId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> verifiedUsers.findById(userId).isPresent());
         return userId;
     }
 
@@ -61,18 +61,18 @@ class FundEventListenerTest {
     private long settlementFor(long applicantUserId, String legalRepPhone, String suffix, long wageCents) {
         long legalRep = verifiedUser(legalRepPhone, "法人" + suffix, "1101011990010" + suffix + "005");
         AtomicLong orgIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, suffix + "号工厂佣金", "9111000000" + suffix + "005X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId);
 
         AtomicLong jobIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, suffix + "号岗位佣金", "描述", wageCents, legalRep)));
         long jobId = jobIdHolder.get();
 
         AtomicLong applicationIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 applicationIdHolder.set(engagementApi.apply(jobId, applicantUserId)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
@@ -83,14 +83,14 @@ class FundEventListenerTest {
         outboxRelay.publishPending();
 
         AtomicLong settlementIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 settlementIdHolder.set(settlementApi.findByApplicationId(applicationId).orElseThrow().id()));
         return settlementIdHolder.get();
     }
 
     private long disburse(long settlementId) {
         AtomicLong payoutIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 payoutIdHolder.set(fundApi.findBySettlementId(settlementId).orElseThrow().id()));
         // 代发要从监管账户扣款(§6.4.2),先备资
         fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "测试备资");
@@ -108,7 +108,7 @@ class FundEventListenerTest {
         long settlementId = settlementFor(worker, "13000000022", "b1", 5000);
         disburse(settlementId);
 
-        await().atMost(Duration.ofSeconds(5)).until(() -> commissions.findBySettlementId(settlementId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> commissions.findBySettlementId(settlementId).isPresent());
         var commission = commissions.findBySettlementId(settlementId).orElseThrow();
         assertThat(commission.getBrokerUserId()).isEqualTo(broker);
         assertThat(commission.getAmountCents()).isEqualTo(500); // 5000 * 10 / 100
