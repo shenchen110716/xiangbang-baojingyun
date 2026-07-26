@@ -4,6 +4,11 @@ import com.xbb.matching.api.MatchingApi;
 import com.xbb.matching.internal.MatchScorer.JobSnapshot;
 import com.xbb.matching.internal.MatchScorer.Side;
 import com.xbb.matching.internal.MatchScorer.WorkerSnapshot;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +21,8 @@ import java.util.random.RandomGenerator;
 @Service
 class MatchingService implements MatchingApi {
 
+    private static final Logger log = LoggerFactory.getLogger(MatchingService.class);
+
     /** ε-greedy(§5.4.4):20% 曝光位强制给低数据对象。"无探索位 = 新供给永远进不来 = 平台死亡"。 */
     static final double EPSILON = 0.2;
 
@@ -24,12 +31,41 @@ class MatchingService implements MatchingApi {
     private final MatchScorer scorer;
     private final RandomGenerator random;
 
+    /**
+     * 候选池上限。硬约束(must 标签是子集判断)现在还落在内存里做,
+     * 所以真正能挡住"一次推荐扫全表"的只有这个上限。没有它,数据一涨
+     * 单次请求的耗时就跟着表大小线性涨,而且是在事务里涨。
+     */
+    private final int poolLimit;
+
     MatchingService(WorkerProjectionRepository workers, JobProjectionRepository jobs,
-                     MatchScorer scorer, RandomGenerator random) {
+                     MatchScorer scorer, RandomGenerator random,
+                     @Value("${xbb.matching.candidate-pool-limit:1000}") int poolLimit) {
         this.workers = workers;
         this.jobs = jobs;
         this.scorer = scorer;
         this.random = random;
+        this.poolLimit = poolLimit;
+    }
+
+    /**
+     * 取候选池:按"最近更新优先"排序后只取上限内的行,多取一行用来判断是否被截断。
+     *
+     * <p>排序不是可有可无的——上限一旦生效,拿哪些行就成了策略。不排序等于
+     * 让数据库随便给几行,同一个人两次刷新拿到的推荐会莫名其妙地变。
+     * 选"最近更新优先"的理由:超出上限时,新岗/刚改过的岗比陈年旧岗更该被看到。
+     */
+    private <T> List<T> pool(java.util.function.Function<PageRequest, List<T>> fetch, String what) {
+        List<T> rows = fetch.apply(PageRequest.of(0, poolLimit + 1,
+                Sort.by(Sort.Order.desc("updatedAt"))));
+        if (rows.size() > poolLimit) {
+            // 必须留痕:静默截断会让"某个岗位没被推荐出来"看起来像算法判错,
+            // 排查的人会去翻打分逻辑,而真正的原因在这里。
+            log.warn("{}候选池达到上限 {} 被截断,本次推荐只覆盖最近更新的那部分。"
+                    + "若长期出现,说明该做粗筛下推或分区了。", what, poolLimit);
+            return rows.subList(0, poolLimit);
+        }
+        return rows;
     }
 
     @Override
@@ -40,7 +76,7 @@ class MatchingService implements MatchingApi {
         WorkerSnapshot workerSnapshot = toSnapshot(worker);
 
         List<Candidate> candidates = new ArrayList<>();
-        for (JobProjection job : jobs.findAll()) {
+        for (JobProjection job : pool(page -> jobs.findAll(page).getContent(), "岗位")) {
             JobSnapshot jobSnapshot = toSnapshot(job);
             if (!scorer.passesHardConstraints(workerSnapshot, jobSnapshot)) continue;
             MatchScorer.Score score = scorer.score(workerSnapshot, jobSnapshot, Side.WORKER);
@@ -57,7 +93,7 @@ class MatchingService implements MatchingApi {
         JobSnapshot jobSnapshot = toSnapshot(job);
 
         List<Candidate> candidates = new ArrayList<>();
-        for (WorkerProjection worker : workers.findAll()) {
+        for (WorkerProjection worker : pool(page -> workers.findAll(page).getContent(), "人才")) {
             WorkerSnapshot workerSnapshot = toSnapshot(worker);
             if (!scorer.passesHardConstraints(workerSnapshot, jobSnapshot)) continue;
             MatchScorer.Score score = scorer.score(workerSnapshot, jobSnapshot, Side.ORG);
