@@ -25,11 +25,13 @@ class OpsServiceTest {
 
     @Test
     void 字典项按类型分组且按权重排序() {
-        opsApi.addItem("SKILL_TAG", "forklift", "叉车", 2);
-        opsApi.addItem("SKILL_TAG", "qc", "质检", 1);
+        // 用独立类型:SKILL_TAG 有 Flyway 种子数据(画像域的受控词表),
+        // 拿它做排序断言会被种子数据干扰
+        opsApi.addItem("SORT_TEST", "forklift", "叉车", 2);
+        opsApi.addItem("SORT_TEST", "qc", "质检", 1);
         opsApi.addItem("OTHER_TYPE", "x", "无关项", 0);
 
-        var items = opsApi.itemsOf("SKILL_TAG");
+        var items = opsApi.itemsOf("SORT_TEST");
 
         assertThat(items).extracting(OpsApi.DictItemView::key).containsExactly("qc", "forklift");
         assertThat(items).extracting(OpsApi.DictItemView::key).doesNotContain("x");

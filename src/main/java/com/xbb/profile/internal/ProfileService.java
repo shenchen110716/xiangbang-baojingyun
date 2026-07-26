@@ -1,5 +1,6 @@
 package com.xbb.profile.internal;
 
+import com.xbb.ops.api.OpsApi;
 import com.xbb.profile.api.JobProfileUpdated;
 import com.xbb.profile.api.ProfileApi;
 import com.xbb.profile.api.ProfileUpdated;
@@ -17,20 +18,23 @@ class ProfileService implements ProfileApi {
     private final ProfileTagRepository tags;
     private final JobProfileRepository jobProfiles;
     private final WorkerPreferenceRepository workerPreferences;
+    private final OpsApi opsApi;
     private final ApplicationEventPublisher events;
 
     ProfileService(ProfileTagRepository tags, JobProfileRepository jobProfiles,
-                    WorkerPreferenceRepository workerPreferences, ApplicationEventPublisher events) {
+                    WorkerPreferenceRepository workerPreferences, OpsApi opsApi,
+                    ApplicationEventPublisher events) {
         this.tags = tags;
         this.jobProfiles = jobProfiles;
         this.workerPreferences = workerPreferences;
+        this.opsApi = opsApi;
         this.events = events;
     }
 
     @Override
     @Transactional("profileTransactionManager")
     public void submitTags(long userId, List<String> tagNames) {
-        tagNames.forEach(ProfileService::requireInVocabulary);
+        tagNames.forEach(this::requireInVocabulary);
         for (String tagName : tagNames) {
             ProfileTag tag = tags.findByUserIdAndTagName(userId, tagName)
                     .map(existing -> { existing.touch(); return existing; })
@@ -51,8 +55,8 @@ class ProfileService implements ProfileApi {
     @Override
     @Transactional("profileTransactionManager")
     public void setJobProfile(long jobId, List<String> mustTags, List<String> niceTags, double lat, double lon) {
-        mustTags.forEach(ProfileService::requireInVocabulary);
-        niceTags.forEach(ProfileService::requireInVocabulary);
+        mustTags.forEach(this::requireInVocabulary);
+        niceTags.forEach(this::requireInVocabulary);
         JobProfile profile = jobProfiles.findById(jobId)
                 .map(existing -> { existing.update(mustTags, niceTags, lat, lon); return existing; })
                 .orElseGet(() -> new JobProfile(jobId, mustTags, niceTags, lat, lon));
@@ -101,8 +105,20 @@ class ProfileService implements ProfileApi {
                 Instant.now()));
     }
 
-    private static void requireInVocabulary(String tagName) {
-        if (!ProfileTag.CONTROLLED_VOCABULARY.contains(tagName)) {
+    /**
+     * §5.2.1:"LLM 抽取时**只能映射到已有标签,禁止自由生成新标签**",
+     * 否则"打螺丝/拧螺丝/螺丝工/装配螺丝"四个标签指同一件事,标签体系一周内爆炸。
+     *
+     * <p>词表原本硬编码在 ProfileTag 里(Plan6/8 都记过"等运营字典"),
+     * 运营域建好后改为查字典——**运营现在可以自己增删词条,不用改代码发版**。
+     */
+    private void requireInVocabulary(String tagName) {
+        // 停用的词条等同于不在词表内——运营停用一个词就是要它不再被使用,
+        // 只是从列表里隐藏而仍允许提交,等于停用没有生效。
+        boolean usable = opsApi.findItem(OpsApi.SKILL_TAG, tagName)
+                .filter(OpsApi.DictItemView::enabled)
+                .isPresent();
+        if (!usable) {
             throw new IllegalArgumentException("标签不在受控词表内: " + tagName);
         }
     }

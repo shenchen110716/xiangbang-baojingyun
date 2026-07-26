@@ -12,6 +12,9 @@ import java.util.Optional;
  */
 public interface OpsApi {
 
+    /** 技能标签受控词表(§5.2.1)。画像域校验自述标签时查它。 */
+    String SKILL_TAG = "SKILL_TAG";
+
     record DictItemView(long id, String dictType, String key, String value, int sortOrder, boolean enabled) { }
 
     long addItem(String dictType, String key, String value, int sortOrder);

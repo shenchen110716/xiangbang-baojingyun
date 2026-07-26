@@ -3,6 +3,7 @@ package com.xbb.profile;
 import com.xbb.TestcontainersConfig;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
+import com.xbb.ops.api.OpsApi;
 import com.xbb.profile.api.ProfileApi;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +29,7 @@ class ProfileServiceTest {
     @Autowired IdentityApi identityApi;
     @Autowired TestCodeAccessor codes;
     @Autowired ProfileApi profileApi;
+    @Autowired OpsApi opsApi;
 
     private long registeredUser(String phone) {
         return identityApi.loginByPhone(phone, codes.issue(phone)).userId();
@@ -95,5 +97,41 @@ class ProfileServiceTest {
         long userId = registeredUser("15100000006");
 
         assertThat(profileApi.findWorkerPreference(userId)).isEmpty();
+    }
+
+    // ---------- 受控词表来自运营字典(不再硬编码) ----------
+
+    @Test
+    void 运营新增词条后画像域立刻可用不需要改代码发版() {
+        long userId = registeredUser("15100000007");
+        // 新词条入库前提交会被拒
+        assertThatThrownBy(() -> profileApi.submitTags(userId, List.of("电焊机操作")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("受控词表");
+
+        opsApi.addItem(OpsApi.SKILL_TAG, "电焊机操作", "电焊机操作", 99);
+
+        // 这才是把词表迁进运营字典的真正价值:运营自己就能扩词表
+        profileApi.submitTags(userId, List.of("电焊机操作"));
+        assertThat(profileApi.getProfile(userId))
+                .extracting(ProfileApi.ProfileTagView::tagName).contains("电焊机操作");
+    }
+
+    @Test
+    void 运营停用词条后不再能提交该标签() {
+        long userId = registeredUser("15100000008");
+        long itemId = opsApi.addItem(OpsApi.SKILL_TAG, "已废弃工种", "已废弃工种", 98);
+        profileApi.submitTags(userId, List.of("已废弃工种"));
+
+        opsApi.disableItem(itemId);
+
+        // 停用就该真的禁止新提交,否则"停用"这个动作等于没生效
+        assertThatThrownBy(() -> profileApi.submitTags(registeredUser("15100000009"),
+                List.of("已废弃工种")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("受控词表");
+        // 已经提交过的历史标签不受影响,不会被追溯删除
+        assertThat(profileApi.getProfile(userId))
+                .extracting(ProfileApi.ProfileTagView::tagName).contains("已废弃工种");
     }
 }

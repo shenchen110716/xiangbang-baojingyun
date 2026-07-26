@@ -2,7 +2,6 @@ package com.xbb.profile.internal;
 
 import jakarta.persistence.*;
 import java.time.Instant;
-import java.util.Set;
 
 @Entity
 @Table(name = "profile_tag", schema = "profile")
@@ -24,15 +23,6 @@ public class ProfileTag {
         public double confidence() { return confidence; }
     }
 
-    /**
-     * 受控词表的最小可行落地(响帮帮 v1.0 全新方案 §5.2.1):防止"打螺丝/拧螺丝/螺丝工"
-     * 这种同义词泛滥。真正的运营后台维护词表是明显更大的后续工作,这里先用硬编码常量兜底——
-     * 不在表里的提交直接拒绝,而不是静默接受自由文本(词表来源:从 xbb_code 历史岗位数据里
-     * 挑出的真实工种/设备高频词,不是拍脑袋)。
-     */
-    public static final Set<String> CONTROLLED_VOCABULARY = Set.of(
-            "普工", "质检", "叉车", "电工", "贴片", "分拣", "打包", "理货",
-            "焊工", "注塑", "包装", "搬运", "仓管", "客服", "文员", "保安");
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
