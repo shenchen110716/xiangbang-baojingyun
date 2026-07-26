@@ -2,16 +2,14 @@ package com.xbb.broker.internal;
 
 import com.xbb.broker.api.CommissionGenerated;
 import com.xbb.fund.api.FundsDisbursed;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Instant;
 
-import static org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT;
 
 // 佣金触发源:原先订阅 settlement.SettlementPaid,现在 settlement 已不再直接发钱
 // (结算⊥资金拆分,见 Plan6),真正"钱已经付了"的信号来自 fund.FundsDisbursed。
@@ -21,13 +19,24 @@ class FundEventListener {
 
     private final InvitationRepository invitations;
     private final CommissionRepository commissions;
-    private final ApplicationEventPublisher events;
+    private final BrokerOutboxRepository outbox;
+    private final ObjectMapper json;
 
     FundEventListener(InvitationRepository invitations, CommissionRepository commissions,
-                       ApplicationEventPublisher events) {
+                     BrokerOutboxRepository outbox, ObjectMapper json) {
         this.invitations = invitations;
         this.commissions = commissions;
-        this.events = events;
+        this.outbox = outbox;
+        this.json = json;
+    }
+
+    private String serialize(Object event) {
+        try {
+            return json.writeValueAsString(event);
+        } catch (Exception e) {
+            // 序列化不了就别让这步业务成功——事件发不出去,下游永远补不回来
+            throw new IllegalStateException("事件无法序列化: " + event, e);
+        }
     }
 
     /**
@@ -48,8 +57,10 @@ class FundEventListener {
             long amountCents = event.amountCents() * Commission.RATE_PERCENT / 100;
             Commission commission = commissions.save(new Commission(
                     invitation.getBrokerUserId(), event.payeeUserId(), event.settlementId(), amountCents));
-            events.publishEvent(new CommissionGenerated(
-                    commission.getId(), invitation.getBrokerUserId(), amountCents, Instant.now()));
+            CommissionGenerated generated = new CommissionGenerated(
+                    commission.getId(), invitation.getBrokerUserId(), amountCents, Instant.now());
+            outbox.save(new BrokerOutboxEvent(java.util.UUID.randomUUID().toString(),
+                    CommissionGenerated.class.getName(), serialize(generated)));
         });
     }
 }

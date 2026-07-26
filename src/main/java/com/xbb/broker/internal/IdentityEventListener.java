@@ -5,9 +5,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionalEventListener;
 
-import static org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT;
 
 // 显式命名:其它域也有同名类 IdentityEventListener,默认 bean 名会撞车
 @Component("brokerIdentityEventListener")

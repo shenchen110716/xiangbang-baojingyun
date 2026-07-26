@@ -10,9 +10,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionalEventListener;
 
-import static org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT;
 
 /**
  * 统一出口(§4.2):各域只发事件,这里是唯一决定"要不要通知人、通知什么"的地方。
@@ -29,8 +27,12 @@ class DomainEventListener {
         this.notifications = notifications;
     }
 
-    // 同步(非 @Async)AFTER_COMMIT,理由见 org.internal.IdentityEventListener 的注释(审计修复)。
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:所有跨域事件都由发布方的 outbox 中继投递。
+     * AFTER_COMMIT 的监听器要等中继事务提交后才跑,那时 outbox 行已是 PUBLISHED,
+     * 这里再抛异常事件就永久丢了(理由详见 AbstractOutboxRelay)。
+     */
+    @EventListener
     @Transactional(transactionManager = "notificationTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(AgreementGenerated event) {
         notifications.deliver(event.workerUserId(), NotificationType.AGREEMENT_PENDING,
@@ -69,7 +71,12 @@ class DomainEventListener {
                 event.payoutId());
     }
 
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:所有跨域事件都由发布方的 outbox 中继投递。
+     * AFTER_COMMIT 的监听器要等中继事务提交后才跑,那时 outbox 行已是 PUBLISHED,
+     * 这里再抛异常事件就永久丢了(理由详见 AbstractOutboxRelay)。
+     */
+    @EventListener
     @Transactional(transactionManager = "notificationTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(CommissionGenerated event) {
         notifications.deliver(event.brokerUserId(), NotificationType.COMMISSION_GENERATED,
@@ -79,7 +86,12 @@ class DomainEventListener {
                 event.commissionId());
     }
 
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:所有跨域事件都由发布方的 outbox 中继投递。
+     * AFTER_COMMIT 的监听器要等中继事务提交后才跑,那时 outbox 行已是 PUBLISHED,
+     * 这里再抛异常事件就永久丢了(理由详见 AbstractOutboxRelay)。
+     */
+    @EventListener
     @Transactional(transactionManager = "notificationTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(CreditScoreChanged event) {
         // 信用分影响押金档位与派单优先级,不通知等于让用户蒙在鼓里

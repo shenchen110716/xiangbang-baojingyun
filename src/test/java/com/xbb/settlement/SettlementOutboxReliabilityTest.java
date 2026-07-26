@@ -133,8 +133,12 @@ class SettlementOutboxReliabilityTest {
         long applicationId = appHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                agreementApi.sign(applicationId, worker, "SMS"));
-        engagementApi.completeApplication(applicationId, legalRep);
+                // 协议由录用事件异步触发生成,先等它到位
+                await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                        agreementApi.sign(applicationId, worker, "SMS")));
+        // 履约域的"已签协议"副本靠订阅 AgreementSigned 异步落地,签完不等于本域已知晓
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                engagementApi.completeApplication(applicationId, legalRep));
         // 把 EngagementCompleted 投给结算域,结算域才会写自己的 outbox 行
         engagementRelay.publishPending();
         return applicationId;

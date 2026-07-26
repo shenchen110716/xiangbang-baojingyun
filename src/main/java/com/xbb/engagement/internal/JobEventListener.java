@@ -6,9 +6,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionalEventListener;
 
-import static org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT;
 
 // 显式命名:settlement 域也有个同名类 JobEventListener,默认 bean 名会撞车
 @Component("engagementJobEventListener")

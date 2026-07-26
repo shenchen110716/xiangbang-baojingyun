@@ -3,7 +3,7 @@ package com.xbb.review.internal;
 import com.xbb.review.api.CreditScoreChanged;
 import com.xbb.review.api.ReviewApi;
 import com.xbb.review.api.ReviewSubmitted;
-import org.springframework.context.ApplicationEventPublisher;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,17 +24,29 @@ class ReviewService implements ReviewApi {
     private final CreditScoreRepository creditScores;
     private final CreditCalculator calculator;
     private final ReviewTagCatalog tagCatalog;
-    private final ApplicationEventPublisher events;
+    private final ReviewOutboxRepository outbox;
+    private final ObjectMapper json;
 
     ReviewService(ReviewRepository reviews, CompletedEngagementRepository completedEngagements,
                    CreditScoreRepository creditScores, CreditCalculator calculator,
-                   ReviewTagCatalog tagCatalog, ApplicationEventPublisher events) {
+                   ReviewTagCatalog tagCatalog,
+                     ReviewOutboxRepository outbox, ObjectMapper json) {
         this.reviews = reviews;
         this.completedEngagements = completedEngagements;
         this.creditScores = creditScores;
         this.calculator = calculator;
         this.tagCatalog = tagCatalog;
-        this.events = events;
+        this.outbox = outbox;
+        this.json = json;
+    }
+
+    private String serialize(Object event) {
+        try {
+            return json.writeValueAsString(event);
+        } catch (Exception e) {
+            // 序列化不了就别让这步业务成功——事件发不出去,下游永远补不回来
+            throw new IllegalStateException("事件无法序列化: " + event, e);
+        }
     }
 
     @Override
@@ -57,7 +69,9 @@ class ReviewService implements ReviewApi {
                 direction, tags, comment, score));
 
         revealIfBothSubmitted(applicationId);
-        events.publishEvent(new ReviewSubmitted(review.getId(), applicationId, raterUserId, score, Instant.now()));
+        ReviewSubmitted submitted = new ReviewSubmitted(review.getId(), applicationId, raterUserId, score, Instant.now());
+        outbox.save(new ReviewOutboxEvent(java.util.UUID.randomUUID().toString(),
+                ReviewSubmitted.class.getName(), serialize(submitted)));
 
         if (direction == ReviewTag.Direction.ORG_RATES_WORKER) {
             recalculateCredit(engagement.getWorkerUserId(), "收到新评价");
@@ -135,7 +149,9 @@ class ReviewService implements ReviewApi {
             creditScores.save(record);
         }
         if (Double.compare(oldScore, newScore) != 0) {
-            events.publishEvent(new CreditScoreChanged(workerUserId, oldScore, newScore, reason, Instant.now()));
+            CreditScoreChanged changed = new CreditScoreChanged(workerUserId, oldScore, newScore, reason, Instant.now());
+            outbox.save(new ReviewOutboxEvent(java.util.UUID.randomUUID().toString(),
+                    CreditScoreChanged.class.getName(), serialize(changed)));
         }
     }
 

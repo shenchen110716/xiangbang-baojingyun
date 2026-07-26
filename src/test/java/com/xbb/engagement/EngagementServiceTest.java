@@ -169,7 +169,9 @@ class EngagementServiceTest {
         engagementApi.acceptApplication(applicationId, legalRep);
         // 协议签署是履约完成的前置门禁(§6.2)
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                agreementApi.sign(applicationId, applicant, "SMS"));
+                // 协议由录用事件异步触发生成,先等它到位
+                await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                        agreementApi.sign(applicationId, applicant, "SMS")));
         return applicationId;
     }
 
@@ -180,7 +182,9 @@ class EngagementServiceTest {
                 "15400000001", "110101199001017001", "15400000002", "110101199001017002",
                 "完成测试一厂", "91110000000000101X", legalRep);
 
-        engagementApi.completeApplication(applicationId, legalRep.get());
+        // 履约域的"已签协议"副本靠订阅 AgreementSigned 异步落地,签完不等于本域已知晓
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                engagementApi.completeApplication(applicationId, legalRep.get()));
 
         assertThat(engagementApi.findApplication(applicationId).orElseThrow().status())
                 .isEqualTo(Application.Status.COMPLETED);
@@ -207,7 +211,9 @@ class EngagementServiceTest {
         long applicationId = acceptedApplication(
                 "15400000005", "110101199001017005", "15400000006", "110101199001017006",
                 "完成测试三厂", "91110000000000103X", legalRep);
-        engagementApi.completeApplication(applicationId, legalRep.get());
+        // 履约域的"已签协议"副本靠订阅 AgreementSigned 异步落地,签完不等于本域已知晓
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                engagementApi.completeApplication(applicationId, legalRep.get()));
 
         assertThatThrownBy(() -> engagementApi.completeApplication(applicationId, legalRep.get()))
                 .isInstanceOf(IllegalStateException.class)

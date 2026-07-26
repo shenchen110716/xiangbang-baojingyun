@@ -1,7 +1,7 @@
 package com.xbb.mall.internal;
 
 import com.xbb.mall.api.*;
-import org.springframework.context.ApplicationEventPublisher;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,17 +15,29 @@ class MallService implements MallApi {
     private final ProductRepository products;
     private final MallOrderRepository orders;
     private final SettlementTriggerPolicy triggerPolicy;
-    private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final MallOutboxRepository outbox;
+    private final ObjectMapper json;
 
     MallService(ProductRepository products, MallOrderRepository orders,
-                 SettlementTriggerPolicy triggerPolicy, ApplicationEventPublisher events,
-                 Clock clock) {
+                 SettlementTriggerPolicy triggerPolicy,
+                 Clock clock,
+                     MallOutboxRepository outbox, ObjectMapper json) {
         this.products = products;
         this.orders = orders;
         this.triggerPolicy = triggerPolicy;
-        this.events = events;
         this.clock = clock;
+        this.outbox = outbox;
+        this.json = json;
+    }
+
+    private String serialize(Object event) {
+        try {
+            return json.writeValueAsString(event);
+        } catch (Exception e) {
+            // 序列化不了就别让这步业务成功——事件发不出去,下游永远补不回来
+            throw new IllegalStateException("事件无法序列化: " + event, e);
+        }
     }
 
     @Override
@@ -81,8 +93,10 @@ class MallService implements MallApi {
         order.redeem();
         orders.save(order);
 
-        events.publishEvent(new VoucherRedeemed(order.getId(), product.getId(), product.getMerchantId(),
-                order.getBuyerUserId(), order.getAmountCents(), clock.instant()));
+        VoucherRedeemed redeemed = new VoucherRedeemed(order.getId(), product.getId(), product.getMerchantId(),
+                order.getBuyerUserId(), order.getAmountCents(), clock.instant());
+        outbox.save(new MallOutboxEvent(java.util.UUID.randomUUID().toString(),
+                VoucherRedeemed.class.getName(), serialize(redeemed)));
 
         // §6.3.6 R4:核销结算商品的货款,核销成功才划给商户——
         // 防止"买了不来"占坑却让商户提前拿到全款
@@ -117,9 +131,11 @@ class MallService implements MallApi {
     }
 
     private void publishSettlementTriggered(MallOrder order, Product product, SettlementTrigger trigger) {
-        events.publishEvent(new OrderSettlementTriggered(order.getId(), product.getId(),
+        OrderSettlementTriggered triggered = new OrderSettlementTriggered(order.getId(), product.getId(),
                 product.getMerchantId(), order.getBuyerUserId(), order.getAmountCents(),
-                trigger, clock.instant()));
+                trigger, clock.instant());
+        outbox.save(new MallOutboxEvent(java.util.UUID.randomUUID().toString(),
+                OrderSettlementTriggered.class.getName(), serialize(triggered)));
     }
 
     @Override

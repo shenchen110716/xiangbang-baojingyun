@@ -4,7 +4,7 @@ import com.xbb.agreement.api.AgreementApi;
 import com.xbb.agreement.api.AgreementGenerated;
 import com.xbb.agreement.api.AgreementSigned;
 import com.xbb.ops.api.OpsApi;
-import org.springframework.context.ApplicationEventPublisher;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,14 +17,26 @@ class AgreementService implements AgreementApi {
     private final AgreementRepository agreements;
     private final SigningProvider signingProvider;
     private final OpsApi ops;
-    private final ApplicationEventPublisher events;
+    private final AgreementOutboxRepository outbox;
+    private final ObjectMapper json;
 
     AgreementService(AgreementRepository agreements, SigningProvider signingProvider,
-                      OpsApi ops, ApplicationEventPublisher events) {
+                      OpsApi ops,
+                     AgreementOutboxRepository outbox, ObjectMapper json) {
         this.agreements = agreements;
         this.signingProvider = signingProvider;
         this.ops = ops;
-        this.events = events;
+        this.outbox = outbox;
+        this.json = json;
+    }
+
+    private String serialize(Object event) {
+        try {
+            return json.writeValueAsString(event);
+        } catch (Exception e) {
+            // 序列化不了就别让这步业务成功——事件发不出去,下游永远补不回来
+            throw new IllegalStateException("事件无法序列化: " + event, e);
+        }
     }
 
     @Override
@@ -42,8 +54,10 @@ class AgreementService implements AgreementApi {
         String hash = AgreementTemplate.hash(content);
         Agreement agreement = agreements.save(new Agreement(applicationId, workerUserId, orgId, content, hash,
                 template.templateKey(), template.version()));
-        events.publishEvent(new AgreementGenerated(
-                agreement.getId(), applicationId, workerUserId, orgId, hash, Instant.now()));
+        AgreementGenerated generated = new AgreementGenerated(
+                agreement.getId(), applicationId, workerUserId, orgId, hash, Instant.now());
+        outbox.save(new AgreementOutboxEvent(java.util.UUID.randomUUID().toString(),
+                AgreementGenerated.class.getName(), serialize(generated)));
     }
 
     @Override
@@ -64,9 +78,11 @@ class AgreementService implements AgreementApi {
         agreement.sign(factor, receipt.providerRef());
         agreements.save(agreement);
 
-        events.publishEvent(new AgreementSigned(
+        AgreementSigned signed = new AgreementSigned(
                 agreement.getId(), applicationId, agreement.getWorkerUserId(),
-                agreement.getOrgId(), agreement.getContentHash(), Instant.now()));
+                agreement.getOrgId(), agreement.getContentHash(), Instant.now());
+        outbox.save(new AgreementOutboxEvent(java.util.UUID.randomUUID().toString(),
+                AgreementSigned.class.getName(), serialize(signed)));
     }
 
     /**

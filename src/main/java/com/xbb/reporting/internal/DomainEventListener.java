@@ -8,9 +8,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionalEventListener;
 
-import static org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT;
 
 /**
  * §6.6.1:报表域**订阅各域事件**建本域宽表,**绝不跨域 join 生产表**。
@@ -40,7 +38,12 @@ class DomainEventListener {
     }
 
     /** 佣金:对经纪人是收入。 */
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:所有跨域事件都由发布方的 outbox 中继投递。
+     * AFTER_COMMIT 的监听器要等中继事务提交后才跑,那时 outbox 行已是 PUBLISHED,
+     * 这里再抛异常事件就永久丢了(理由详见 AbstractOutboxRelay)。
+     */
+    @EventListener
     @Transactional(transactionManager = "reportingTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(CommissionGenerated event) {
         reporting.record(ReportingApi.Dimension.BROKER, event.brokerUserId(),
@@ -49,7 +52,12 @@ class DomainEventListener {
     }
 
     /** 商城订单结算:对商户是收入。两种触发模式殊途同归,这里不区分来源(§6.3.7)。 */
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:所有跨域事件都由发布方的 outbox 中继投递。
+     * AFTER_COMMIT 的监听器要等中继事务提交后才跑,那时 outbox 行已是 PUBLISHED,
+     * 这里再抛异常事件就永久丢了(理由详见 AbstractOutboxRelay)。
+     */
+    @EventListener
     @Transactional(transactionManager = "reportingTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(OrderSettlementTriggered event) {
         reporting.record(ReportingApi.Dimension.ORG, event.merchantId(),

@@ -4,7 +4,7 @@ import com.xbb.ops.api.OpsApi;
 import com.xbb.profile.api.JobProfileUpdated;
 import com.xbb.profile.api.ProfileApi;
 import com.xbb.profile.api.ProfileUpdated;
-import org.springframework.context.ApplicationEventPublisher;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,16 +19,27 @@ class ProfileService implements ProfileApi {
     private final JobProfileRepository jobProfiles;
     private final WorkerPreferenceRepository workerPreferences;
     private final OpsApi opsApi;
-    private final ApplicationEventPublisher events;
+    private final ProfileOutboxRepository outbox;
+    private final ObjectMapper json;
 
     ProfileService(ProfileTagRepository tags, JobProfileRepository jobProfiles,
                     WorkerPreferenceRepository workerPreferences, OpsApi opsApi,
-                    ApplicationEventPublisher events) {
+                     ProfileOutboxRepository outbox, ObjectMapper json) {
         this.tags = tags;
         this.jobProfiles = jobProfiles;
         this.workerPreferences = workerPreferences;
         this.opsApi = opsApi;
-        this.events = events;
+        this.outbox = outbox;
+        this.json = json;
+    }
+
+    private String serialize(Object event) {
+        try {
+            return json.writeValueAsString(event);
+        } catch (Exception e) {
+            // 序列化不了就别让这步业务成功——事件发不出去,下游永远补不回来
+            throw new IllegalStateException("事件无法序列化: " + event, e);
+        }
     }
 
     @Override
@@ -61,7 +72,9 @@ class ProfileService implements ProfileApi {
                 .map(existing -> { existing.update(mustTags, niceTags, lat, lon); return existing; })
                 .orElseGet(() -> new JobProfile(jobId, mustTags, niceTags, lat, lon));
         jobProfiles.save(profile);
-        events.publishEvent(new JobProfileUpdated(jobId, mustTags, niceTags, lat, lon, Instant.now()));
+        JobProfileUpdated updated = new JobProfileUpdated(jobId, mustTags, niceTags, lat, lon, Instant.now());
+        outbox.save(new ProfileOutboxEvent(java.util.UUID.randomUUID().toString(),
+                JobProfileUpdated.class.getName(), serialize(updated)));
     }
 
     @Override
@@ -97,12 +110,14 @@ class ProfileService implements ProfileApi {
                 .map(t -> new ProfileUpdated.TagUpdate(t.getTagName(), t.getSource().name(), t.getConfidence()))
                 .toList();
         WorkerPreference preference = workerPreferences.findById(userId).orElse(null);
-        events.publishEvent(new ProfileUpdated(
+        ProfileUpdated updated = new ProfileUpdated(
                 userId, updates,
                 preference == null ? null : preference.getExpectedWageCents(),
                 preference == null ? null : preference.getLat(),
                 preference == null ? null : preference.getLon(),
-                Instant.now()));
+                Instant.now());
+        outbox.save(new ProfileOutboxEvent(java.util.UUID.randomUUID().toString(),
+                ProfileUpdated.class.getName(), serialize(updated)));
     }
 
     /**

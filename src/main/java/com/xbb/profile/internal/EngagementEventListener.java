@@ -2,19 +2,17 @@ package com.xbb.profile.internal;
 
 import com.xbb.engagement.api.EngagementCompleted;
 import com.xbb.profile.api.ProfileUpdated;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT;
 
 /**
  * 履约反哺画像(主文档 §5.2,"这个模块的灵魂"):
@@ -29,15 +27,26 @@ class EngagementEventListener {
     private final ProfileTagRepository tags;
     private final JobProfileRepository jobProfiles;
     private final WorkerPreferenceRepository workerPreferences;
-    private final ApplicationEventPublisher events;
+    private final ProfileOutboxRepository outbox;
+    private final ObjectMapper json;
 
     EngagementEventListener(ProfileTagRepository tags, JobProfileRepository jobProfiles,
                              WorkerPreferenceRepository workerPreferences,
-                             ApplicationEventPublisher events) {
+                     ProfileOutboxRepository outbox, ObjectMapper json) {
         this.tags = tags;
         this.jobProfiles = jobProfiles;
         this.workerPreferences = workerPreferences;
-        this.events = events;
+        this.outbox = outbox;
+        this.json = json;
+    }
+
+    private String serialize(Object event) {
+        try {
+            return json.writeValueAsString(event);
+        } catch (Exception e) {
+            // 序列化不了就别让这步业务成功——事件发不出去,下游永远补不回来
+            throw new IllegalStateException("事件无法序列化: " + event, e);
+        }
     }
 
     // 同步(非 @Async)AFTER_COMMIT,理由见 org.internal.IdentityEventListener 的注释(审计修复)。
@@ -83,11 +92,13 @@ class EngagementEventListener {
                 .map(t -> new ProfileUpdated.TagUpdate(t.getTagName(), t.getSource().name(), t.getConfidence()))
                 .toList();
         WorkerPreference preference = workerPreferences.findById(userId).orElse(null);
-        events.publishEvent(new ProfileUpdated(
+        ProfileUpdated updated = new ProfileUpdated(
                 userId, updates,
                 preference == null ? null : preference.getExpectedWageCents(),
                 preference == null ? null : preference.getLat(),
                 preference == null ? null : preference.getLon(),
-                Instant.now()));
+                Instant.now());
+        outbox.save(new ProfileOutboxEvent(java.util.UUID.randomUUID().toString(),
+                ProfileUpdated.class.getName(), serialize(updated)));
     }
 }

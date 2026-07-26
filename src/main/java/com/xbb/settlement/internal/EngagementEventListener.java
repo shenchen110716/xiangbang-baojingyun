@@ -8,11 +8,9 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Instant;
 
-import static org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT;
 
 /**
  * 结算的触发点是**履约完成**,不是录用(主文档 §9.3 枢纽事件)。

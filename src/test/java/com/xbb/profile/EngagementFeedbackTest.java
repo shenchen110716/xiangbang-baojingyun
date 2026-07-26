@@ -79,8 +79,12 @@ class EngagementFeedbackTest {
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
         // 协议签署是履约完成的前置门禁(§6.2),没签不让完成
-        agreementApi.sign(applicationId, worker, "SMS");
-        engagementApi.completeApplication(applicationId, legalRep);
+        // 协议由录用事件异步触发生成,先等它到位
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                agreementApi.sign(applicationId, worker, "SMS"));
+        // 履约域的"已签协议"副本靠订阅 AgreementSigned 异步落地,签完不等于本域已知晓
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                engagementApi.completeApplication(applicationId, legalRep));
         return worker;
     }
 
@@ -150,8 +154,12 @@ class EngagementFeedbackTest {
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
         // 协议签署是履约完成的前置门禁(§6.2),没签不让完成
-        agreementApi.sign(applicationId, worker, "SMS");
-        engagementApi.completeApplication(applicationId, legalRep);
+        // 协议由录用事件异步触发生成,先等它到位
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                agreementApi.sign(applicationId, worker, "SMS"));
+        // 履约域的"已签协议"副本靠订阅 AgreementSigned 异步落地,签完不等于本域已知晓
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                engagementApi.completeApplication(applicationId, legalRep));
 
         // 反哺发的 ProfileUpdated 是整行覆盖投影的,载荷里漏带偏好会静默清空已填数据
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->

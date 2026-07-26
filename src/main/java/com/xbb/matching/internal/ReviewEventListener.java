@@ -1,14 +1,13 @@
 package com.xbb.matching.internal;
 
 import com.xbb.review.api.CreditScoreChanged;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.Map;
 
-import static org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT;
 
 /**
  * 评价域"只发布'信用分已变更'事件"(§4.2),匹配域订阅后落到自己的只读投影——
@@ -23,8 +22,12 @@ class ReviewEventListener {
         this.workers = workers;
     }
 
-    // 同步(非 @Async)AFTER_COMMIT,理由见 org.internal.IdentityEventListener 的注释(审计修复)。
-    @TransactionalEventListener(phase = AFTER_COMMIT)
+    /**
+     * `@EventListener` 而非 AFTER_COMMIT:所有跨域事件都由发布方的 outbox 中继投递。
+     * AFTER_COMMIT 的监听器要等中继事务提交后才跑,那时 outbox 行已是 PUBLISHED,
+     * 这里再抛异常事件就永久丢了(理由详见 AbstractOutboxRelay)。
+     */
+    @EventListener
     @Transactional(transactionManager = "matchingTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(CreditScoreChanged event) {
         WorkerProjection projection = workers.findById(event.userId())

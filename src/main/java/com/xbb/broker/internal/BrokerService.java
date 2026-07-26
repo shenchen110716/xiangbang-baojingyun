@@ -4,7 +4,7 @@ import com.xbb.broker.api.BrokerApi;
 import com.xbb.broker.api.BrokerRegistered;
 import com.xbb.broker.api.CommissionPaid;
 import com.xbb.broker.api.WorkerBound;
-import org.springframework.context.ApplicationEventPublisher;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,15 +18,27 @@ class BrokerService implements BrokerApi {
     private final InvitationRepository invitations;
     private final CommissionRepository commissions;
     private final BrokerVerifiedUserRepository verifiedUsers;
-    private final ApplicationEventPublisher events;
+    private final BrokerOutboxRepository outbox;
+    private final ObjectMapper json;
 
     BrokerService(BrokerRepository brokers, InvitationRepository invitations, CommissionRepository commissions,
-                  BrokerVerifiedUserRepository verifiedUsers, ApplicationEventPublisher events) {
+                  BrokerVerifiedUserRepository verifiedUsers,
+                     BrokerOutboxRepository outbox, ObjectMapper json) {
         this.brokers = brokers;
         this.invitations = invitations;
         this.commissions = commissions;
         this.verifiedUsers = verifiedUsers;
-        this.events = events;
+        this.outbox = outbox;
+        this.json = json;
+    }
+
+    private String serialize(Object event) {
+        try {
+            return json.writeValueAsString(event);
+        } catch (Exception e) {
+            // 序列化不了就别让这步业务成功——事件发不出去,下游永远补不回来
+            throw new IllegalStateException("事件无法序列化: " + event, e);
+        }
     }
 
     @Override
@@ -39,7 +51,9 @@ class BrokerService implements BrokerApi {
             throw new IllegalStateException("已经是经纪人,不可重复注册");
         }
         brokers.save(new Broker(userId));
-        events.publishEvent(new BrokerRegistered(userId, Instant.now()));
+        BrokerRegistered registered = new BrokerRegistered(userId, Instant.now());
+        outbox.save(new BrokerOutboxEvent(java.util.UUID.randomUUID().toString(),
+                BrokerRegistered.class.getName(), serialize(registered)));
     }
 
     @Override
@@ -58,7 +72,9 @@ class BrokerService implements BrokerApi {
             throw new IllegalStateException("该工人已经绑定过经纪人");
         }
         Invitation invitation = invitations.save(new Invitation(brokerUserId, workerUserId));
-        events.publishEvent(new WorkerBound(invitation.getId(), brokerUserId, workerUserId, Instant.now()));
+        WorkerBound bound = new WorkerBound(invitation.getId(), brokerUserId, workerUserId, Instant.now());
+        outbox.save(new BrokerOutboxEvent(java.util.UUID.randomUUID().toString(),
+                WorkerBound.class.getName(), serialize(bound)));
         return invitation.getId();
     }
 
@@ -69,8 +85,10 @@ class BrokerService implements BrokerApi {
                 .orElseThrow(() -> new IllegalArgumentException("佣金记录不存在"));
         commission.pay();
         commissions.save(commission);
-        events.publishEvent(new CommissionPaid(
-                commissionId, commission.getBrokerUserId(), commission.getAmountCents(), Instant.now()));
+        CommissionPaid paid = new CommissionPaid(
+                commissionId, commission.getBrokerUserId(), commission.getAmountCents(), Instant.now());
+        outbox.save(new BrokerOutboxEvent(java.util.UUID.randomUUID().toString(),
+                CommissionPaid.class.getName(), serialize(paid)));
     }
 
     @Override

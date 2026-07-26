@@ -95,8 +95,12 @@ class NotificationTest {
         long[] ids = accepted("16100000003", "110101199001027003",
                 "16100000004", "110101199001027004", "通知二厂", "91110000000000192X");
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                agreementApi.sign(ids[0], ids[2], "SMS"));
-        engagementApi.completeApplication(ids[0], ids[1]);
+                // 协议由录用事件异步触发生成,先等它到位
+                await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                        agreementApi.sign(ids[0], ids[2], "SMS")));
+        // 履约域的"已签协议"副本靠订阅 AgreementSigned 异步落地,签完不等于本域已知晓
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                engagementApi.completeApplication(ids[0], ids[1]));
         // outbox:结算事件先落库,由中继投递到下游(生产由调度驱动,测试显式推进)
         outboxRelay.publishPending();
 
@@ -111,8 +115,12 @@ class NotificationTest {
         long[] ids = accepted("16100000005", "110101199001027005",
                 "16100000006", "110101199001027006", "通知三厂", "91110000000000193X");
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                agreementApi.sign(ids[0], ids[2], "SMS"));
-        engagementApi.completeApplication(ids[0], ids[1]);
+                // 协议由录用事件异步触发生成,先等它到位
+                await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                        agreementApi.sign(ids[0], ids[2], "SMS")));
+        // 履约域的"已签协议"副本靠订阅 AgreementSigned 异步落地,签完不等于本域已知晓
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                engagementApi.completeApplication(ids[0], ids[1]));
         // outbox:结算事件先落库,由中继投递到下游(生产由调度驱动,测试显式推进)
         outboxRelay.publishPending();
 

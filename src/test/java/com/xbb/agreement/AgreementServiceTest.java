@@ -91,7 +91,9 @@ class AgreementServiceTest {
         long[] ids = acceptedApplication("15800000003", "110101199001024003",
                 "15800000004", "110101199001024004", "协议二厂", "91110000000000142X");
 
-        agreementApi.sign(ids[0], ids[2], "SMS");
+        // 协议由录用事件异步触发生成,先等它到位
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                agreementApi.sign(ids[0], ids[2], "SMS"));
 
         AgreementApi.AgreementView view = agreementApi.findByApplicationId(ids[0]).orElseThrow();
         assertThat(view.status()).isEqualTo(Agreement.Status.SIGNED);
@@ -135,7 +137,9 @@ class AgreementServiceTest {
     void 已签署的协议不能重复签署() {
         long[] ids = acceptedApplication("15800000011", "110101199001024011",
                 "15800000012", "110101199001024012", "协议六厂", "91110000000000146X");
-        agreementApi.sign(ids[0], ids[2], "FACE");
+        // 协议由录用事件异步触发生成,先等它到位
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                agreementApi.sign(ids[0], ids[2], "FACE"));
 
         assertThatThrownBy(() -> agreementApi.sign(ids[0], ids[2], "FACE"))
                 .isInstanceOf(IllegalStateException.class)
@@ -148,7 +152,9 @@ class AgreementServiceTest {
                 "15800000014", "110101199001024014", "协议七厂", "91110000000000147X");
         String before = agreementApi.findByApplicationId(ids[0]).orElseThrow().contentHash();
 
-        agreementApi.sign(ids[0], ids[2], "SMS");
+        // 协议由录用事件异步触发生成,先等它到位
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                agreementApi.sign(ids[0], ids[2], "SMS"));
 
         // 存证的意义就在于签署前后正文可证明未被篡改
         assertThat(agreementApi.findByApplicationId(ids[0]).orElseThrow().contentHash()).isEqualTo(before);
@@ -178,9 +184,13 @@ class AgreementServiceTest {
         long[] ids = acceptedApplication("15800000017", "110101199001024017",
                 "15800000018", "110101199001024018", "协议九厂", "91110000000000149X");
 
-        agreementApi.sign(ids[0], ids[2], "FACE");
+        // 协议由录用事件异步触发生成,先等它到位
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                engagementApi.completeApplication(ids[0], ids[1]));
+                agreementApi.sign(ids[0], ids[2], "FACE"));
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                // 履约域的"已签协议"副本靠订阅 AgreementSigned 异步落地,签完不等于本域已知晓
+                await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                        engagementApi.completeApplication(ids[0], ids[1])));
 
         assertThat(engagementApi.findApplication(ids[0]).orElseThrow().status())
                 .isEqualTo(com.xbb.engagement.internal.Application.Status.COMPLETED);

@@ -7,7 +7,6 @@ import com.xbb.engagement.api.EngagementApi;
 import com.xbb.engagement.api.EngagementCompleted;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.job.api.JobApi;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,13 +25,11 @@ class EngagementService implements EngagementApi {
     private final JobApi jobApi;
     private final EngagementOutboxRepository outbox;
     private final ObjectMapper json;
-    private final ApplicationEventPublisher events;
 
     EngagementService(ApplicationRepository applications, PostedJobRepository postedJobs,
                        EngagementApprovedOrgRepository approvedOrgs, EngagementVerifiedUserRepository verifiedUsers,
                        SignedAgreementRepository signedAgreements, JobApi jobApi,
-                       EngagementOutboxRepository outbox, ObjectMapper json,
-                       ApplicationEventPublisher events) {
+                       EngagementOutboxRepository outbox, ObjectMapper json) {
         this.applications = applications;
         this.postedJobs = postedJobs;
         this.approvedOrgs = approvedOrgs;
@@ -41,7 +38,6 @@ class EngagementService implements EngagementApi {
         this.jobApi = jobApi;
         this.outbox = outbox;
         this.json = json;
-        this.events = events;
     }
 
     private String serialize(Object event) {
@@ -65,7 +61,9 @@ class EngagementService implements EngagementApi {
             throw new IllegalStateException("岗位已关闭,不能报名");
         }
         Application application = applications.save(new Application(jobId, applicantUserId));
-        events.publishEvent(new ApplicationSubmitted(application.getId(), jobId, applicantUserId, Instant.now()));
+        ApplicationSubmitted submitted = new ApplicationSubmitted(application.getId(), jobId, applicantUserId, Instant.now());
+        outbox.save(new EngagementOutboxEvent(java.util.UUID.randomUUID().toString(),
+                ApplicationSubmitted.class.getName(), serialize(submitted)));
         return application.getId();
     }
 
@@ -90,9 +88,11 @@ class EngagementService implements EngagementApi {
 
         application.accept();
         applications.save(application);
-        events.publishEvent(new ApplicationAccepted(
+        ApplicationAccepted accepted = new ApplicationAccepted(
                 applicationId, job.getJobId(), application.getApplicantUserId(),
-                job.getOrgId(), job.getWageCents(), Instant.now()));
+                job.getOrgId(), job.getWageCents(), Instant.now());
+        outbox.save(new EngagementOutboxEvent(java.util.UUID.randomUUID().toString(),
+                ApplicationAccepted.class.getName(), serialize(accepted)));
     }
 
     @Override
@@ -109,7 +109,9 @@ class EngagementService implements EngagementApi {
         }
         application.reject();
         applications.save(application);
-        events.publishEvent(new ApplicationRejected(applicationId, Instant.now()));
+        ApplicationRejected rejected = new ApplicationRejected(applicationId, Instant.now());
+        outbox.save(new EngagementOutboxEvent(java.util.UUID.randomUUID().toString(),
+                ApplicationRejected.class.getName(), serialize(rejected)));
     }
 
     @Override
