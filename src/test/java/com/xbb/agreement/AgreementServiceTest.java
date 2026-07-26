@@ -1,0 +1,186 @@
+package com.xbb.agreement;
+
+import com.xbb.TestcontainersConfig;
+import com.xbb.agreement.api.AgreementApi;
+import com.xbb.agreement.internal.Agreement;
+import com.xbb.engagement.api.EngagementApi;
+import com.xbb.identity.TestCodeAccessor;
+import com.xbb.identity.api.IdentityApi;
+import com.xbb.job.api.JobApi;
+import com.xbb.org.api.OrgApi;
+import com.xbb.org.internal.Organization;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
+
+@SpringBootTest
+@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+class AgreementServiceTest {
+
+    @DynamicPropertySource
+    static void postgresProperties(DynamicPropertyRegistry registry) {
+        TestcontainersConfig.registerProperties(registry);
+    }
+
+    @Autowired IdentityApi identityApi;
+    @Autowired TestCodeAccessor codes;
+    @Autowired OrgApi orgApi;
+    @Autowired JobApi jobApi;
+    @Autowired EngagementApi engagementApi;
+    @Autowired AgreementApi agreementApi;
+
+    private long verifiedUser(String phone, String realName, String idNumber) {
+        long userId = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
+        identityApi.verifyRealName(userId, realName, idNumber);
+        return userId;
+    }
+
+    /** 走到"已录用"(协议此时应已自动生成),返回 [applicationId, legalRep, worker]。 */
+    private long[] acceptedApplication(String legalRepPhone, String legalRepId, String workerPhone,
+                                        String workerIdNumber, String orgName, String creditCode) {
+        long legalRep = verifiedUser(legalRepPhone, "法人" + legalRepPhone.substring(8), legalRepId);
+        AtomicLong orgIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
+        long orgId = orgIdHolder.get();
+        orgApi.approve(orgId);
+
+        AtomicLong jobIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                jobIdHolder.set(jobApi.postJob(orgId, "普工", "描述", 30000, legalRep)));
+        long jobId = jobIdHolder.get();
+
+        long worker = verifiedUser(workerPhone, "工人" + workerPhone.substring(8), workerIdNumber);
+        AtomicLong applicationIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                applicationIdHolder.set(engagementApi.apply(jobId, worker)));
+        long applicationId = applicationIdHolder.get();
+        engagementApi.acceptApplication(applicationId, legalRep);
+
+        await().atMost(Duration.ofSeconds(5)).until(() ->
+                agreementApi.findByApplicationId(applicationId).isPresent());
+        return new long[]{applicationId, legalRep, worker};
+    }
+
+    @Test
+    void 录用后自动生成待签协议且带存证哈希() {
+        long[] ids = acceptedApplication("15800000001", "110101199001024001",
+                "15800000002", "110101199001024002", "协议一厂", "91110000000000141X");
+
+        AgreementApi.AgreementView view = agreementApi.findByApplicationId(ids[0]).orElseThrow();
+        assertThat(view.status()).isEqualTo(Agreement.Status.PENDING);
+        assertThat(view.contentHash()).hasSize(64);
+        assertThat(view.workerUserId()).isEqualTo(ids[2]);
+        assertThat(view.content()).contains("劳务协议");
+    }
+
+    @Test
+    void 工人可以用短信因子签署自己的协议() {
+        long[] ids = acceptedApplication("15800000003", "110101199001024003",
+                "15800000004", "110101199001024004", "协议二厂", "91110000000000142X");
+
+        agreementApi.sign(ids[0], ids[2], "SMS");
+
+        AgreementApi.AgreementView view = agreementApi.findByApplicationId(ids[0]).orElseThrow();
+        assertThat(view.status()).isEqualTo(Agreement.Status.SIGNED);
+        assertThat(view.providerRef()).startsWith("MOCK-");
+    }
+
+    // ---------- 身份因子是法律效力要件(§6.2),不能省 ----------
+
+    @Test
+    void 不带身份因子不能签署() {
+        long[] ids = acceptedApplication("15800000005", "110101199001024005",
+                "15800000006", "110101199001024006", "协议三厂", "91110000000000143X");
+
+        assertThatThrownBy(() -> agreementApi.sign(ids[0], ids[2], null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("身份因子");
+    }
+
+    @Test
+    void 非法的身份因子不能签署() {
+        long[] ids = acceptedApplication("15800000007", "110101199001024007",
+                "15800000008", "110101199001024008", "协议四厂", "91110000000000144X");
+
+        assertThatThrownBy(() -> agreementApi.sign(ids[0], ids[2], "随便糊弄一下"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("身份因子");
+    }
+
+    @Test
+    void 别人不能替工人签署() {
+        long[] ids = acceptedApplication("15800000009", "110101199001024009",
+                "15800000010", "110101199001024010", "协议五厂", "91110000000000145X");
+
+        // 法人代表也不行——协议乙方是工人本人
+        assertThatThrownBy(() -> agreementApi.sign(ids[0], ids[1], "FACE"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("本人");
+    }
+
+    @Test
+    void 已签署的协议不能重复签署() {
+        long[] ids = acceptedApplication("15800000011", "110101199001024011",
+                "15800000012", "110101199001024012", "协议六厂", "91110000000000146X");
+        agreementApi.sign(ids[0], ids[2], "FACE");
+
+        assertThatThrownBy(() -> agreementApi.sign(ids[0], ids[2], "FACE"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("重复签署");
+    }
+
+    @Test
+    void 签署不会改变存证哈希() {
+        long[] ids = acceptedApplication("15800000013", "110101199001024013",
+                "15800000014", "110101199001024014", "协议七厂", "91110000000000147X");
+        String before = agreementApi.findByApplicationId(ids[0]).orElseThrow().contentHash();
+
+        agreementApi.sign(ids[0], ids[2], "SMS");
+
+        // 存证的意义就在于签署前后正文可证明未被篡改
+        assertThat(agreementApi.findByApplicationId(ids[0]).orElseThrow().contentHash()).isEqualTo(before);
+    }
+
+    @Test
+    void 不存在的协议签署报错() {
+        assertThatThrownBy(() -> agreementApi.sign(999999L, 1L, "SMS"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("协议不存在");
+    }
+
+    // ---------- 履约门禁(§6.2:没签不让到岗) ----------
+
+    @Test
+    void 协议未签署不能确认履约完成() {
+        long[] ids = acceptedApplication("15800000015", "110101199001024015",
+                "15800000016", "110101199001024016", "协议八厂", "91110000000000148X");
+
+        assertThatThrownBy(() -> engagementApi.completeApplication(ids[0], ids[1]))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("协议尚未签署");
+    }
+
+    @Test
+    void 协议签署后可以确认履约完成() {
+        long[] ids = acceptedApplication("15800000017", "110101199001024017",
+                "15800000018", "110101199001024018", "协议九厂", "91110000000000149X");
+
+        agreementApi.sign(ids[0], ids[2], "FACE");
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                engagementApi.completeApplication(ids[0], ids[1]));
+
+        assertThat(engagementApi.findApplication(ids[0]).orElseThrow().status())
+                .isEqualTo(com.xbb.engagement.internal.Application.Status.COMPLETED);
+    }
+}

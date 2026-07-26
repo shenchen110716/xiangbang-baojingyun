@@ -1,6 +1,7 @@
 package com.xbb.settlement;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.engagement.internal.PostedJobRepository;
 import com.xbb.identity.TestCodeAccessor;
@@ -37,6 +38,7 @@ class EngagementEventListenerTest {
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
     @Autowired EngagementApi engagementApi;
+    @Autowired AgreementApi agreementApi;
     @Autowired PostedJobRepository postedJobs;
     @Autowired SettlementRepository settlements;
 
@@ -65,6 +67,8 @@ class EngagementEventListenerTest {
         long applicationId = applicationIdHolder.get();
 
         engagementApi.acceptApplication(applicationId, legalRep);
+        // 协议签署是履约完成的前置门禁(§6.2),没签不让完成
+        agreementApi.sign(applicationId, applicant, "SMS");
         engagementApi.completeApplication(applicationId, legalRep);
 
         await().atMost(Duration.ofSeconds(5)).until(() -> settlements.findByApplicationId(applicationId).isPresent());

@@ -1,6 +1,7 @@
 package com.xbb.profile;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
@@ -41,6 +42,7 @@ class EngagementFeedbackTest {
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
     @Autowired EngagementApi engagementApi;
+    @Autowired AgreementApi agreementApi;
     @Autowired ProfileApi profileApi;
     @Autowired WorkerProjectionRepository workerProjections;
 
@@ -76,6 +78,8 @@ class EngagementFeedbackTest {
                 applicationIdHolder.set(engagementApi.apply(jobId, worker)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
+        // 协议签署是履约完成的前置门禁(§6.2),没签不让完成
+        agreementApi.sign(applicationId, worker, "SMS");
         engagementApi.completeApplication(applicationId, legalRep);
         return worker;
     }
@@ -145,6 +149,8 @@ class EngagementFeedbackTest {
                 applicationIdHolder.set(engagementApi.apply(jobId, worker)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
+        // 协议签署是履约完成的前置门禁(§6.2),没签不让完成
+        agreementApi.sign(applicationId, worker, "SMS");
         engagementApi.completeApplication(applicationId, legalRep);
 
         // 反哺发的 ProfileUpdated 是整行覆盖投影的,载荷里漏带偏好会静默清空已填数据

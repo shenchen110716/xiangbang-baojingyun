@@ -1,6 +1,7 @@
 package com.xbb.broker;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.agreement.api.AgreementApi;
 import com.xbb.broker.api.BrokerApi;
 import com.xbb.broker.internal.Commission;
 import com.xbb.broker.internal.CommissionRepository;
@@ -40,6 +41,7 @@ class FundEventListenerTest {
     @Autowired JobApi jobApi;
     @Autowired SettlementApi settlementApi;
     @Autowired EngagementApi engagementApi;
+    @Autowired AgreementApi agreementApi;
     @Autowired FundApi fundApi;
     @Autowired BrokerApi brokerApi;
     @Autowired CommissionRepository commissions;
@@ -71,6 +73,8 @@ class FundEventListenerTest {
                 applicationIdHolder.set(engagementApi.apply(jobId, applicantUserId)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
+        // 协议签署是履约完成的前置门禁(§6.2),没签不让完成
+        agreementApi.sign(applicationId, applicantUserId, "SMS");
         engagementApi.completeApplication(applicationId, legalRep);
 
         AtomicLong settlementIdHolder = new AtomicLong();

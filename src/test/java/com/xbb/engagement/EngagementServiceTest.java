@@ -1,6 +1,7 @@
 package com.xbb.engagement;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.engagement.internal.Application;
 import com.xbb.engagement.internal.EngagementApprovedOrgRepository;
@@ -39,6 +40,7 @@ class EngagementServiceTest {
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
     @Autowired EngagementApi engagementApi;
+    @Autowired AgreementApi agreementApi;
     @Autowired EngagementApprovedOrgRepository approvedOrgs;
     @Autowired EngagementVerifiedUserRepository verifiedUsers;
     @Autowired PostedJobRepository postedJobs;
@@ -161,6 +163,9 @@ class EngagementServiceTest {
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
+        // 协议签署是履约完成的前置门禁(§6.2)
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                agreementApi.sign(applicationId, applicant, "SMS"));
         return applicationId;
     }
 

@@ -1,6 +1,7 @@
 package com.xbb.fund;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.fund.api.FundApi;
 import com.xbb.identity.TestCodeAccessor;
@@ -38,6 +39,7 @@ class SettlementVoidedTest {
     @Autowired JobApi jobApi;
     @Autowired SettlementApi settlementApi;
     @Autowired EngagementApi engagementApi;
+    @Autowired AgreementApi agreementApi;
     @Autowired FundApi fundApi;
 
     private long verifiedUser(String phone, String realName, String idNumber) {
@@ -66,6 +68,8 @@ class SettlementVoidedTest {
                 applicationIdHolder.set(engagementApi.apply(jobId, applicant)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
+        // 协议签署是履约完成的前置门禁(§6.2),没签不让完成
+        agreementApi.sign(applicationId, applicant, "SMS");
         engagementApi.completeApplication(applicationId, legalRep);
 
         AtomicLong settlementIdHolder = new AtomicLong();

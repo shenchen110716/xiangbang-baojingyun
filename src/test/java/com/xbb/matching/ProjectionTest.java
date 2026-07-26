@@ -1,6 +1,7 @@
 package com.xbb.matching;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
@@ -40,6 +41,7 @@ class ProjectionTest {
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
     @Autowired EngagementApi engagementApi;
+    @Autowired AgreementApi agreementApi;
     @Autowired ProfileApi profileApi;
     @Autowired WorkerProjectionRepository workerProjections;
     @Autowired JobProjectionRepository jobProjections;
@@ -99,6 +101,8 @@ class ProjectionTest {
                 applicationIdHolder.set(engagementApi.apply(jobId, worker)));
         long applicationId = applicationIdHolder.get();
         engagementApi.acceptApplication(applicationId, legalRep);
+        // 协议签署是履约完成的前置门禁(§6.2),没签不让完成
+        agreementApi.sign(applicationId, worker, "SMS");
         engagementApi.completeApplication(applicationId, legalRep);
 
         // 履约完成 → 评价域算信用分 → CreditScoreChanged → 匹配域投影
