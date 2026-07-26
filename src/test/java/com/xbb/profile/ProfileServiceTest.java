@@ -65,4 +65,35 @@ class ProfileServiceTest {
 
         assertThat(profileApi.getProfile(userId)).hasSize(1);
     }
+
+    @Test
+    void 设置人才期望薪资与坐标后能查回() {
+        long userId = registeredUser("15100000004");
+
+        profileApi.setWorkerPreference(userId, 30000, 31.2304, 121.4737);
+
+        ProfileApi.WorkerPreferenceView view = profileApi.findWorkerPreference(userId).orElseThrow();
+        assertThat(view.expectedWageCents()).isEqualTo(30000);
+        assertThat(view.lat()).isEqualTo(31.2304);
+        assertThat(view.lon()).isEqualTo(121.4737);
+    }
+
+    @Test
+    void 重复设置人才偏好是更新不是报重复键() {
+        long userId = registeredUser("15100000005");
+        profileApi.setWorkerPreference(userId, 30000, 31.0, 121.0);
+
+        profileApi.setWorkerPreference(userId, 35000, 32.0, 122.0);
+
+        ProfileApi.WorkerPreferenceView view = profileApi.findWorkerPreference(userId).orElseThrow();
+        assertThat(view.expectedWageCents()).isEqualTo(35000);
+        assertThat(view.lat()).isEqualTo(32.0);
+    }
+
+    @Test
+    void 没有设置偏好的用户查回空() {
+        long userId = registeredUser("15100000006");
+
+        assertThat(profileApi.findWorkerPreference(userId)).isEmpty();
+    }
 }
