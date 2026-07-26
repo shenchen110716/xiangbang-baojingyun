@@ -99,3 +99,14 @@ xbb:
         password: ${DB_ADMIN_PASSWORD:postgres}
         schemas: profile
         locations: classpath:db/migration/profile
+    matching:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_MATCHING_USER:matching_user}
+        password: ${DB_MATCHING_PASSWORD:matching_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: matching
+        locations: classpath:db/migration/matching
