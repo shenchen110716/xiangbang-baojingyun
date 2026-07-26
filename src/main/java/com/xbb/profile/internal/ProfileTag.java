@@ -8,7 +8,21 @@ import java.util.Set;
 @Table(name = "profile_tag", schema = "profile")
 public class ProfileTag {
 
-    public enum Source { SELF_REPORTED }
+    /**
+     * 三层置信(主文档 §5.2):自述 0.4 < 平台验证 0.7 < 履约验证 1.0。
+     * "他说他会,不算数;他干过并且评价好,才算数。"
+     * 平台验证(证书/技能测试)还没有数据源,先不放进来。
+     */
+    public enum Source {
+        SELF_REPORTED(0.4),
+        ENGAGEMENT_VERIFIED(1.0);
+
+        private final double confidence;
+
+        Source(double confidence) { this.confidence = confidence; }
+
+        public double confidence() { return confidence; }
+    }
 
     /**
      * 受控词表的最小可行落地(响帮帮 v1.0 全新方案 §5.2.1):防止"打螺丝/拧螺丝/螺丝工"
@@ -48,6 +62,17 @@ public class ProfileTag {
     }
 
     public void touch() {
+        this.updatedAt = Instant.now();
+    }
+
+    /**
+     * 履约反哺(§5.2"这个模块的灵魂"):干过该岗位 → 自述升级为履约验证,置信 0.4 → 1.0。
+     * 已经是履约验证的不降级。
+     */
+    public void markEngagementVerified() {
+        if (this.source == Source.ENGAGEMENT_VERIFIED) return;
+        this.source = Source.ENGAGEMENT_VERIFIED;
+        this.confidence = Source.ENGAGEMENT_VERIFIED.confidence();
         this.updatedAt = Instant.now();
     }
 

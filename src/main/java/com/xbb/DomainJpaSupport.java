@@ -29,11 +29,17 @@ public final class DomainJpaSupport {
                 .bind("xbb.domains." + domain + ".datasource", Bindable.of(DataSourceProperties.class))
                 .orElseThrow(() -> new IllegalStateException("missing xbb.domains." + domain + " configuration"));
         HikariDataSource ds = props.initializeDataSourceBuilder().type(HikariDataSource.class).build();
-        // 见 xbb-v1-progress.md:测试里每个 @SpringBootTest 类都会被 Spring
-        // 测试上下文缓存出独立的 ApplicationContext,连接池默认 10 很容易把
-        // Testcontainers 的 max_connections 打满(域越多越明显,TestcontainersConfig
-        // 里把测试容器的 max_connections 调到了 300 兜底,这里仍然调小池子本身)。
+        // 见 xbb-v1-progress.md:测试里每个 @SpringBootTest 类都会被 Spring 测试上下文
+        // 缓存出独立的 ApplicationContext,每个上下文 × 每个域 = 一个连接池。
+        // 10 个域 × 30 多个测试类 = 300+ 个池子同时存在。
         ds.setMaximumPoolSize(3);
+        // 关键:Hikari 默认 minimumIdle = maximumPoolSize,意味着**每个池子都会长期
+        // 占住 3 条连接**,哪怕整个测试类根本没碰这个域。300 个池子就是 900 条常驻连接,
+        // 这才是"每加一个域就要调大 max_connections"的真正原因。
+        // 设成 0 + 30 秒空闲回收后,池子只在真正用到时才建连接,用完就还——
+        // 需求从"域数 × 上下文数 × 3"降到"实际并发用到的那几个域"。
+        ds.setMinimumIdle(0);
+        ds.setIdleTimeout(30_000);
         return ds;
     }
 

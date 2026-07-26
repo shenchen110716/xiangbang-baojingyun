@@ -125,6 +125,26 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <!--
+              Spring 测试上下文缓存默认只存 32 个。测试类超过 32 个之后就会 LRU 淘汰,
+              而淘汰会关掉被缓存上下文里的资源;本项目所有集成测试共享同一个
+              Testcontainers 数据库容器,一旦踩到淘汰,后续测试全部拿不到连接,
+              报错是 "Failed to bind xbb.domains.*.flyway.url"(getJdbcUrl 返回 null),
+              看着完全像配置写错,和真正的原因隔得非常远。
+
+              症状特征:**单独跑某个测试类必过,全量跑必挂**,而且挂的总是靠后执行的那几个。
+              实测测试类到 44 个时必现;调大上限后 152 个测试全绿。
+              每加一个域会新增若干测试类,这个值要留足余量。
+            -->
+            <spring.test.context.cache.maxSize>64</spring.test.context.cache.maxSize>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 </project>

@@ -26,7 +26,7 @@ class MatchScorerTest {
 
     @Test
     void 岗位must标签人才全覆盖才算通过硬约束() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 0.4), 30000L, 31.0, 121.0);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 0.4), 30000L, 31.0, 121.0, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of("叉车"), List.of(), 31.0, 121.0);
 
         assertThat(scorer.passesHardConstraints(worker, job)).isTrue();
@@ -34,7 +34,7 @@ class MatchScorerTest {
 
     @Test
     void 缺任一must标签直接被硬约束挡掉() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 0.4), 30000L, 31.0, 121.0);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 0.4), 30000L, 31.0, 121.0, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of("叉车", "电工"), List.of(), 31.0, 121.0);
 
         assertThat(scorer.passesHardConstraints(worker, job)).isFalse();
@@ -42,7 +42,7 @@ class MatchScorerTest {
 
     @Test
     void 岗位没有must标签时任何人都通过硬约束() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), null, null, null);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), null, null, null, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of(), List.of("普工"), 31.0, 121.0);
 
         assertThat(scorer.passesHardConstraints(worker, job)).isTrue();
@@ -53,7 +53,7 @@ class MatchScorerTest {
     @Test
     void 技能匹配按置信权重加权再除以岗位要求标签数() {
         // 岗位要求 2 个标签(must 叉车 + nice 质检),人才只命中 1 个,自述置信 0.4
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 0.4), 30000L, 31.0, 121.0);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 0.4), 30000L, 31.0, 121.0, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of("叉车"), List.of("质检"), 31.0, 121.0);
 
         assertThat(scorer.skillScore(worker, job)).isCloseTo(0.4 / 2, within(EPS));
@@ -62,15 +62,15 @@ class MatchScorerTest {
     @Test
     void 履约验证置信10比自述04得分高() {
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of("叉车"), List.of(), 31.0, 121.0);
-        WorkerSnapshot selfReported = new WorkerSnapshot(1L, Map.of("叉车", 0.4), 30000L, 31.0, 121.0);
-        WorkerSnapshot verified = new WorkerSnapshot(2L, Map.of("叉车", 1.0), 30000L, 31.0, 121.0);
+        WorkerSnapshot selfReported = new WorkerSnapshot(1L, Map.of("叉车", 0.4), 30000L, 31.0, 121.0, null);
+        WorkerSnapshot verified = new WorkerSnapshot(2L, Map.of("叉车", 1.0), 30000L, 31.0, 121.0, null);
 
         assertThat(scorer.skillScore(verified, job)).isGreaterThan(scorer.skillScore(selfReported, job));
     }
 
     @Test
     void 岗位没有任何标签要求时技能维度视为缺失() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 0.4), 30000L, 31.0, 121.0);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 0.4), 30000L, 31.0, 121.0, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of(), List.of(), 31.0, 121.0);
 
         // 除以 0 是没有意义的,这个维度应该退出计分而不是变成 NaN 或 0
@@ -81,7 +81,7 @@ class MatchScorerTest {
 
     @Test
     void 同一坐标距离得分为1() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 30000L, 31.2304, 121.4737);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 30000L, 31.2304, 121.4737, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of(), List.of(), 31.2304, 121.4737);
 
         assertThat(scorer.distanceScore(worker, job)).isCloseTo(1.0, within(1e-4));
@@ -89,7 +89,7 @@ class MatchScorerTest {
 
     @Test
     void 距离越远得分越低() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 30000L, 31.0, 121.0);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 30000L, 31.0, 121.0, null);
         JobSnapshot near = new JobSnapshot(10L, 30000L, List.of(), List.of(), 31.02, 121.0);
         JobSnapshot far = new JobSnapshot(11L, 30000L, List.of(), List.of(), 31.5, 121.0);
 
@@ -98,7 +98,7 @@ class MatchScorerTest {
 
     @Test
     void 坐标缺失时距离维度视为缺失() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 30000L, null, null);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 30000L, null, null, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of(), List.of(), 31.0, 121.0);
 
         assertThat(scorer.distanceScore(worker, job)).isNull();
@@ -108,7 +108,7 @@ class MatchScorerTest {
 
     @Test
     void 岗位薪资达到期望得满分() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 30000L, 31.0, 121.0);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 30000L, 31.0, 121.0, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of(), List.of(), 31.0, 121.0);
 
         assertThat(scorer.wageScore(worker, job)).isCloseTo(1.0, within(EPS));
@@ -116,7 +116,7 @@ class MatchScorerTest {
 
     @Test
     void 岗位薪资高于期望不额外加分也不扣分() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 30000L, 31.0, 121.0);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 30000L, 31.0, 121.0, null);
         JobSnapshot job = new JobSnapshot(10L, 99999L, List.of(), List.of(), 31.0, 121.0);
 
         // 主文档明确"不因给太多而扣分",上限就是 1.0
@@ -125,7 +125,7 @@ class MatchScorerTest {
 
     @Test
     void 岗位薪资低于期望按比例折算() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 40000L, 31.0, 121.0);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 40000L, 31.0, 121.0, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of(), List.of(), 31.0, 121.0);
 
         assertThat(scorer.wageScore(worker, job)).isCloseTo(30000.0 / 40000.0, within(EPS));
@@ -133,7 +133,7 @@ class MatchScorerTest {
 
     @Test
     void 期望薪资缺失时薪资维度视为缺失() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), null, 31.0, 121.0);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), null, 31.0, 121.0, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of(), List.of(), 31.0, 121.0);
 
         assertThat(scorer.wageScore(worker, job)).isNull();
@@ -144,7 +144,7 @@ class MatchScorerTest {
     @Test
     void 同一对工人岗位在两个视角下得分不同() {
         // 技能强、薪资弱的组合:工厂视角看重技能(0.667),工人视角看重薪资(0.40)
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 1.0), 40000L, 31.0, 121.0);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 1.0), 40000L, 31.0, 121.0, null);
         JobSnapshot job = new JobSnapshot(10L, 20000L, List.of("叉车"), List.of(), 31.0, 121.0);
 
         double forWorker = scorer.score(worker, job, Side.WORKER).total();
@@ -155,13 +155,66 @@ class MatchScorerTest {
 
     @Test
     void 权重按主文档双边表归一化后各维度总和为1() {
-        assertThat(Side.WORKER.wageWeight() + Side.WORKER.distanceWeight() + Side.WORKER.skillWeight())
+        assertThat(Side.WORKER.wageWeight() + Side.WORKER.distanceWeight()
+                + Side.WORKER.skillWeight() + Side.WORKER.creditWeight())
                 .isCloseTo(1.0, within(EPS));
-        assertThat(Side.ORG.wageWeight() + Side.ORG.distanceWeight() + Side.ORG.skillWeight())
+        assertThat(Side.ORG.wageWeight() + Side.ORG.distanceWeight()
+                + Side.ORG.skillWeight() + Side.ORG.creditWeight())
                 .isCloseTo(1.0, within(EPS));
         // 工人第一看钱,工厂第一看能不能干(§5.4.2)
         assertThat(Side.WORKER.wageWeight()).isGreaterThan(Side.ORG.wageWeight());
         assertThat(Side.ORG.skillWeight()).isGreaterThan(Side.WORKER.skillWeight());
+    }
+
+    // ---------- 信用维度(§5.4.2 匹配 v1) ----------
+
+    @Test
+    void 信用分归一化为百分制的比例() {
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 30000L, 31.0, 121.0, 80.0);
+
+        assertThat(scorer.creditScore(worker)).isCloseTo(0.8, within(EPS));
+    }
+
+    @Test
+    void 没有信用记录时信用维度视为缺失() {
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), 30000L, 31.0, 121.0, null);
+
+        assertThat(scorer.creditScore(worker)).isNull();
+    }
+
+    @Test
+    void 工厂视角信用权重最高是一等输入维度() {
+        // §5.4.5 R4:"履约信用是引擎的一等输入维度(工厂视角权重最高)"——工厂最怕放鸽子
+        assertThat(Side.ORG.creditWeight())
+                .isGreaterThan(Side.ORG.skillWeight())
+                .isGreaterThan(Side.ORG.wageWeight())
+                .isGreaterThan(Side.ORG.distanceWeight());
+        // 工人侧信用只占一小份,工人更关心钱和通勤
+        assertThat(Side.WORKER.creditWeight()).isLessThan(Side.WORKER.wageWeight());
+    }
+
+    @Test
+    void 信用分高低对工厂视角的影响远大于对工人视角() {
+        JobSnapshot job = new JobSnapshot(10L, 30000L, List.of("叉车"), List.of(), 31.0, 121.0);
+        WorkerSnapshot goodCredit = new WorkerSnapshot(1L, Map.of("叉车", 1.0), 30000L, 31.0, 121.0, 95.0);
+        WorkerSnapshot badCredit = new WorkerSnapshot(2L, Map.of("叉车", 1.0), 30000L, 31.0, 121.0, 35.0);
+
+        double orgGap = scorer.score(goodCredit, job, Side.ORG).total()
+                - scorer.score(badCredit, job, Side.ORG).total();
+        double workerGap = scorer.score(goodCredit, job, Side.WORKER).total()
+                - scorer.score(badCredit, job, Side.WORKER).total();
+
+        assertThat(orgGap).isGreaterThan(workerGap);
+    }
+
+    @Test
+    void 信用维度纳入明细供生成理由() {
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 1.0), 30000L, 31.0, 121.0, 90.0);
+        JobSnapshot job = new JobSnapshot(10L, 30000L, List.of("叉车"), List.of(), 31.0, 121.0);
+
+        MatchScorer.Score score = scorer.score(worker, job, Side.ORG);
+
+        assertThat(score.breakdown()).containsOnlyKeys("技能", "距离", "薪资", "信用");
     }
 
     // ---------- 维度缺失降级 ----------
@@ -170,7 +223,7 @@ class MatchScorerTest {
     void 维度缺失时剩余维度权重重新归一化() {
         // 只有技能维度可算(没坐标、没期望薪资)——得分应该等于技能分本身,
         // 而不是 技能分 × 技能权重(那等于把没填资料惩罚成低分)
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 1.0), null, null, null);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 1.0), null, null, null, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of("叉车"), List.of(), 31.0, 121.0);
 
         MatchScorer.Score score = scorer.score(worker, job, Side.WORKER);
@@ -181,7 +234,7 @@ class MatchScorerTest {
 
     @Test
     void 所有维度都缺失时得分为0且明细为空() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), null, null, null);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of(), null, null, null, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of(), List.of(), null, null);
 
         MatchScorer.Score score = scorer.score(worker, job, Side.WORKER);
@@ -192,7 +245,7 @@ class MatchScorerTest {
 
     @Test
     void 明细保留各维度的加权贡献供生成可解释理由() {
-        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 1.0), 30000L, 31.0, 121.0);
+        WorkerSnapshot worker = new WorkerSnapshot(1L, Map.of("叉车", 1.0), 30000L, 31.0, 121.0, null);
         JobSnapshot job = new JobSnapshot(10L, 30000L, List.of("叉车"), List.of(), 31.0, 121.0);
 
         MatchScorer.Score score = scorer.score(worker, job, Side.WORKER);

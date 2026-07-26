@@ -18,7 +18,8 @@ public class MatchScorer {
     private static final double EARTH_RADIUS_KM = 6371.0;
 
     public record WorkerSnapshot(long userId, Map<String, Double> tags,
-                                  Long expectedWageCents, Double lat, Double lon) { }
+                                  Long expectedWageCents, Double lat, Double lon,
+                                  Double creditScore) { }
 
     public record JobSnapshot(long jobId, long wageCents, List<String> mustTags, List<String> niceTags,
                                Double lat, Double lon) { }
@@ -26,30 +27,35 @@ public class MatchScorer {
     public record Score(double total, Map<String, Double> breakdown) { }
 
     /**
-     * 双边权重(§5.4.2)。原始表含信用与时段两维,v0 没有数据源,
-     * 按剩余三维重新归一化——不是随手改数字,是保持维度间的相对比例不变。
+     * 双边权重(§5.4.2)。v1 接入信用维度;时段维度两侧仍无数据源,
+     * 按剩余四维重新归一化——保持维度间的相对比例不变。
      *
-     * <p>工人视角原始 薪资 0.30 / 距离 0.25 / 技能 0.20(合计 0.75)
-     * <p>工厂视角原始 薪资 0.05 / 距离 0.10 / 技能 0.30(合计 0.45)
+     * <p>工人视角原始 薪资 0.30 / 距离 0.25 / 技能 0.20 / 信用 0.15
+     * <p>工厂视角原始 薪资 0.05 / 距离 0.10 / 技能 0.30 / **信用 0.40**
+     *
+     * <p>§5.4.5 R4:"履约信用是引擎的一等输入维度(工厂视角权重最高)"——工厂最怕放鸽子。
      */
     public enum Side {
-        WORKER(0.30, 0.25, 0.20),
-        ORG(0.05, 0.10, 0.30);
+        WORKER(0.30, 0.25, 0.20, 0.15),
+        ORG(0.05, 0.10, 0.30, 0.40);
 
         private final double wage;
         private final double distance;
         private final double skill;
+        private final double credit;
 
-        Side(double wage, double distance, double skill) {
-            double sum = wage + distance + skill;
+        Side(double wage, double distance, double skill, double credit) {
+            double sum = wage + distance + skill + credit;
             this.wage = wage / sum;
             this.distance = distance / sum;
             this.skill = skill / sum;
+            this.credit = credit / sum;
         }
 
         public double wageWeight() { return wage; }
         public double distanceWeight() { return distance; }
         public double skillWeight() { return skill; }
+        public double creditWeight() { return credit; }
     }
 
     /**
@@ -84,6 +90,12 @@ public class MatchScorer {
         return Math.exp(-km / DISTANCE_DECAY_KM);
     }
 
+    /** credit / 100(§5.4.3);还没有信用记录时该维度缺失。 */
+    public Double creditScore(WorkerSnapshot worker) {
+        Double credit = worker.creditScore();
+        return credit == null ? null : credit / 100.0;
+    }
+
     /** 岗位 ≥ 期望 → 1.0,否则 岗位/期望("不因给太多而扣分");期望缺失时该维度缺失。 */
     public Double wageScore(WorkerSnapshot worker, JobSnapshot job) {
         Long expected = worker.expectedWageCents();
@@ -114,6 +126,11 @@ public class MatchScorer {
         if (wage != null) {
             raw.put("薪资", wage);
             weights.put("薪资", side.wageWeight());
+        }
+        Double credit = creditScore(worker);
+        if (credit != null) {
+            raw.put("信用", credit);
+            weights.put("信用", side.creditWeight());
         }
 
         double weightSum = weights.values().stream().mapToDouble(Double::doubleValue).sum();

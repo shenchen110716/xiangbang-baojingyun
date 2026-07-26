@@ -1,6 +1,7 @@
 package com.xbb.matching;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.engagement.api.EngagementApi;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
@@ -38,6 +39,7 @@ class ProjectionTest {
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
+    @Autowired EngagementApi engagementApi;
     @Autowired ProfileApi profileApi;
     @Autowired WorkerProjectionRepository workerProjections;
     @Autowired JobProjectionRepository jobProjections;
@@ -72,6 +74,37 @@ class ProjectionTest {
         // 维度缺失是正常的冷启动状态,不是错误——评分函数必须容忍
         assertThat(projection.getExpectedWageCents()).isNull();
         assertThat(projection.getLat()).isNull();
+    }
+
+    @Test
+    void 信用分变更被匹配域投影() {
+        String legalRepPhone = "15700000001";
+        long legalRep = identityApi.loginByPhone(legalRepPhone, codes.issue(legalRepPhone)).userId();
+        identityApi.verifyRealName(legalRep, "法人信用", "110101199001022001");
+        AtomicLong orgIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "信用测试厂", "91110000000000131X", legalRep)));
+        long orgId = orgIdHolder.get();
+        orgApi.approve(orgId);
+        AtomicLong jobIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                jobIdHolder.set(jobApi.postJob(orgId, "普工", "描述", 30000, legalRep)));
+        long jobId = jobIdHolder.get();
+
+        String workerPhone = "15700000002";
+        long worker = identityApi.loginByPhone(workerPhone, codes.issue(workerPhone)).userId();
+        identityApi.verifyRealName(worker, "工人信用", "110101199001022002");
+        AtomicLong applicationIdHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                applicationIdHolder.set(engagementApi.apply(jobId, worker)));
+        long applicationId = applicationIdHolder.get();
+        engagementApi.acceptApplication(applicationId, legalRep);
+        engagementApi.completeApplication(applicationId, legalRep);
+
+        // 履约完成 → 评价域算信用分 → CreditScoreChanged → 匹配域投影
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                assertThat(workerProjections.findById(worker).orElseThrow().getCreditScore()).isNotNull());
+        assertThat(workerProjections.findById(worker).orElseThrow().getCreditScore()).isBetween(0.0, 100.0);
     }
 
     @Test

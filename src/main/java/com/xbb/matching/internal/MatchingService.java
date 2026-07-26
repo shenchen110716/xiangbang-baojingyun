@@ -127,6 +127,7 @@ class MatchingService implements MatchingApi {
                 yield "离你 %.1f 公里".formatted(km);
             }
             case "技能" -> "你做过同类岗";
+            case "信用" -> "履约记录良好";
             case "薪资" -> job.wageCents() >= (worker.expectedWageCents() == null ? 0 : worker.expectedWageCents())
                     ? "薪资达到你的期望"
                     : "薪资 %d 元".formatted(job.wageCents() / 100);
@@ -144,7 +145,8 @@ class MatchingService implements MatchingApi {
     }
 
     private static WorkerSnapshot toSnapshot(WorkerProjection w) {
-        return new WorkerSnapshot(w.getUserId(), w.getTags(), w.getExpectedWageCents(), w.getLat(), w.getLon());
+        return new WorkerSnapshot(w.getUserId(), w.getTags(), w.getExpectedWageCents(),
+                w.getLat(), w.getLon(), w.getCreditScore());
     }
 
     private static JobSnapshot toSnapshot(JobProjection j) {

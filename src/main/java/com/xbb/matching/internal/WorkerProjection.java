@@ -28,6 +28,10 @@ public class WorkerProjection {
 
     private Double lon;
 
+    /** 信用分(§5.4.2 匹配 v1)。null = 还没有信用记录,评分时该维度缺失。 */
+    @Column(name = "credit_score")
+    private Double creditScore;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 
@@ -49,10 +53,17 @@ public class WorkerProjection {
         this.updatedAt = Instant.now();
     }
 
+    /** 信用分单独更新:它来自评价域的 CreditScoreChanged,不跟画像事件同源。 */
+    public void updateCreditScore(double creditScore) {
+        this.creditScore = creditScore;
+        this.updatedAt = Instant.now();
+    }
+
     public Long getUserId() { return userId; }
     public Long getExpectedWageCents() { return expectedWageCents; }
     public Double getLat() { return lat; }
     public Double getLon() { return lon; }
+    public Double getCreditScore() { return creditScore; }
 
     public Map<String, Double> getTags() {
         Map<String, Double> result = new LinkedHashMap<>();
