@@ -121,6 +121,13 @@ public class TestcontainersConfig {
         registry.add("xbb.domains.voice.flyway.url", PG::getJdbcUrl);
         registry.add("xbb.domains.voice.flyway.user", PG::getUsername);
         registry.add("xbb.domains.voice.flyway.password", PG::getPassword);
+        // talent 域:同一个容器,不同 schema/用户
+        registry.add("xbb.domains.talent.datasource.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.talent.datasource.username", () -> "talent_user");
+        registry.add("xbb.domains.talent.datasource.password", () -> "talent_pw");
+        registry.add("xbb.domains.talent.flyway.url", PG::getJdbcUrl);
+        registry.add("xbb.domains.talent.flyway.user", PG::getUsername);
+        registry.add("xbb.domains.talent.flyway.password", PG::getPassword);
     }
 
     /**

@@ -11,3 +11,4 @@ CREATE USER matching_user WITH PASSWORD 'matching_pw';
 CREATE USER review_user WITH PASSWORD 'review_pw';
 CREATE USER agreement_user WITH PASSWORD 'agreement_pw';
 CREATE USER voice_user WITH PASSWORD 'voice_pw';
+CREATE USER talent_user WITH PASSWORD 'talent_pw';

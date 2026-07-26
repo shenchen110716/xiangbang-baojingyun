@@ -3,6 +3,7 @@ package com.xbb.fund;
 import com.xbb.TestcontainersConfig;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
+import com.xbb.fund.api.AccountType;
 import com.xbb.fund.api.FundApi;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
@@ -88,6 +89,8 @@ class SettlementVoidedTest {
                 assertThat(fundApi.findById(payoutId).orElseThrow().status())
                         .isEqualTo(com.xbb.fund.internal.Payout.Status.CANCELLED));
 
+        // 备足资金,确保这里挡下发放的原因是"已作废"而不是"余额不足"
+        fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "测试备资");
         assertThatThrownBy(() -> fundApi.disburse(payoutId))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("已作废");

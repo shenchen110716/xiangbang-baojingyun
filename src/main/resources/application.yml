@@ -143,3 +143,14 @@ xbb:
         password: ${DB_ADMIN_PASSWORD:postgres}
         schemas: voice
         locations: classpath:db/migration/voice
+    talent:
+      datasource:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        username: ${DB_TALENT_USER:talent_user}
+        password: ${DB_TALENT_PASSWORD:talent_pw}
+      flyway:
+        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
+        user: ${DB_ADMIN_USER:postgres}
+        password: ${DB_ADMIN_PASSWORD:postgres}
+        schemas: talent
+        locations: classpath:db/migration/talent

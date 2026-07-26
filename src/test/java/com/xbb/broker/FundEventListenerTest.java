@@ -6,6 +6,7 @@ import com.xbb.broker.api.BrokerApi;
 import com.xbb.broker.internal.Commission;
 import com.xbb.broker.internal.CommissionRepository;
 import com.xbb.engagement.api.EngagementApi;
+import com.xbb.fund.api.AccountType;
 import com.xbb.fund.api.FundApi;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
@@ -87,6 +88,8 @@ class FundEventListenerTest {
         AtomicLong payoutIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
                 payoutIdHolder.set(fundApi.findBySettlementId(settlementId).orElseThrow().id()));
+        // 代发要从监管账户扣款(§6.4.2),先备资
+        fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "测试备资");
         fundApi.disburse(payoutIdHolder.get());
         return payoutIdHolder.get();
     }

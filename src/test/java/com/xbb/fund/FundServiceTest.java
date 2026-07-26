@@ -1,6 +1,7 @@
 package com.xbb.fund;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.fund.api.AccountType;
 import com.xbb.fund.api.FundApi;
 import com.xbb.fund.internal.Payout;
 import com.xbb.fund.internal.PayoutRepository;
@@ -37,6 +38,8 @@ class FundServiceTest {
     private static final AtomicLong SETTLEMENT_ID_SEQ = new AtomicLong(900_000);
 
     private long pendingPayout(long amountCents) {
+        // 代发要从监管账户扣款(§6.4.2 资金隔离),先备资再发,否则会被"余额不足"挡下
+        fundApi.topUp(AccountType.USER_FUNDS, amountCents * 2, "测试备资");
         Payout payout = payouts.save(new Payout(SETTLEMENT_ID_SEQ.incrementAndGet(), 42L, amountCents));
         return payout.getId();
     }
@@ -52,18 +55,24 @@ class FundServiceTest {
     }
 
     @Test
-    void 已发放不可重复发放() {
+    void 重复发放是幂等的不会重复打钱() {
+        // 语义变更(Plan12):代发接入微工卡通道后,重复调用从"报错"改成"幂等空操作"。
+        // 对支付类接口这才是正确语义——网络重试不该报错。真正要守住的不变量是
+        // **钱只出一次**,而不是"第二次调用抛异常"。
         long payoutId = pendingPayout(1100);
         fundApi.disburse(payoutId);
+        long balanceAfterFirst = fundApi.balanceOf(AccountType.USER_FUNDS);
 
-        assertThatThrownBy(() -> fundApi.disburse(payoutId))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("待发放");
+        fundApi.disburse(payoutId);
+
+        assertThat(fundApi.balanceOf(AccountType.USER_FUNDS)).isEqualTo(balanceAfterFirst);
+        assertThat(fundApi.findById(payoutId).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
     }
 
     @Test
-    void 并发发放只有一次能成功() throws InterruptedException {
+    void 并发发放不会重复打钱() throws InterruptedException {
         long payoutId = pendingPayout(1200);
+        long balanceBefore = fundApi.balanceOf(AccountType.USER_FUNDS);
 
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch go = new CountDownLatch(1);
@@ -90,9 +99,13 @@ class FundServiceTest {
         t1.join();
         t2.join();
 
-        // 铁律:同一笔发放不能被并发执行两次(乐观锁 + 状态机检查兜底)
-        assertThat(successCount.get()).isEqualTo(1);
-        assertThat(failures).hasSize(1);
+        // 铁律:同一笔发放不能被并发**打两次钱**。
+        // 幂等语义下"两个调用都不报错"是允许的(其中一个是空操作),
+        // 所以断言的是资金侧的不变量:只扣一次款、只有一条成功的代发记录。
+        assertThat(fundApi.balanceOf(AccountType.USER_FUNDS)).isEqualTo(balanceBefore - 1200);
+        assertThat(fundApi.findDisbursement(payoutId).orElseThrow().status())
+                .isEqualTo(com.xbb.fund.api.DisbursementStatus.SUCCESS);
+        assertThat(successCount.get() + failures.size()).isEqualTo(2);
     }
 
     private static void awaitLatch(CountDownLatch latch) {
