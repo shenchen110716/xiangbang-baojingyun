@@ -3,6 +3,7 @@ package com.xbb.web;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -26,6 +27,15 @@ class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     ResponseEntity<Map<String, String>> conflict(IllegalStateException e) {
         return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+    }
+
+    /**
+     * 权限不足是 403,不能混进 IllegalStateException 的 409——
+     * 调用方要能区分"业务状态不对"和"你没这个权限"。
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<Map<String, String>> forbidden(AccessDeniedException e) {
+        return ResponseEntity.status(403).body(Map.of("error", e.getMessage()));
     }
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
