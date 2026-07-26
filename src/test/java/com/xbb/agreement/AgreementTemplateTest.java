@@ -4,13 +4,22 @@ import com.xbb.agreement.internal.AgreementTemplate;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** 模板渲染与存证哈希是纯函数,纯 JUnit 单测,不起 Spring。 */
 class AgreementTemplateTest {
 
+    /** 和入库首版同构的模板,足够覆盖全部占位符。真实首版见 ops 的 V5 迁移。 */
+    private static final String BODY = """
+            甲方(用工单位):组织 #{orgId}
+            乙方(劳动者):用户 #{workerUserId}
+            岗位 #{jobId},每单位 {wage} 元
+            (关联履约单 #{applicationId})
+            """;
+
     @Test
     void 渲染结果包含双方主体岗位与薪酬() {
-        String content = AgreementTemplate.render(1001L, 2002L, 3003L, 4004L, 32050);
+        String content = AgreementTemplate.render(BODY, 1001L, 2002L, 3003L, 4004L, 32050);
 
         assertThat(content).contains("4004");    // 甲方组织
         assertThat(content).contains("3003");    // 乙方工人
@@ -21,8 +30,8 @@ class AgreementTemplateTest {
 
     @Test
     void 同样的变量渲染出同样的哈希() {
-        String a = AgreementTemplate.render(1L, 2L, 3L, 4L, 30000);
-        String b = AgreementTemplate.render(1L, 2L, 3L, 4L, 30000);
+        String a = AgreementTemplate.render(BODY, 1L, 2L, 3L, 4L, 30000);
+        String b = AgreementTemplate.render(BODY, 1L, 2L, 3L, 4L, 30000);
 
         // 存证要可复现:同样的输入必须得到同样的正文和哈希,否则举证时无法自证
         assertThat(a).isEqualTo(b);
@@ -31,10 +40,27 @@ class AgreementTemplateTest {
 
     @Test
     void 变量不同则哈希不同() {
-        String a = AgreementTemplate.render(1L, 2L, 3L, 4L, 30000);
-        String b = AgreementTemplate.render(1L, 2L, 3L, 4L, 40000);
+        String a = AgreementTemplate.render(BODY, 1L, 2L, 3L, 4L, 30000);
+        String b = AgreementTemplate.render(BODY, 1L, 2L, 3L, 4L, 40000);
 
         assertThat(AgreementTemplate.hash(a)).isNotEqualTo(AgreementTemplate.hash(b));
+    }
+
+    @Test
+    void 模板不同则哈希不同() {
+        String a = AgreementTemplate.render(BODY, 1L, 2L, 3L, 4L, 30000);
+        String b = AgreementTemplate.render(BODY + "五、补充条款\n", 1L, 2L, 3L, 4L, 30000);
+
+        assertThat(AgreementTemplate.hash(a)).isNotEqualTo(AgreementTemplate.hash(b));
+    }
+
+    @Test
+    void 模板里有认不出的占位符时拒绝渲染() {
+        // 留着 {甲方法人} 原样输出,等于让人签下一份带占位符的协议
+        assertThatThrownBy(() -> AgreementTemplate.render("甲方 {orgId} 法人 {legalRepName}",
+                1L, 2L, 3L, 4L, 30000))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("未知占位符");
     }
 
     @Test

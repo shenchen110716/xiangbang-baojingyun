@@ -23,15 +23,17 @@ class ReviewService implements ReviewApi {
     private final CompletedEngagementRepository completedEngagements;
     private final CreditScoreRepository creditScores;
     private final CreditCalculator calculator;
+    private final ReviewTagCatalog tagCatalog;
     private final ApplicationEventPublisher events;
 
     ReviewService(ReviewRepository reviews, CompletedEngagementRepository completedEngagements,
                    CreditScoreRepository creditScores, CreditCalculator calculator,
-                   ApplicationEventPublisher events) {
+                   ReviewTagCatalog tagCatalog, ApplicationEventPublisher events) {
         this.reviews = reviews;
         this.completedEngagements = completedEngagements;
         this.creditScores = creditScores;
         this.calculator = calculator;
+        this.tagCatalog = tagCatalog;
         this.events = events;
     }
 
@@ -47,7 +49,7 @@ class ReviewService implements ReviewApi {
             throw new IllegalStateException("同一履约单每人只能评价一次");
         }
 
-        double score = ReviewTag.score(direction, tags);
+        double score = tagCatalog.score(direction, tags);
         Review review = reviews.save(new Review(
                 applicationId, raterUserId,
                 direction == ReviewTag.Direction.ORG_RATES_WORKER ? engagement.getWorkerUserId() : null,

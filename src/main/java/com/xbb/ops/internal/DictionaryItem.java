@@ -25,6 +25,10 @@ public class DictionaryItem {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    /** 扩展属性的 JSON 原文。解析放在服务层,实体只负责存取。 */
+    @Column(name = "attributes")
+    private String attributes;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -39,10 +43,15 @@ public class DictionaryItem {
 
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 
+    public void setAttributes(String attributes) { this.attributes = attributes; }
+
+    public void setValue(String value) { this.value = value; }
+
     public Long getId() { return id; }
     public String getDictType() { return dictType; }
     public String getKey() { return key; }
     public String getValue() { return value; }
     public int getSortOrder() { return sortOrder; }
     public boolean isEnabled() { return enabled; }
+    public String getAttributes() { return attributes; }
 }

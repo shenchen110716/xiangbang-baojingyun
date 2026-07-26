@@ -6,6 +6,7 @@ import com.xbb.agreement.internal.Agreement;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
+import com.xbb.ops.api.OpsApi;
 import com.xbb.job.api.JobApi;
 import com.xbb.org.api.OrgApi;
 import com.xbb.org.internal.Organization;
@@ -38,6 +39,7 @@ class AgreementServiceTest {
     @Autowired JobApi jobApi;
     @Autowired EngagementApi engagementApi;
     @Autowired AgreementApi agreementApi;
+    @Autowired OpsApi opsApi;
 
     private long verifiedUser(String phone, String realName, String idNumber) {
         long userId = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
@@ -182,5 +184,71 @@ class AgreementServiceTest {
 
         assertThat(engagementApi.findApplication(ids[0]).orElseThrow().status())
                 .isEqualTo(com.xbb.engagement.internal.Application.Status.COMPLETED);
+    }
+
+    // ---------- 模板版本化(§6.2) ----------
+
+    @Test
+    void 协议记下了生成时所用的模板版本() {
+        long[] ids = acceptedApplication("15800000019", "110101199001024019",
+                "15800000020", "110101199001024020", "协议十厂", "91110000000000211X");
+
+        AgreementApi.AgreementView view = agreementApi.findByApplicationId(ids[0]).orElseThrow();
+        int activeVersion = opsApi.activeTemplate(OpsApi.LABOR_AGREEMENT).orElseThrow().version();
+
+        assertThat(view.templateKey()).isEqualTo(OpsApi.LABOR_AGREEMENT);
+        assertThat(view.templateVersion()).isEqualTo(activeVersion);
+    }
+
+    /**
+     * 模板改版是**向前生效**的。已签协议的正文和版本号都必须钉死在当时那一版上——
+     * 这是纠纷举证的前提:拿协议上的版本号能翻出当时的标准文本。
+     */
+    @Test
+    void 模板发新版后老协议仍指向老版本且能按版本号回溯正文() {
+        long[] ids = acceptedApplication("15800000021", "110101199001024021",
+                "15800000022", "110101199001024022", "协议十一厂", "91110000000000212X");
+        AgreementApi.AgreementView before = agreementApi.findByApplicationId(ids[0]).orElseThrow();
+        int oldVersion = before.templateVersion();
+        String oldBody = opsApi.activeTemplate(OpsApi.LABOR_AGREEMENT).orElseThrow().body();
+
+        int newVersion = opsApi.publishTemplate(OpsApi.LABOR_AGREEMENT,
+                oldBody + "\n五、本条为新版补充条款\n");
+        try {
+            assertThat(newVersion).isEqualTo(oldVersion + 1);
+
+            AgreementApi.AgreementView after = agreementApi.findByApplicationId(ids[0]).orElseThrow();
+            assertThat(after.templateVersion()).isEqualTo(oldVersion);
+            assertThat(after.content()).isEqualTo(before.content());
+            assertThat(after.contentHash()).isEqualTo(before.contentHash());
+
+            // 举证路径:版本号 → 当时的模板正文
+            assertThat(opsApi.templateVersion(OpsApi.LABOR_AGREEMENT, oldVersion).orElseThrow().body())
+                    .isEqualTo(oldBody)
+                    .doesNotContain("新版补充条款");
+
+            // 新版发布后生成的协议用新版
+            long[] later = acceptedApplication("15800000023", "110101199001024023",
+                    "15800000024", "110101199001024024", "协议十二厂", "91110000000000213X");
+            AgreementApi.AgreementView latest = agreementApi.findByApplicationId(later[0]).orElseThrow();
+            assertThat(latest.templateVersion()).isEqualTo(newVersion);
+            assertThat(latest.content()).contains("新版补充条款");
+        } finally {
+            // 还原成标准文本,别把后续用例的协议正文都带上这条测试条款
+            opsApi.publishTemplate(OpsApi.LABOR_AGREEMENT, oldBody);
+        }
+    }
+
+    @Test
+    void 同一个模板同时只有一版生效() {
+        String body = opsApi.activeTemplate(OpsApi.LABOR_AGREEMENT).orElseThrow().body();
+        int previous = opsApi.activeTemplate(OpsApi.LABOR_AGREEMENT).orElseThrow().version();
+
+        int published = opsApi.publishTemplate(OpsApi.LABOR_AGREEMENT, body);
+
+        assertThat(opsApi.activeTemplate(OpsApi.LABOR_AGREEMENT).orElseThrow().version())
+                .isEqualTo(published);
+        assertThat(opsApi.templateVersion(OpsApi.LABOR_AGREEMENT, previous).orElseThrow().active())
+                .isFalse();
     }
 }

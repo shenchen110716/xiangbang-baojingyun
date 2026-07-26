@@ -49,6 +49,13 @@ public class Agreement {
     @Column(name = "signed_at")
     private Instant signedAt;
 
+    /** 生成时所用的模板版本。模板以后会改,举证要能翻出**当时那一版**(§6.2)。 */
+    @Column(name = "template_key", length = 50)
+    private String templateKey;
+
+    @Column(name = "template_version")
+    private Integer templateVersion;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -57,7 +64,10 @@ public class Agreement {
 
     protected Agreement() { }
 
-    public Agreement(long applicationId, long workerUserId, long orgId, String content, String contentHash) {
+    public Agreement(long applicationId, long workerUserId, long orgId, String content, String contentHash,
+                      String templateKey, Integer templateVersion) {
+        this.templateKey = templateKey;
+        this.templateVersion = templateVersion;
         this.applicationId = applicationId;
         this.workerUserId = workerUserId;
         this.orgId = orgId;
@@ -72,6 +82,9 @@ public class Agreement {
         this.providerRef = providerRef;
         this.signedAt = Instant.now();
     }
+
+    public String getTemplateKey() { return templateKey; }
+    public Integer getTemplateVersion() { return templateVersion; }
 
     public Long getId() { return id; }
     public long getApplicationId() { return applicationId; }

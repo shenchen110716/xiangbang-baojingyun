@@ -8,6 +8,7 @@ import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
 import com.xbb.org.api.OrgApi;
 import com.xbb.org.internal.Organization;
+import com.xbb.ops.api.OpsApi;
 import com.xbb.review.api.ReviewApi;
 import com.xbb.review.internal.CompletedEngagementRepository;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
@@ -41,6 +43,7 @@ class ReviewServiceTest {
     @Autowired EngagementApi engagementApi;
     @Autowired AgreementApi agreementApi;
     @Autowired ReviewApi reviewApi;
+    @Autowired OpsApi opsApi;
     @Autowired CompletedEngagementRepository completedEngagements;
 
     private long verifiedUser(String phone, String realName, String idNumber) {
@@ -163,5 +166,32 @@ class ReviewServiceTest {
         double badScore = reviewApi.findCreditScore(bad[2]).orElseThrow().score();
 
         assertThat(badScore).isLessThan(goodScore);
+    }
+
+    /**
+     * 运营调权重是**向前生效**的:已经落库的评价分不能被追溯改写。
+     * 否则一次词表调整就会把全站历史评分和依赖它的信用分一起改掉,没人能解释分数为什么变了。
+     */
+    @Test
+    void 运营调整权重后老评价的分数不被追溯改写() {
+        long[] ids = completedEngagement("15500000015", "110101199001018015",
+                "15500000016", "110101199001018016", "评价八厂", "91110000000000118X");
+        reviewApi.submitReview(ids[0], ids[1], List.of("迟到早退"), "偶尔迟到");
+        reviewApi.submitReview(ids[0], ids[2], List.of("结算准时"), "还行");
+
+        double before = reviewApi.findVisibleReviews(ids[0]).stream()
+                .filter(r -> r.raterUserId() == ids[1]).findFirst().orElseThrow().score();
+        assertThat(before).isCloseTo(4.5, within(1e-9));
+
+        long light = opsApi.findItem(OpsApi.REVIEW_SEVERITY_WEIGHT, "LIGHT").orElseThrow().id();
+        try {
+            opsApi.updateValue(light, "3.0");
+
+            double after = reviewApi.findVisibleReviews(ids[0]).stream()
+                    .filter(r -> r.raterUserId() == ids[1]).findFirst().orElseThrow().score();
+            assertThat(after).isCloseTo(before, within(1e-9));
+        } finally {
+            opsApi.updateValue(light, "0.5");
+        }
     }
 }

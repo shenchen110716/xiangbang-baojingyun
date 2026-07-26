@@ -3,6 +3,7 @@ package com.xbb.agreement.internal;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.agreement.api.AgreementGenerated;
 import com.xbb.agreement.api.AgreementSigned;
+import com.xbb.ops.api.OpsApi;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,12 +16,14 @@ class AgreementService implements AgreementApi {
 
     private final AgreementRepository agreements;
     private final SigningProvider signingProvider;
+    private final OpsApi ops;
     private final ApplicationEventPublisher events;
 
     AgreementService(AgreementRepository agreements, SigningProvider signingProvider,
-                      ApplicationEventPublisher events) {
+                      OpsApi ops, ApplicationEventPublisher events) {
         this.agreements = agreements;
         this.signingProvider = signingProvider;
+        this.ops = ops;
         this.events = events;
     }
 
@@ -30,9 +33,15 @@ class AgreementService implements AgreementApi {
         // 幂等:重复录用事件/重试不应生成第二份协议
         if (agreements.findByApplicationId(applicationId).isPresent()) return;
 
-        String content = AgreementTemplate.render(applicationId, jobId, workerUserId, orgId, wageCents);
+        // 没有生效模板就不生成:宁可这一单卡住让运营去发布模板,也不能凭空拿个空文本去签。
+        OpsApi.AgreementTemplateView template = ops.activeTemplate(OpsApi.LABOR_AGREEMENT)
+                .orElseThrow(() -> new IllegalStateException("没有生效的劳务协议模板,无法生成协议"));
+
+        String content = AgreementTemplate.render(
+                template.body(), applicationId, jobId, workerUserId, orgId, wageCents);
         String hash = AgreementTemplate.hash(content);
-        Agreement agreement = agreements.save(new Agreement(applicationId, workerUserId, orgId, content, hash));
+        Agreement agreement = agreements.save(new Agreement(applicationId, workerUserId, orgId, content, hash,
+                template.templateKey(), template.version()));
         events.publishEvent(new AgreementGenerated(
                 agreement.getId(), applicationId, workerUserId, orgId, hash, Instant.now()));
     }
@@ -80,6 +89,7 @@ class AgreementService implements AgreementApi {
     public Optional<AgreementView> findByApplicationId(long applicationId) {
         return agreements.findByApplicationId(applicationId).map(a -> new AgreementView(
                 a.getId(), a.getApplicationId(), a.getWorkerUserId(), a.getOrgId(),
-                a.getContent(), a.getContentHash(), a.getStatus(), a.getProviderRef()));
+                a.getContent(), a.getContentHash(), a.getStatus(), a.getProviderRef(),
+                a.getTemplateKey(), a.getTemplateVersion()));
     }
 }

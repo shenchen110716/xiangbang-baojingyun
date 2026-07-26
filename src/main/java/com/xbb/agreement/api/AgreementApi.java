@@ -8,7 +8,7 @@ public interface AgreementApi {
 
     record AgreementView(long id, long applicationId, long workerUserId, long orgId,
                           String content, String contentHash, Agreement.Status status,
-                          String providerRef) { }
+                          String providerRef, String templateKey, Integer templateVersion) { }
 
     /**
      * 生成待签协议。由**履约域**在录用后调用——协议是履约流程的一环,
