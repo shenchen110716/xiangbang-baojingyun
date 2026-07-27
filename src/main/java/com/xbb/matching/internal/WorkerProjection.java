@@ -35,12 +35,33 @@ public class WorkerProjection {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 
+    /**
+     * 写入本行的那个事件的发生时刻。
+     *
+     * <p>投递是至少一次且**可能乱序**(失败的事件会退避,晚于后来的事件重投)。
+     * 没有这个字段时,一条旧的 ProfileUpdated 重投会把新的置信度覆盖回去——
+     * 表现是"工人明明履约验证过了,画像却退回自述状态",而且无声无息。
+     */
+    @Column(name = "source_event_at")
+    private Instant sourceEventAt;
+
     protected WorkerProjection() { }
 
     public WorkerProjection(long userId, Map<String, Double> tags,
                              Long expectedWageCents, Double lat, Double lon) {
         this.userId = userId;
         update(tags, expectedWageCents, lat, lon);
+    }
+
+    /** @return 是否真的写入(旧事件会被忽略) */
+    public boolean updateIfNewer(Map<String, Double> tags, Long expectedWageCents,
+                                  Double lat, Double lon, Instant eventAt) {
+        if (sourceEventAt != null && eventAt != null && eventAt.isBefore(sourceEventAt)) {
+            return false;
+        }
+        update(tags, expectedWageCents, lat, lon);
+        this.sourceEventAt = eventAt;
+        return true;
     }
 
     public void update(Map<String, Double> tags, Long expectedWageCents, Double lat, Double lon) {

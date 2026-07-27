@@ -170,7 +170,7 @@ class JobLifecycleTest {
         // 直接数 outbox 行:事件是在关闭那一刻同事务写进去的,数它比等异步投递确定得多。
         assertThat(outbox.findAll().stream()
                 .filter(row -> JobClosed.class.getName().equals(row.getEventType()))
-                .filter(row -> row.getPayload().contains("\"jobId\":" + jobId))
+                .filter(row -> payloadHasField(row.getPayload(), "jobId", jobId))
                 .count()).isEqualTo(1);
     }
 
@@ -225,5 +225,16 @@ class JobLifecycleTest {
         assertThatThrownBy(() -> engagementApi.apply(jobId, worker))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("岗位已关闭");
+    }
+
+    /**
+     * JSON 字段精确匹配。
+     *
+     * <p>原来直接用 contains("\"settlementId\":" + id):id 是 1 时会匹配到 12、13……
+     * 全新的隔离库里 id 都是小整数,正好踩中。这个 bug 表现为"单独跑过、全量跑挂",
+     * 排查了很久才发现问题在测试辅助方法里,不在被测代码。
+     */
+    private static boolean payloadHasField(String payload, String field, long value) {
+        return payload.matches(".*\"" + field + "\"\\s*:\\s*" + value + "\\s*[,}].*");
     }
 }

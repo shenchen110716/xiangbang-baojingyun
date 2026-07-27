@@ -34,8 +34,11 @@ class ProfileEventListener {
         event.tags().forEach(t -> tags.put(t.tagName(), t.confidence()));
         WorkerProjection projection = workers.findById(event.userId())
                 .orElseGet(() -> new WorkerProjection(event.userId(), Map.of(), null, null, null));
-        projection.update(tags, event.expectedWageCents(), event.lat(), event.lon());
-        workers.save(projection);
+        // 旧事件不覆盖新值:退避会让失败的事件晚于后来的事件到达
+        if (projection.updateIfNewer(tags, event.expectedWageCents(), event.lat(), event.lon(),
+                event.occurredAt())) {
+            workers.save(projection);
+        }
     }
 
     /**

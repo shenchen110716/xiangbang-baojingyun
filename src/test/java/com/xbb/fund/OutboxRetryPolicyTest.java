@@ -48,7 +48,7 @@ class OutboxRetryPolicyTest {
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
         // 独占数据库:别的上下文的中继会抢着投递,"还没到点就不该被重投"这种断言在共享库上不成立
-        TestcontainersConfig.registerIsolatedProperties(registry);
+        TestcontainersConfig.registerIsolatedProperties(registry, "retry_policy");
     }
 
     @TestConfiguration
@@ -82,7 +82,7 @@ class OutboxRetryPolicyTest {
 
     private FundOutboxEvent rowOf(long payoutId) {
         return outbox.findAll().stream()
-                .filter(row -> row.getPayload().contains("\"payoutId\":" + payoutId))
+                .filter(row -> payloadHasField(row.getPayload(), "payoutId", payoutId))
                 .findFirst().orElseThrow(() -> new AssertionError("发放 " + payoutId + " 没有对应的 outbox 行"));
     }
 
@@ -165,5 +165,16 @@ class OutboxRetryPolicyTest {
         assertThat(admin.domains())
                 .contains("fund", "settlement", "engagement", "identity", "org", "job",
                         "agreement", "review", "broker", "mall", "profile");
+    }
+
+    /**
+     * JSON 字段精确匹配。
+     *
+     * <p>原来直接用 contains("\"settlementId\":" + id):id 是 1 时会匹配到 12、13……
+     * 全新的隔离库里 id 都是小整数,正好踩中。这个 bug 表现为"单独跑过、全量跑挂",
+     * 排查了很久才发现问题在测试辅助方法里,不在被测代码。
+     */
+    private static boolean payloadHasField(String payload, String field, long value) {
+        return payload.matches(".*\"" + field + "\"\\s*:\\s*" + value + "\\s*[,}].*");
     }
 }

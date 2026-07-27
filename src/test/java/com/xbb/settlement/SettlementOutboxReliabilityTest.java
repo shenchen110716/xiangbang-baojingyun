@@ -61,7 +61,7 @@ class SettlementOutboxReliabilityTest {
     static void postgresProperties(DynamicPropertyRegistry registry) {
         // 独占数据库:别的测试上下文的后台中继一直在跑,共享库里做不到
         // "没人投递之前下游拿不到"这个前提(详见 registerIsolatedProperties)
-        TestcontainersConfig.registerIsolatedProperties(registry);
+        TestcontainersConfig.registerIsolatedProperties(registry, "settle_rel");
     }
 
     /** 一个可以按开关罢工的下游消费方,用来制造"投递失败"。 */
@@ -149,7 +149,7 @@ class SettlementOutboxReliabilityTest {
     private SettlementOutboxEvent outboxRowOf(long applicationId) {
         long settlementId = settlements.findByApplicationId(applicationId).orElseThrow().getId();
         return outbox.findAll().stream()
-                .filter(row -> row.getPayload().contains("\"settlementId\":" + settlementId))
+                .filter(row -> payloadHasField(row.getPayload(), "settlementId", settlementId))
                 .findFirst().orElseThrow(() -> new AssertionError("结算 " + settlementId + " 没有对应的 outbox 行"));
     }
 
@@ -275,5 +275,16 @@ class SettlementOutboxReliabilityTest {
 
         assertThat(outboxRowOf(applicationId).getStatus()).isEqualTo(AbstractOutboxEvent.Status.PUBLISHED);
         assertThat(payouts.findBySettlementId(settlementId)).isPresent();
+    }
+
+    /**
+     * JSON 字段精确匹配。
+     *
+     * <p>原来直接用 contains("\"settlementId\":" + id):id 是 1 时会匹配到 12、13……
+     * 全新的隔离库里 id 都是小整数,正好踩中。这个 bug 表现为"单独跑过、全量跑挂",
+     * 排查了很久才发现问题在测试辅助方法里,不在被测代码。
+     */
+    private static boolean payloadHasField(String payload, String field, long value) {
+        return payload.matches(".*\"" + field + "\"\\s*:\\s*" + value + "\\s*[,}].*");
     }
 }

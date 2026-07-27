@@ -38,20 +38,25 @@ public class TestcontainersConfig {
 
     static {
         PG.start();
-        createIsolatedDatabase();
         // 跨域事件改走 outbox 之后,投递是真异步的:"下游那行还没出现"是合法的中间态,
         // 不是失败。而 untilAsserted 默认只吞 AssertionError,orElseThrow 这类
         // NoSuchElementException 会直接炸穿等待循环。让它一并重试到超时为止。
         Awaitility.ignoreExceptionsByDefault();
     }
 
-    private static void createIsolatedDatabase() {
+    private static final java.util.Set<String> CREATED =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
+    private static synchronized void ensureDatabase(String database) {
+        if (!CREATED.add(database)) {
+            return;
+        }
         try (Connection connection = DriverManager.getConnection(
                      PG.getJdbcUrl(), PG.getUsername(), PG.getPassword());
              Statement statement = connection.createStatement()) {
-            statement.execute("CREATE DATABASE " + ISOLATED_DB);
+            statement.execute("CREATE DATABASE " + database);
         } catch (SQLException e) {
-            throw new IllegalStateException("建隔离库失败", e);
+            throw new IllegalStateException("建隔离库失败: " + database, e);
         }
     }
 
@@ -89,7 +94,17 @@ public class TestcontainersConfig {
      * <p>用户是集群级的,所以新库只要建出来,各域的 Flyway(管理员身份)会自己建 schema 并授权。
      */
     public static void registerIsolatedProperties(DynamicPropertyRegistry registry) {
-        registerProperties(registry, isolatedJdbcUrl());
+        registerIsolatedProperties(registry, "shared");
+    }
+
+    /**
+     * 每个需要独占的测试类给一个**自己的**库名。
+     *
+     * <p>共用一个隔离库是不够的:中继间隔现在按域配置,某个类只关掉自己那一个域的中继,
+     * 其余十个域的中继照样以 200ms 轮询同一个库,照样会去动别的类的 outbox 行。
+     */
+    public static void registerIsolatedProperties(DynamicPropertyRegistry registry, String name) {
+        registerProperties(registry, isolatedJdbcUrl(ISOLATED_DB + "_" + name));
     }
 
     private static void registerProperties(DynamicPropertyRegistry registry, String jdbcUrl) {
@@ -104,11 +119,12 @@ public class TestcontainersConfig {
         }
     }
 
-    private static String isolatedJdbcUrl() {
+    private static String isolatedJdbcUrl(String database) {
+        ensureDatabase(database);
         String url = PG.getJdbcUrl();
         int dbStart = url.lastIndexOf('/') + 1;
         int dbEnd = url.indexOf('?', dbStart);
-        return url.substring(0, dbStart) + ISOLATED_DB + (dbEnd < 0 ? "" : url.substring(dbEnd));
+        return url.substring(0, dbStart) + database + (dbEnd < 0 ? "" : url.substring(dbEnd));
     }
 
     /**
