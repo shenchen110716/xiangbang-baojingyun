@@ -34,8 +34,11 @@ class ReimbursementService implements ReimbursementApi {
 
         // §6.5.2:打款走资金域(唯一动钱者)。本域只是发起,不自己记账、不自己扣余额。
         // 从平台收入账户出——报销是平台的内部成本,不该动用户在途资金。
+        // 幂等键必须给:这一步和本域事务是两个事务,钱出去之后本域再失败回滚,
+        // 单据会退回待审批状态、可以再审批一次——没有键就会重复扣款,
+        // 而且流水里认不出哪笔是重复的。
         fundApi.spendFromAccount(AccountType.PLATFORM_REVENUE, r.getAmountCents(),
-                "报销打款 reimbursement#" + r.getId());
+                "报销打款 reimbursement#" + r.getId(), "reimbursement-" + r.getId());
 
         r.markPaid();
         reimbursements.save(r);

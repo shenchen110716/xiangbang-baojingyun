@@ -37,8 +37,18 @@ public class Application {
         this.applicantUserId = applicantUserId;
     }
 
-    public void accept() {
+    /**
+     * 只读的可录用检查。
+     *
+     * <p>单独拆出来是因为**扣名额发生在跨域事务里,一旦提交就回滚不了**——
+     * 状态不对必须在扣名额之前就拦住,不能等 accept() 时才发现。
+     */
+    public void requireAcceptable() {
         if (status != Status.PENDING) throw new IllegalStateException("只有待处理状态可以处理");
+    }
+
+    public void accept() {
+        requireAcceptable();
         this.status = Status.ACCEPTED;
     }
 

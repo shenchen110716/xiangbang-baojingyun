@@ -145,8 +145,9 @@ class FundService implements FundApi {
 
     @Override
     @Transactional("fundTransactionManager")
-    public void spendFromAccount(AccountType accountType, long amountCents, String reason) {
-        escrow.debit(accountType, amountCents, reason);
+    public void spendFromAccount(AccountType accountType, long amountCents, String reason,
+                                  String idempotencyKey) {
+        escrow.debit(accountType, amountCents, reason, idempotencyKey);
     }
 
     @Override

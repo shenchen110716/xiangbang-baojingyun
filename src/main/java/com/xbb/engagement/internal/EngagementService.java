@@ -60,6 +60,11 @@ class EngagementService implements EngagementApi {
         if (!postedJob.isOpen()) {
             throw new IllegalStateException("岗位已关闭,不能报名");
         }
+        // 表上有 (job_id, applicant_user_id) 唯一约束兜底;这里先查一次是为了给出
+        // 说得清的错误,而不是让约束冲突冒成一句笼统的"数据冲突,可能是重复提交"。
+        if (applications.findByJobIdAndApplicantUserId(jobId, applicantUserId).isPresent()) {
+            throw new IllegalStateException("你已经报名过这个岗位了");
+        }
         Application application = applications.save(new Application(jobId, applicantUserId));
         ApplicationSubmitted submitted = new ApplicationSubmitted(application.getId(), jobId, applicantUserId, Instant.now());
         outbox.save(new EngagementOutboxEvent(java.util.UUID.randomUUID().toString(),
@@ -79,6 +84,12 @@ class EngagementService implements EngagementApi {
         if (org.getLegalRepUserId() != callerUserId) {
             throw new IllegalStateException("只有组织法人代表可以处理应聘");
         }
+        // 状态守卫必须在扣名额**之前**。原来 fillSlot 在前、accept() 的状态检查在后,
+        // 于是重复点击"录用"时:第二次的 fillSlot 已经把名额扣掉(跨域事务,立即提交、
+        // 不可回滚),甚至可能因此把岗位置为 CLOSED 并发出 JobClosed;随后 accept()
+        // 才发现状态不对抛异常回滚——名额凭空蒸发一个,岗位还永久关闭了。
+        application.requireAcceptable();
+
         // **先扣名额再落录用**。两个域各自独立 DataSource,这两步落在两个事务里,
         // 做不到原子,所以顺序决定了失败时倒向哪边:
         // 先扣名额失败 → 名额白扣一个,岗位显得比实际满(少招,是运营问题);

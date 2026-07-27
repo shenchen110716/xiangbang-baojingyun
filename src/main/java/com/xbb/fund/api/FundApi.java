@@ -37,7 +37,13 @@ public interface FundApi {
      * 从指定监管账户出账(报销打款等)。**资金域是唯一动钱者**——
      * 别的域只能调这个接口发起,不能自己记账扣余额(§4.1 决策#1)。
      */
-    void spendFromAccount(AccountType accountType, long amountCents, String reason);
+    /**
+     * @param idempotencyKey 业务方给的唯一键(如 "reimbursement-42")。**必填**——
+     *                       调用方与资金域是两个事务,调用方那边失败回滚时这笔钱
+     *                       已经出去了,重试就会重复扣款。有了它资金域能认出
+     *                       "这笔我付过了",重复调用直接返回。
+     */
+    void spendFromAccount(AccountType accountType, long amountCents, String reason, String idempotencyKey);
 
     /**
      * 担保决策(§8)。**只产出决策不扣款**——§8.2"策略只做决策,不碰钱;

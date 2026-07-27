@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.identity.api.Role;
 import org.springframework.security.access.AccessDeniedException;
+import com.xbb.fund.api.AccountType;
+import com.xbb.fund.api.FundApi;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,11 +26,12 @@ class BrokerService implements BrokerApi {
     private final BrokerOutboxRepository outbox;
     private final ObjectMapper json;
     private final IdentityApi identityApi;
+    private final FundApi fundApi;
 
     BrokerService(BrokerRepository brokers, InvitationRepository invitations, CommissionRepository commissions,
                   BrokerVerifiedUserRepository verifiedUsers,
                      BrokerOutboxRepository outbox, ObjectMapper json,
-                       IdentityApi identityApi) {
+                       IdentityApi identityApi, FundApi fundApi) {
         this.brokers = brokers;
         this.invitations = invitations;
         this.commissions = commissions;
@@ -36,6 +39,7 @@ class BrokerService implements BrokerApi {
         this.outbox = outbox;
         this.json = json;
         this.identityApi = identityApi;
+        this.fundApi = fundApi;
     }
 
     /**
@@ -103,6 +107,13 @@ class BrokerService implements BrokerApi {
         requirePlatformOps(callerUserId);
         Commission commission = commissions.findById(commissionId)
                 .orElseThrow(() -> new IllegalArgumentException("佣金记录不存在"));
+        // **钱必须真的从平台账户出去。** 之前这里只把记录标成已付、发个事件,
+        // 没有任何账户被扣:平台对外承诺付出的比账上实际出的多,账实不符;
+        // 而 CommissionPaid 还没有任何订阅者,也就没人会去补这一步。
+        // §4.1 决策#1:资金域是唯一动钱者,所以走它的接口,不自己记账。
+        fundApi.spendFromAccount(AccountType.PLATFORM_REVENUE, commission.getAmountCents(),
+                "经纪人佣金 commission#" + commissionId, "commission-" + commissionId);
+
         commission.pay();
         commissions.save(commission);
         CommissionPaid paid = new CommissionPaid(

@@ -50,8 +50,22 @@ public class Payout {
         this.paidAt = Instant.now();
     }
 
+    /**
+     * 作废待发放记录。
+     *
+     * <p>**已发放的必须报错,不能静默返回。** 钱出去了再作废结算,原来这里
+     * 什么都不做:不冲正、不告警、佣金不动、报表仍记收入——账面上"这单不该付钱",
+     * 而三千块已经离开监管账户,没有任何人会知道。这种情况需要人工冲正,
+     * 不该被一个 return 吞掉。
+     */
     public void cancel() {
-        if (status != Status.PENDING) return; // 已发放/已作废都不再变更,幂等
+        if (status == Status.PAID) {
+            throw new IllegalStateException(
+                    "该笔已发放,不能直接作废,需要走冲正流程。payoutId=" + id);
+        }
+        if (status == Status.CANCELLED) {
+            return;   // 重复作废幂等
+        }
         this.status = Status.CANCELLED;
     }
 

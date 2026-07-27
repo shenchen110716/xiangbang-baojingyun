@@ -7,5 +7,8 @@ import java.util.List;
 
 public interface EscrowLedgerRepository extends JpaRepository<EscrowLedgerEntry, Long> {
 
+    boolean existsByIdempotencyKey(String idempotencyKey);
+
+
     List<EscrowLedgerEntry> findByAccountTypeOrderByIdAsc(AccountType accountType);
 }

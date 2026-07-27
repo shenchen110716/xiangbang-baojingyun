@@ -29,18 +29,23 @@ public class EscrowLedgerEntry {
     @Column(nullable = false, length = 200)
     private String reason;
 
+    /** 业务幂等键(如 "reimbursement-42")。为空表示这笔没有外部业务键。 */
+    @Column(name = "idempotency_key", length = 100)
+    private String idempotencyKey;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
     protected EscrowLedgerEntry() { }
 
     public EscrowLedgerEntry(AccountType accountType, long beforeCents, long amountCents,
-                              long afterCents, String reason) {
+                              long afterCents, String reason, String idempotencyKey) {
         this.accountType = accountType;
         this.beforeCents = beforeCents;
         this.amountCents = amountCents;
         this.afterCents = afterCents;
         this.reason = reason;
+        this.idempotencyKey = idempotencyKey;
     }
 
     public Long getId() { return id; }
