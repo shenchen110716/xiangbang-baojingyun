@@ -46,9 +46,16 @@ class SettlementEventListener {
     @EventListener
     @Transactional(transactionManager = "fundTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(SettlementVoided event) {
-        payouts.findBySettlementId(event.settlementId()).ifPresent(payout -> {
-            payout.cancel();
-            payouts.save(payout);
-        });
+        // **找不到待发放记录时必须抛出,不能静默返回。**
+        // 同一批里 SettlementCalculated 可能因为下游抖动被退避、排在 Voided 后面重投;
+        // 那时这条 Voided 若被静默吞掉(中继随即标 PUBLISHED、永不重投),
+        // 稍后 Calculated 重投成功会建出一张 PENDING 的工资单——
+        // 一笔已作废的结算留下了可发放的单子,运营一点就真把钱打出去了。
+        // 抛出去让中继退避重试,等 Calculated 先落地。
+        Payout payout = payouts.findBySettlementId(event.settlementId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "结算 " + event.settlementId() + " 的待发放记录尚未到达,稍后重试"));
+        payout.cancel();
+        payouts.save(payout);
     }
 }

@@ -43,11 +43,14 @@ class JobEventListener {
     @EventListener
     @Transactional(transactionManager = "engagementTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(JobClosed event) {
-        // 岗位可能还没投影过来(事件乱序/投影丢失),那就没什么可关的——
-        // 不新建一条"已关闭"的空投影,那会让后续 JobPosted 覆盖成 open。
-        postedJobs.findById(event.jobId()).ifPresent(job -> {
-            job.close();
-            postedJobs.save(job);
-        });
+        // **找不到岗位投影时必须抛出,不能静默返回。**
+        // JobPosted 可能因为退避排在 JobClosed 之后重投;此时若把 Closed 吞掉
+        // (中继随即标 PUBLISHED、永不重投),随后 JobPosted 落地建出的投影
+        // 默认是 open —— 已招满/已下架的岗位就在推荐和报名里永久复活了。
+        var job = postedJobs.findById(event.jobId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "岗位 " + event.jobId() + " 的投影尚未到达,稍后重试"));
+        job.close();
+        postedJobs.save(job);
     }
 }

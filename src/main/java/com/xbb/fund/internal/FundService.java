@@ -8,6 +8,7 @@ import com.xbb.fund.api.GuaranteeContext;
 import com.xbb.fund.api.GuaranteeDecision;
 import com.xbb.fund.api.GuaranteePolicy;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.ObjectProvider;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.identity.api.Role;
 import org.springframework.security.access.AccessDeniedException;
@@ -29,12 +30,15 @@ class FundService implements FundApi {
     private final FundOutboxRepository outbox;
     private final ObjectMapper json;
     private final IdentityApi identityApi;
+    /** 自身代理:三段式里每一段都要各自的事务边界,自调用会绕过代理。 */
+    private final ObjectProvider<FundService> self;
 
     FundService(PayoutRepository payouts, DisbursementRepository disbursements,
                  DisbursementChannel channel, EscrowService escrow,
                  GuaranteePolicy guaranteePolicy, WorkerCreditRepository credits,
                  FundOutboxRepository outbox, ObjectMapper json,
-                       IdentityApi identityApi) {
+                       IdentityApi identityApi,
+                 ObjectProvider<FundService> self) {
         this.payouts = payouts;
         this.disbursements = disbursements;
         this.channel = channel;
@@ -44,6 +48,7 @@ class FundService implements FundApi {
         this.outbox = outbox;
         this.json = json;
         this.identityApi = identityApi;
+        this.self = self;
     }
 
     /**
@@ -71,66 +76,114 @@ class FundService implements FundApi {
     /** 新人起始信用分,和评价域 CreditCalculator.NEW_USER_SCORE 一致。 */
     private static final int NEW_USER_CREDIT = 60;
 
+    /**
+     * 代发。**注意本方法没有 @Transactional**——它分三段,中间那段要在事务之外。
+     *
+     * <p>原来整段在一个事务里:先 escrow.debit(只改内存,@Version 要到提交时才校验),
+     * 再调真实资金通道。两笔并发时双方都读到同一个 version,**两笔钱都真的打出去了**,
+     * 然后其中一笔在提交时撞乐观锁全部回滚——账上"什么都没发生",实际少了一笔钱,
+     * 运营看到余额不对很可能再点一次发放。
+     *
+     * <p>现在:①事务内预扣并落 PENDING 代发单(此时乐观锁已校验、已提交);
+     * ②事务外调通道;③事务内记结果。通道调用发生时,资金已经被真正扣住,
+     * 不存在"两笔都以为自己能扣"的窗口。
+     */
     @Override
-    @Transactional("fundTransactionManager")
     public void disburse(long payoutId, long callerUserId) {
         requirePlatformOps(callerUserId);
-        Payout payout = payouts.findById(payoutId)
-                .orElseThrow(() -> new IllegalArgumentException("发放记录不存在"));
-        // 幂等:同一笔 payout 已经成功代发过就不再动钱
-        Optional<Disbursement> existing = disbursements.findByPayoutId(payoutId);
-        if (existing.isPresent() && existing.get().getStatus() == Disbursement.Status.SUCCESS) {
-            return;
+        Disbursement prepared = self.getObject().reserveForDisbursement(payoutId);
+        if (prepared == null) {
+            return;   // 已成功代发过,幂等
         }
-        Disbursement disbursement = existing.orElseGet(() -> disbursements.save(new Disbursement(
-                payoutId, payout.getPayeeUserId(), payout.getAmountCents(), idempotencyKeyFor(payoutId))));
-        execute(payout, disbursement);
+        callChannelAndRecord(prepared);
     }
 
     @Override
-    @Transactional("fundTransactionManager")
     public void retryDisbursement(long payoutId, long callerUserId) {
         requirePlatformOps(callerUserId);
+        Disbursement prepared = self.getObject().reserveForRetry(payoutId);
+        callChannelAndRecord(prepared);
+    }
+
+    /** ①预扣:乐观锁在这一段提交时就校验完,通道调用不再和它抢。 */
+    @Transactional("fundTransactionManager")
+    public Disbursement reserveForDisbursement(long payoutId) {
+        Payout payout = payouts.findById(payoutId)
+                .orElseThrow(() -> new IllegalArgumentException("发放记录不存在"));
+        Optional<Disbursement> existing = disbursements.findByPayoutId(payoutId);
+        if (existing.isPresent() && existing.get().getStatus() == Disbursement.Status.SUCCESS) {
+            return null;
+        }
+        Disbursement disbursement = existing.orElseGet(() -> disbursements.save(new Disbursement(
+                payoutId, payout.getPayeeUserId(), payout.getAmountCents(), idempotencyKeyFor(payoutId))));
+        escrow.debit(AccountType.USER_FUNDS, disbursement.getAmountCents(),
+                "代发预扣 payout#" + payoutId, "disburse-" + payoutId);
+        return disbursement;
+    }
+
+    @Transactional("fundTransactionManager")
+    public Disbursement reserveForRetry(long payoutId) {
         Disbursement disbursement = disbursements.findByPayoutId(payoutId)
                 .orElseThrow(() -> new IllegalArgumentException("代发记录不存在"));
         if (disbursement.getStatus() == Disbursement.Status.SUCCESS) {
             throw new IllegalStateException("该笔代发已成功,无需重发");
         }
-        Payout payout = payouts.findById(payoutId)
-                .orElseThrow(() -> new IllegalArgumentException("发放记录不存在"));
+        payouts.findById(payoutId).orElseThrow(() -> new IllegalArgumentException("发放记录不存在"));
         disbursement.recordRetry();
-        execute(payout, disbursement);
+        disbursements.save(disbursement);
+        // 上一轮失败时已经原路退回,这里要重新预扣。重试用不同的幂等键,
+        // 否则第二次预扣会被当成重复而跳过,钱没扣就把款打出去了。
+        escrow.debit(AccountType.USER_FUNDS, disbursement.getAmountCents(),
+                "代发预扣(重试) payout#" + payoutId,
+                "disburse-" + payoutId + "-retry-" + disbursement.getRetryCount());
+        return disbursement;
+    }
+
+    /** ②通道调用在事务之外:外部 IO 不该占着数据库事务和监管账户那一行的锁。 */
+    private void callChannelAndRecord(Disbursement disbursement) {
+        try {
+            DisbursementChannel.Receipt receipt = channel.disburse(
+                    disbursement.getIdempotencyKey(), disbursement.getPayeeUserId(),
+                    disbursement.getAmountCents(), DisbursementChannel.PayeeAccount.WECHAT_BALANCE);
+            self.getObject().recordSuccess(disbursement.getId(), receipt);
+        } catch (DisbursementChannel.ChannelException e) {
+            self.getObject().recordFailure(disbursement.getId(), e.getMessage());
+        }
+    }
+
+    /** ③记结果:成功。资金已在①预扣,这里只落状态与事件。 */
+    @Transactional("fundTransactionManager")
+    public void recordSuccess(long disbursementId, DisbursementChannel.Receipt receipt) {
+        Disbursement disbursement = disbursements.findById(disbursementId).orElseThrow();
+        Payout payout = payouts.findById(disbursement.getPayoutId()).orElseThrow();
+
+        disbursement.markSuccess(receipt.externalRef(), receipt.taxCertificateNo());
+        disbursements.save(disbursement);
+
+        payout.disburse();
+        payouts.save(payout);
+        // 事件与账本变动**同事务落库**,再由中继投递。丢了这条事件的后果不会自愈:
+        // 不会再有第二次"这笔钱发过了"的事件,佣金和盈亏账就永远少一笔。
+        outbox.save(new FundOutboxEvent(
+                java.util.UUID.randomUUID().toString(),
+                FundsDisbursed.class.getName(),
+                serialize(new FundsDisbursed(payout.getId(), payout.getSettlementId(),
+                        payout.getPayeeUserId(), disbursement.getAmountCents(), Instant.now()))));
     }
 
     /**
-     * 先从监管账户预扣,再走通道。通道失败则**原路退回**并落 FAILED 记录——
-     * 这样账本上既留下了预扣也留下了冲正,对账时能看出发生过什么,
+     * ③记结果:失败,**原路退回**。
+     *
+     * <p>账本上既留下预扣也留下冲正,对账时能看出发生过什么,
      * 而不是"什么都没发生"(§6.4.2:对账以账本为准)。
      */
-    private void execute(Payout payout, Disbursement disbursement) {
-        long amount = disbursement.getAmountCents();
-        escrow.debit(AccountType.USER_FUNDS, amount, "代发预扣 payout#" + payout.getId());
-        try {
-            DisbursementChannel.Receipt receipt = channel.disburse(
-                    disbursement.getIdempotencyKey(), disbursement.getPayeeUserId(), amount,
-                    DisbursementChannel.PayeeAccount.WECHAT_BALANCE);
-            disbursement.markSuccess(receipt.externalRef(), receipt.taxCertificateNo());
-            disbursements.save(disbursement);
-
-            payout.disburse();
-            payouts.save(payout);
-            // 事件与账本变动**同事务落库**,再由中继投递。丢了这条事件的后果不会自愈:
-            // 不会再有第二次"这笔钱发过了"的事件,佣金和盈亏账就永远少一笔。
-            outbox.save(new FundOutboxEvent(
-                    java.util.UUID.randomUUID().toString(),
-                    FundsDisbursed.class.getName(),
-                    serialize(new FundsDisbursed(payout.getId(), payout.getSettlementId(),
-                            payout.getPayeeUserId(), amount, Instant.now()))));
-        } catch (DisbursementChannel.ChannelException e) {
-            escrow.credit(AccountType.USER_FUNDS, amount, "代发失败冲正 payout#" + payout.getId());
-            disbursement.markFailed(e.getMessage());
-            disbursements.save(disbursement);
-        }
+    @Transactional("fundTransactionManager")
+    public void recordFailure(long disbursementId, String error) {
+        Disbursement disbursement = disbursements.findById(disbursementId).orElseThrow();
+        escrow.credit(AccountType.USER_FUNDS, disbursement.getAmountCents(),
+                "代发失败冲正 payout#" + disbursement.getPayoutId());
+        disbursement.markFailed(error);
+        disbursements.save(disbursement);
     }
 
     private static String idempotencyKeyFor(long payoutId) {

@@ -87,7 +87,17 @@ public abstract class AbstractOutboxRelay<T extends AbstractOutboxEvent> {
         int published = 0;
         for (T event : pending) {
             try {
+                OutboxEventMulticasterConfig.drainFailures();   // 清掉上一轮的残留
                 events.publishEvent(deserialize(event));
+
+                // 广播器把每个监听器的异常都接住了(见 OutboxEventMulticasterConfig),
+                // 所以走到这里不代表全都成功——要主动check。任一消费方失败就整条重试,
+                // 已成功的那些靠自身幂等吸收。
+                java.util.List<Throwable> failures = OutboxEventMulticasterConfig.drainFailures();
+                if (!failures.isEmpty()) {
+                    throw new IllegalStateException(
+                            failures.size() + " 个消费方处理失败,首个原因: " + failures.get(0), failures.get(0));
+                }
                 event.markPublished(Instant.now());
                 published++;
             } catch (Exception e) {
