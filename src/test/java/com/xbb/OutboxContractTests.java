@@ -21,8 +21,15 @@ class OutboxContractTests {
 
     private static final Path MAIN = Path.of("src/main/java/com/xbb");
 
-    private static final java.util.regex.Pattern ANNOTATION_USE =
-            java.util.regex.Pattern.compile("^\\s*@TransactionalEventListener", java.util.regex.Pattern.MULTILINE);
+    /**
+     * 匹配注解的**短名与全限定名两种写法**。
+     *
+     * <p>最早只写了短名,于是 {@code @org.springframework.transaction.event.TransactionalEventListener}
+     * 能大摇大摆绕过去——守卫存在但抓不到,和没有守卫一样,而且更危险(让人以为已经防住了)。
+     * 这个漏洞是在"验证守卫真的会失败"那一步发现的,不是靠读代码看出来的。
+     */
+    private static final java.util.regex.Pattern ANNOTATION_USE = java.util.regex.Pattern.compile(
+            "^\\s*@(?:[\\w.]+\\.)?TransactionalEventListener", java.util.regex.Pattern.MULTILINE);
 
     private static List<Path> javaSources() throws IOException {
         try (Stream<Path> paths = Files.walk(MAIN)) {
