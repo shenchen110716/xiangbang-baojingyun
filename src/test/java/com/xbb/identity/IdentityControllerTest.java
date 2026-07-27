@@ -1,6 +1,7 @@
 package com.xbb.identity;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestCodeAccessor;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -26,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(TestcontainersConfig.class)
+@Import({TestcontainersConfig.class, TestCodeAccessor.class})
 class IdentityControllerTest {
 
     @DynamicPropertySource
@@ -35,15 +36,18 @@ class IdentityControllerTest {
     }
 
     @Autowired MockMvc mvc;
+    @Autowired TestCodeAccessor codes;
     @Autowired ObjectMapper json;
 
     @Test
-    void 请求验证码再登录_返回token() throws Exception {
+    void 申请验证码时绝不把验证码回给调用方() throws Exception {
+        // 这个端点是 permitAll 的。回显验证码 = 任何人报一个手机号就能登录那个账号,
+        // 包括平台管理员,整套鉴权与 RBAC 直接失效。修复前它就是这么写的。
         mvc.perform(post("/api/identity/code")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phone\":\"13700000001\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").isNotEmpty());
+                .andExpect(jsonPath("$.code").doesNotExist());
     }
 
     @Test
@@ -138,11 +142,11 @@ class IdentityControllerTest {
         return json.readTree(loginBody).get("token").asText();
     }
 
-    private String codeFor(String phone) throws Exception {
-        String body = mvc.perform(post("/api/identity/code")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phone\":\"%s\"}".formatted(phone)))
-                .andReturn().getResponse().getContentAsString();
-        return json.readTree(body).get("code").asText();
+    /**
+     * 验证码从测试钩子取,不从 HTTP 响应取——那个端点是 permitAll 的,
+     * 回显验证码等于任何人报个手机号就能登录任意账号(修复前正是如此)。
+     */
+    private String codeFor(String phone) {
+        return codes.issue(phone);
     }
 }

@@ -1,6 +1,7 @@
 package com.xbb.job;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.org.api.OrgApi;
@@ -25,7 +26,7 @@ import static org.awaitility.Awaitility.await;
  * 实名副本校验通过为止,是从 job 测试视角唯一站得住脚的等待方式。
  */
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class OrgEventListenerTest {
 
     @DynamicPropertySource
@@ -34,6 +35,7 @@ class OrgEventListenerTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired ApprovedOrgRepository approvedOrgs;
@@ -50,7 +52,7 @@ class OrgEventListenerTest {
                         Organization.Type.FACTORY, "四号工厂", "91110000000000041X", legalRepUserId)));
         long orgId = orgIdHolder.get();
 
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
 
         await().atMost(Duration.ofSeconds(15)).until(() -> approvedOrgs.findById(orgId).isPresent());
         var approved = approvedOrgs.findById(orgId).orElseThrow();

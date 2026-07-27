@@ -8,7 +8,7 @@ public interface SettlementApi {
     record SettlementView(long id, long applicationId, long jobId, long workerUserId,
                            long amountCents, Settlement.Status status, String voidReason) { }
 
-    void voidSettlement(long settlementId, String reason);
+    void voidSettlement(long settlementId, String reason, long callerUserId);
 
     Optional<SettlementView> findById(long settlementId);
 

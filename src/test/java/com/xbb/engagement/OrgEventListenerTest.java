@@ -1,6 +1,7 @@
 package com.xbb.engagement;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.engagement.internal.EngagementApprovedOrgRepository;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
@@ -20,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class OrgEventListenerTest {
 
     @DynamicPropertySource
@@ -29,6 +30,7 @@ class OrgEventListenerTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired EngagementApprovedOrgRepository approvedOrgs;
@@ -45,7 +47,7 @@ class OrgEventListenerTest {
                         Organization.Type.FACTORY, "十五号工厂", "91110000000000151X", legalRepUserId)));
         long orgId = orgIdHolder.get();
 
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
 
         await().atMost(Duration.ofSeconds(15)).until(() -> approvedOrgs.findById(orgId).isPresent());
         var approved = approvedOrgs.findById(orgId).orElseThrow();

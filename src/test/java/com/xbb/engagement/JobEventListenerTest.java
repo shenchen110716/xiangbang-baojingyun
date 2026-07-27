@@ -1,6 +1,7 @@
 package com.xbb.engagement;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.engagement.internal.PostedJobRepository;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
@@ -21,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class JobEventListenerTest {
 
     @DynamicPropertySource
@@ -30,6 +31,7 @@ class JobEventListenerTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
@@ -45,7 +47,7 @@ class JobEventListenerTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "十二号工厂", "91110000000000082X", legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
 
         AtomicLong jobIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->

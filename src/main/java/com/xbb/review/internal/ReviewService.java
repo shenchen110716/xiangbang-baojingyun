@@ -4,6 +4,7 @@ import com.xbb.review.api.CreditScoreChanged;
 import com.xbb.review.api.ReviewApi;
 import com.xbb.review.api.ReviewSubmitted;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,11 +27,13 @@ class ReviewService implements ReviewApi {
     private final ReviewTagCatalog tagCatalog;
     private final ReviewOutboxRepository outbox;
     private final ObjectMapper json;
+    private final ReviewApprovedOrgRepository approvedOrgs;
 
     ReviewService(ReviewRepository reviews, CompletedEngagementRepository completedEngagements,
                    CreditScoreRepository creditScores, CreditCalculator calculator,
                    ReviewTagCatalog tagCatalog,
-                     ReviewOutboxRepository outbox, ObjectMapper json) {
+                     ReviewOutboxRepository outbox, ObjectMapper json,
+                   ReviewApprovedOrgRepository approvedOrgs) {
         this.reviews = reviews;
         this.completedEngagements = completedEngagements;
         this.creditScores = creditScores;
@@ -38,6 +41,7 @@ class ReviewService implements ReviewApi {
         this.tagCatalog = tagCatalog;
         this.outbox = outbox;
         this.json = json;
+        this.approvedOrgs = approvedOrgs;
     }
 
     private String serialize(Object event) {
@@ -84,9 +88,19 @@ class ReviewService implements ReviewApi {
      * 这里只区分"是不是那个工人",不是工人就按工厂侧处理。
      */
     private ReviewTag.Direction directionOf(CompletedEngagement engagement, long raterUserId) {
-        return raterUserId == engagement.getWorkerUserId()
-                ? ReviewTag.Direction.WORKER_RATES_ORG
-                : ReviewTag.Direction.ORG_RATES_WORKER;
+        if (raterUserId == engagement.getWorkerUserId()) {
+            return ReviewTag.Direction.WORKER_RATES_ORG;
+        }
+        // 不是这个工人,就必须是这个组织的法人代表。此前这里是"不是工人 = 一律当工厂方",
+        // 于是任何人都能以工厂身份给任意工人打差评、直接拉低他的信用分,
+        // 而信用分又决定押金档位和派单排序。原注释说"法人代表由履约域鉴权保证",
+        // 但这个入口根本不经过履约域。
+        ApprovedOrg org = approvedOrgs.findById(engagement.getOrgId())
+                .orElseThrow(() -> new IllegalStateException("组织未通过审核"));
+        if (org.getLegalRepUserId() != raterUserId) {
+            throw new AccessDeniedException("只有这一单的工人本人或用工单位法人代表可以评价");
+        }
+        return ReviewTag.Direction.ORG_RATES_WORKER;
     }
 
     /** R2 双盲:双方都提交后一起公开。7 天到期那一支在读取时判定,见 isRevealed。 */

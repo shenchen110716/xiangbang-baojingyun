@@ -2,6 +2,7 @@ package com.xbb.settlement;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.identity.TestCodeAccessor;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class SettlementControllerTest {
 
     @DynamicPropertySource
@@ -28,6 +29,8 @@ class SettlementControllerTest {
     }
 
     @Autowired MockMvc mvc;
+    @Autowired TestPlatformOps.Accessor ops;
+    @Autowired TestCodeAccessor codes;
     @Autowired ObjectMapper json;
 
     @Test
@@ -39,23 +42,29 @@ class SettlementControllerTest {
     }
 
     @Test
-    void 不存在的结算记录作废返回400() throws Exception {
-        // 结算接口目前是"authenticated 即可操作"的粗粒度鉴权,随便借一个合法登录态即可
-        String token = tokenFor("13100000099");
+    void 没有平台运维角色的人调用直接403() throws Exception {
+        // 这两个动作的"主人"是平台自己,不是某个用户,所以要求 PLATFORM_OPS。
+        // 修复前它们零鉴权:任何登录用户遍历 id 就能对任意工资单动手。
+        String ordinary = tokenFor("18800000008");
 
-        mvc.perform(put("/api/settlement/999999/void")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reason\":\"测试\"}"))
+        mvc.perform(put("/api/settlement/999999/void").header("Authorization", "Bearer " + ordinary)
+                        .content("{\"reason\":\"x\"}").contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 运维角色调用不存在的记录返回400() throws Exception {
+        ops.userId();   // 确保运维角色已授予
+        String opsToken = tokenFor(TestPlatformOps.Accessor.PHONE);
+
+        mvc.perform(put("/api/settlement/999999/void").header("Authorization", "Bearer " + opsToken)
+                        .content("{\"reason\":\"x\"}").contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest());
     }
 
     private String tokenFor(String phone) throws Exception {
-        String codeBody = mvc.perform(post("/api/identity/code")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phone\":\"%s\"}".formatted(phone)))
-                .andReturn().getResponse().getContentAsString();
-        String code = json.readTree(codeBody).get("code").asText();
+        // 验证码不再经 HTTP 回显(那是漏洞),从测试钩子取
+        String code = codes.issue(phone);
 
         String loginBody = mvc.perform(post("/api/identity/login")
                         .contentType(MediaType.APPLICATION_JSON)

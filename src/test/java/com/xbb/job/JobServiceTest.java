@@ -1,6 +1,7 @@
 package com.xbb.job;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
@@ -22,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class JobServiceTest {
 
     @DynamicPropertySource
@@ -31,6 +32,7 @@ class JobServiceTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
@@ -47,7 +49,7 @@ class JobServiceTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, name, creditCode, legalRepUserId)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
         await().atMost(Duration.ofSeconds(15)).until(() -> approvedOrgs.findById(orgId).isPresent());
         return orgId;
     }

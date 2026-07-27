@@ -2,6 +2,8 @@ package com.xbb.settlement.internal;
 
 import com.xbb.settlement.api.SettlementApi;
 import jakarta.validation.constraints.NotBlank;
+import com.xbb.security.AuthenticatedUser;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,8 +25,9 @@ class SettlementController {
     }
 
     @PutMapping("/{id}/void")
-    ResponseEntity<Void> voidSettlement(@PathVariable long id, @RequestBody VoidRequest req) {
-        settlementApi.voidSettlement(id, req.reason());
+    ResponseEntity<Void> voidSettlement(@PathVariable long id, @RequestBody VoidRequest req,
+                                         @AuthenticationPrincipal AuthenticatedUser caller) {
+        settlementApi.voidSettlement(id, req.reason(), caller.userId());
         return ResponseEntity.noContent().build();
     }
 

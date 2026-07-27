@@ -3,6 +3,9 @@ package com.xbb.settlement.internal;
 import com.xbb.settlement.api.SettlementApi;
 import com.xbb.settlement.api.SettlementVoided;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbb.identity.api.IdentityApi;
+import com.xbb.identity.api.Role;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,12 +18,28 @@ class SettlementService implements SettlementApi {
     private final SettlementRepository settlements;
     private final SettlementOutboxRepository outbox;
     private final ObjectMapper json;
+    private final IdentityApi identityApi;
 
     SettlementService(SettlementRepository settlements,
-                     SettlementOutboxRepository outbox, ObjectMapper json) {
+                     SettlementOutboxRepository outbox, ObjectMapper json,
+                       IdentityApi identityApi) {
         this.settlements = settlements;
         this.outbox = outbox;
         this.json = json;
+        this.identityApi = identityApi;
+    }
+
+    /**
+     * 平台运维操作,要求 {@link Role#PLATFORM_OPS}。
+     *
+     * <p>这不是归属校验的替代品,而是它缺席时唯一说得通的东西:这几个动作的
+     * "主人"是平台自己,不是某个用户。角色每次向身份域现查,不读 JWT 声明,
+     * 这样收回权限立刻生效(理由同 OutboxOpsController)。
+     */
+    private void requirePlatformOps(long callerUserId) {
+        if (!identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            throw new AccessDeniedException("需要平台运维权限");
+        }
     }
 
     private String serialize(Object event) {
@@ -34,7 +53,8 @@ class SettlementService implements SettlementApi {
 
     @Override
     @Transactional("settlementTransactionManager")
-    public void voidSettlement(long settlementId, String reason) {
+    public void voidSettlement(long settlementId, String reason, long callerUserId) {
+        requirePlatformOps(callerUserId);
         Settlement settlement = settlements.findById(settlementId)
                 .orElseThrow(() -> new IllegalArgumentException("结算记录不存在"));
         settlement.voidSettlement(reason);

@@ -1,6 +1,7 @@
 package com.xbb.engagement;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.engagement.internal.Application;
@@ -27,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class EngagementServiceTest {
 
     @DynamicPropertySource
@@ -36,6 +37,7 @@ class EngagementServiceTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
@@ -57,7 +59,7 @@ class EngagementServiceTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, name, creditCode, legalRepUserId)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
         await().atMost(Duration.ofSeconds(15)).until(() -> approvedOrgs.findById(orgId).isPresent());
         return orgId;
     }

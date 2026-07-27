@@ -1,6 +1,8 @@
 package com.xbb.profile;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.profile.TestJobOwner;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.identity.TestCodeAccessor;
@@ -29,7 +31,7 @@ import static org.awaitility.Awaitility.await;
  * "他说他会,不算数;他干过并且评价好,才算数。"
  */
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class, TestJobOwner.class})
 class EngagementFeedbackTest {
 
     @DynamicPropertySource
@@ -38,6 +40,8 @@ class EngagementFeedbackTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestJobOwner.Accessor jobOwner;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
@@ -62,13 +66,13 @@ class EngagementFeedbackTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
 
         AtomicLong jobIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "岗位", "描述", 30000, legalRep)));
         long jobId = jobIdHolder.get();
-        profileApi.setJobProfile(jobId, jobMust, jobNice, 31.0, 121.0);
+        profileApi.setJobProfile(jobId, jobMust, jobNice, 31.0, 121.0, jobOwner.of(jobId));
 
         long worker = verifiedUser(workerPhone, "工人" + workerPhone.substring(8), workerIdNumber);
         profileApi.submitTags(worker, workerTags);
@@ -137,12 +141,12 @@ class EngagementFeedbackTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "反哺四厂", "91110000000000124X", legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
         AtomicLong jobIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "岗位", "描述", 30000, legalRep)));
         long jobId = jobIdHolder.get();
-        profileApi.setJobProfile(jobId, List.of("焊工"), List.of(), 31.0, 121.0);
+        profileApi.setJobProfile(jobId, List.of("焊工"), List.of(), 31.0, 121.0, jobOwner.of(jobId));
 
         long worker = verifiedUser("15600000008", "工人反四", "110101199001023008");
         profileApi.submitTags(worker, List.of("焊工"));

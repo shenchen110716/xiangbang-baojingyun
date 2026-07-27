@@ -1,6 +1,8 @@
 package com.xbb.fund.internal;
 
 import com.xbb.fund.api.FundApi;
+import com.xbb.security.AuthenticatedUser;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,14 +24,16 @@ class FundController {
     }
 
     @PutMapping("/payouts/{id}/disburse")
-    ResponseEntity<Void> disburse(@PathVariable long id) {
-        fundApi.disburse(id);
+    ResponseEntity<Void> disburse(@PathVariable long id,
+                                   @AuthenticationPrincipal AuthenticatedUser caller) {
+        fundApi.disburse(id, caller.userId());
         return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/payouts/{id}/retry")
-    ResponseEntity<Void> retry(@PathVariable long id) {
-        fundApi.retryDisbursement(id);
+    ResponseEntity<Void> retry(@PathVariable long id,
+                                @AuthenticationPrincipal AuthenticatedUser caller) {
+        fundApi.retryDisbursement(id, caller.userId());
         return ResponseEntity.noContent().build();
     }
 

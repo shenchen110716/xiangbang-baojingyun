@@ -7,227 +7,229 @@ spring:
     open-in-view: false
 
 xbb:
+  # 凭据一律不带默认值:漏配环境变量时应用必须启动失败,
+  # 而不是悄悄用仓库里公开的那个字符串当密钥/口令。
   jwt:
-    secret: ${JWT_SECRET:change-me-in-production-at-least-32-bytes-long}
+    secret: ${JWT_SECRET}
     ttl-minutes: 120
   domains:
     identity:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_IDENTITY_USER:identity_user}
-        password: ${DB_IDENTITY_PASSWORD:identity_pw}
+        url: ${DB_URL}
+        username: ${DB_IDENTITY_USER}
+        password: ${DB_IDENTITY_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: identity
         locations: classpath:db/migration/identity
     org:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_ORG_USER:org_user}
-        password: ${DB_ORG_PASSWORD:org_pw}
+        url: ${DB_URL}
+        username: ${DB_ORG_USER}
+        password: ${DB_ORG_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: org
         locations: classpath:db/migration/org
     job:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_JOB_USER:job_user}
-        password: ${DB_JOB_PASSWORD:job_pw}
+        url: ${DB_URL}
+        username: ${DB_JOB_USER}
+        password: ${DB_JOB_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: job
         locations: classpath:db/migration/job
     engagement:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_ENGAGEMENT_USER:engagement_user}
-        password: ${DB_ENGAGEMENT_PASSWORD:engagement_pw}
+        url: ${DB_URL}
+        username: ${DB_ENGAGEMENT_USER}
+        password: ${DB_ENGAGEMENT_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: engagement
         locations: classpath:db/migration/engagement
     settlement:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_SETTLEMENT_USER:settlement_user}
-        password: ${DB_SETTLEMENT_PASSWORD:settlement_pw}
+        url: ${DB_URL}
+        username: ${DB_SETTLEMENT_USER}
+        password: ${DB_SETTLEMENT_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: settlement
         locations: classpath:db/migration/settlement
     fund:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_FUND_USER:fund_user}
-        password: ${DB_FUND_PASSWORD:fund_pw}
+        url: ${DB_URL}
+        username: ${DB_FUND_USER}
+        password: ${DB_FUND_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: fund
         locations: classpath:db/migration/fund
     broker:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_BROKER_USER:broker_user}
-        password: ${DB_BROKER_PASSWORD:broker_pw}
+        url: ${DB_URL}
+        username: ${DB_BROKER_USER}
+        password: ${DB_BROKER_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: broker
         locations: classpath:db/migration/broker
     profile:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_PROFILE_USER:profile_user}
-        password: ${DB_PROFILE_PASSWORD:profile_pw}
+        url: ${DB_URL}
+        username: ${DB_PROFILE_USER}
+        password: ${DB_PROFILE_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: profile
         locations: classpath:db/migration/profile
     matching:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_MATCHING_USER:matching_user}
-        password: ${DB_MATCHING_PASSWORD:matching_pw}
+        url: ${DB_URL}
+        username: ${DB_MATCHING_USER}
+        password: ${DB_MATCHING_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: matching
         locations: classpath:db/migration/matching
     review:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_REVIEW_USER:review_user}
-        password: ${DB_REVIEW_PASSWORD:review_pw}
+        url: ${DB_URL}
+        username: ${DB_REVIEW_USER}
+        password: ${DB_REVIEW_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: review
         locations: classpath:db/migration/review
     agreement:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_AGREEMENT_USER:agreement_user}
-        password: ${DB_AGREEMENT_PASSWORD:agreement_pw}
+        url: ${DB_URL}
+        username: ${DB_AGREEMENT_USER}
+        password: ${DB_AGREEMENT_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: agreement
         locations: classpath:db/migration/agreement
     voice:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_VOICE_USER:voice_user}
-        password: ${DB_VOICE_PASSWORD:voice_pw}
+        url: ${DB_URL}
+        username: ${DB_VOICE_USER}
+        password: ${DB_VOICE_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: voice
         locations: classpath:db/migration/voice
     talent:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_TALENT_USER:talent_user}
-        password: ${DB_TALENT_PASSWORD:talent_pw}
+        url: ${DB_URL}
+        username: ${DB_TALENT_USER}
+        password: ${DB_TALENT_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: talent
         locations: classpath:db/migration/talent
     notification:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_NOTIFICATION_USER:notification_user}
-        password: ${DB_NOTIFICATION_PASSWORD:notification_pw}
+        url: ${DB_URL}
+        username: ${DB_NOTIFICATION_USER}
+        password: ${DB_NOTIFICATION_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: notification
         locations: classpath:db/migration/notification
     content:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_CONTENT_USER:content_user}
-        password: ${DB_CONTENT_PASSWORD:content_pw}
+        url: ${DB_URL}
+        username: ${DB_CONTENT_USER}
+        password: ${DB_CONTENT_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: content
         locations: classpath:db/migration/content
     collab:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_COLLAB_USER:collab_user}
-        password: ${DB_COLLAB_PASSWORD:collab_pw}
+        url: ${DB_URL}
+        username: ${DB_COLLAB_USER}
+        password: ${DB_COLLAB_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: collab
         locations: classpath:db/migration/collab
     reimbursement:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_REIMBURSEMENT_USER:reimbursement_user}
-        password: ${DB_REIMBURSEMENT_PASSWORD:reimbursement_pw}
+        url: ${DB_URL}
+        username: ${DB_REIMBURSEMENT_USER}
+        password: ${DB_REIMBURSEMENT_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: reimbursement
         locations: classpath:db/migration/reimbursement
     mall:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_MALL_USER:mall_user}
-        password: ${DB_MALL_PASSWORD:mall_pw}
+        url: ${DB_URL}
+        username: ${DB_MALL_USER}
+        password: ${DB_MALL_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: mall
         locations: classpath:db/migration/mall
     ops:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_OPS_USER:ops_user}
-        password: ${DB_OPS_PASSWORD:ops_pw}
+        url: ${DB_URL}
+        username: ${DB_OPS_USER}
+        password: ${DB_OPS_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: ops
         locations: classpath:db/migration/ops
     reporting:
       datasource:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        username: ${DB_REPORTING_USER:reporting_user}
-        password: ${DB_REPORTING_PASSWORD:reporting_pw}
+        url: ${DB_URL}
+        username: ${DB_REPORTING_USER}
+        password: ${DB_REPORTING_PASSWORD}
       flyway:
-        url: ${DB_URL:jdbc:postgresql://localhost:5432/xbb}
-        user: ${DB_ADMIN_USER:postgres}
-        password: ${DB_ADMIN_PASSWORD:postgres}
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
         schemas: reporting
         locations: classpath:db/migration/reporting

@@ -1,6 +1,7 @@
 package com.xbb.fund;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.fund.api.AccountType;
@@ -27,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class SettlementVoidedTest {
 
     @DynamicPropertySource
@@ -36,6 +37,7 @@ class SettlementVoidedTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
@@ -58,7 +60,7 @@ class SettlementVoidedTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "十一号工厂", "91110000000000081X", legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
 
         AtomicLong jobIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
@@ -91,7 +93,7 @@ class SettlementVoidedTest {
                 payoutIdHolder.set(fundApi.findBySettlementId(settlementId).orElseThrow().id()));
         long payoutId = payoutIdHolder.get();
 
-        settlementApi.voidSettlement(settlementId, "岗位取消");
+        settlementApi.voidSettlement(settlementId, "岗位取消", ops.userId());
 
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(fundApi.findById(payoutId).orElseThrow().status())
@@ -99,7 +101,7 @@ class SettlementVoidedTest {
 
         // 备足资金,确保这里挡下发放的原因是"已作废"而不是"余额不足"
         fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "测试备资");
-        assertThatThrownBy(() -> fundApi.disburse(payoutId))
+        assertThatThrownBy(() -> fundApi.disburse(payoutId, ops.userId()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("已作废");
     }

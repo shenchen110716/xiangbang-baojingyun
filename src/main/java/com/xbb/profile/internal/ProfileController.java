@@ -36,8 +36,9 @@ class ProfileController {
     }
 
     @PutMapping("/jobs/{jobId}")
-    ResponseEntity<Void> setJobProfile(@PathVariable long jobId, @RequestBody JobProfileRequest req) {
-        profileApi.setJobProfile(jobId, req.mustTags(), req.niceTags(), req.lat(), req.lon());
+    ResponseEntity<Void> setJobProfile(@PathVariable long jobId, @RequestBody JobProfileRequest req,
+                                          @AuthenticationPrincipal AuthenticatedUser caller) {
+        profileApi.setJobProfile(jobId, req.mustTags(), req.niceTags(), req.lat(), req.lon(), caller.userId());
         return ResponseEntity.noContent().build();
     }
 

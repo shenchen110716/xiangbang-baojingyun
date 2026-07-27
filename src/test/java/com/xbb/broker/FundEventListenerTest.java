@@ -1,6 +1,7 @@
 package com.xbb.broker;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.broker.api.BrokerApi;
 import com.xbb.broker.internal.Commission;
@@ -29,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class FundEventListenerTest {
 
     @DynamicPropertySource
@@ -38,6 +39,7 @@ class FundEventListenerTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
@@ -64,7 +66,7 @@ class FundEventListenerTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, suffix + "号工厂佣金", "9111000000" + suffix + "005X", legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
 
         AtomicLong jobIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
@@ -98,7 +100,7 @@ class FundEventListenerTest {
                 payoutIdHolder.set(fundApi.findBySettlementId(settlementId).orElseThrow().id()));
         // 代发要从监管账户扣款(§6.4.2),先备资
         fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "测试备资");
-        fundApi.disburse(payoutIdHolder.get());
+        fundApi.disburse(payoutIdHolder.get(), ops.userId());
         return payoutIdHolder.get();
     }
 

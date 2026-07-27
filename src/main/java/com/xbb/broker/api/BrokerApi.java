@@ -14,7 +14,7 @@ public interface BrokerApi {
 
     long bindWorker(long brokerUserId, long workerUserId);
 
-    void payCommission(long commissionId);
+    void payCommission(long commissionId, long callerUserId);
 
     Optional<BrokerView> findBroker(long userId);
 

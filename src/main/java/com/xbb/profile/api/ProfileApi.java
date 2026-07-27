@@ -16,7 +16,8 @@ public interface ProfileApi {
     List<ProfileTagView> getProfile(long userId);
 
     /** 岗位画像:must 进硬约束过滤,nice 进软偏好评分(主文档 §5.2.2)。 */
-    void setJobProfile(long jobId, List<String> mustTags, List<String> niceTags, double lat, double lon);
+    void setJobProfile(long jobId, List<String> mustTags, List<String> niceTags,
+                        double lat, double lon, long callerUserId);
 
     Optional<JobProfileView> findJobProfile(long jobId);
 

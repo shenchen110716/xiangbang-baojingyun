@@ -2,6 +2,7 @@ package com.xbb.settlement;
 
 import com.xbb.AbstractOutboxEvent;
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.engagement.api.EngagementCompleted;
@@ -53,7 +54,7 @@ import static org.mockito.Mockito.reset;
 // 关掉后台中继:本类要断言"中继跑之前下游拿不到",投递必须完全由测试驱动
 @SpringBootTest(properties = "xbb.outbox.relay.settlement.interval-ms=3600000")
 @Import({TestcontainersConfig.class, TestCodeAccessor.class,
-        SettlementOutboxReliabilityTest.BreakableConsumerConfig.class})
+        SettlementOutboxReliabilityTest.BreakableConsumerConfig.class, TestPlatformOps.class})
 class SettlementOutboxReliabilityTest {
 
     @DynamicPropertySource
@@ -84,6 +85,7 @@ class SettlementOutboxReliabilityTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
@@ -119,7 +121,7 @@ class SettlementOutboxReliabilityTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
 
         AtomicLong jobIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->

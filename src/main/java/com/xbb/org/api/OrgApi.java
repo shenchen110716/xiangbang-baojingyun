@@ -10,9 +10,9 @@ public interface OrgApi {
 
     long submit(Organization.Type type, String name, String creditCode, long legalRepUserId);
 
-    void approve(long orgId);
+    void approve(long orgId, long callerUserId);
 
-    void reject(long orgId);
+    void reject(long orgId, long callerUserId);
 
     Optional<OrgView> findById(long orgId);
 }

@@ -5,6 +5,9 @@ import com.xbb.broker.api.BrokerRegistered;
 import com.xbb.broker.api.CommissionPaid;
 import com.xbb.broker.api.WorkerBound;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbb.identity.api.IdentityApi;
+import com.xbb.identity.api.Role;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,16 +23,32 @@ class BrokerService implements BrokerApi {
     private final BrokerVerifiedUserRepository verifiedUsers;
     private final BrokerOutboxRepository outbox;
     private final ObjectMapper json;
+    private final IdentityApi identityApi;
 
     BrokerService(BrokerRepository brokers, InvitationRepository invitations, CommissionRepository commissions,
                   BrokerVerifiedUserRepository verifiedUsers,
-                     BrokerOutboxRepository outbox, ObjectMapper json) {
+                     BrokerOutboxRepository outbox, ObjectMapper json,
+                       IdentityApi identityApi) {
         this.brokers = brokers;
         this.invitations = invitations;
         this.commissions = commissions;
         this.verifiedUsers = verifiedUsers;
         this.outbox = outbox;
         this.json = json;
+        this.identityApi = identityApi;
+    }
+
+    /**
+     * 平台运维操作,要求 {@link Role#PLATFORM_OPS}。
+     *
+     * <p>这不是归属校验的替代品,而是它缺席时唯一说得通的东西:这几个动作的
+     * "主人"是平台自己,不是某个用户。角色每次向身份域现查,不读 JWT 声明,
+     * 这样收回权限立刻生效(理由同 OutboxOpsController)。
+     */
+    private void requirePlatformOps(long callerUserId) {
+        if (!identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            throw new AccessDeniedException("需要平台运维权限");
+        }
     }
 
     private String serialize(Object event) {
@@ -80,7 +99,8 @@ class BrokerService implements BrokerApi {
 
     @Override
     @Transactional("brokerTransactionManager")
-    public void payCommission(long commissionId) {
+    public void payCommission(long commissionId, long callerUserId) {
+        requirePlatformOps(callerUserId);
         Commission commission = commissions.findById(commissionId)
                 .orElseThrow(() -> new IllegalArgumentException("佣金记录不存在"));
         commission.pay();

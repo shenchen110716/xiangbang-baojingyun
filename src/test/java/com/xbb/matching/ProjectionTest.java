@@ -1,6 +1,8 @@
 package com.xbb.matching;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.profile.TestJobOwner;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.identity.TestCodeAccessor;
@@ -28,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class, TestJobOwner.class})
 class ProjectionTest {
 
     @DynamicPropertySource
@@ -37,6 +39,8 @@ class ProjectionTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestJobOwner.Accessor jobOwner;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
@@ -87,7 +91,7 @@ class ProjectionTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "信用测试厂", "91110000000000131X", legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
         AtomicLong jobIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "普工", "描述", 30000, legalRep)));
@@ -125,7 +129,7 @@ class ProjectionTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "匹配测试工厂", "91110000000000091X", legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
 
         AtomicLong jobIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
@@ -137,7 +141,7 @@ class ProjectionTest {
         assertThat(jobProjections.findById(jobId).orElseThrow().getWageCents()).isEqualTo(32000);
 
         // JobProfileUpdated 再补上标签与坐标,不覆盖薪资
-        profileApi.setJobProfile(jobId, List.of("叉车"), List.of("普工"), 31.2304, 121.4737);
+        profileApi.setJobProfile(jobId, List.of("叉车"), List.of("普工"), 31.2304, 121.4737, jobOwner.of(jobId));
 
         await().atMost(Duration.ofSeconds(15)).until(() -> jobProjections.findById(jobId)
                 .filter(p -> p.getLat() != null).isPresent());

@@ -1,6 +1,7 @@
 package com.xbb.profile;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.profile.TestJobOwner;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.profile.api.ProfileApi;
 import org.junit.jupiter.api.Test;
@@ -16,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestJobOwner.class})
 class JobProfileTest {
 
     @DynamicPropertySource
@@ -25,12 +26,13 @@ class JobProfileTest {
     }
 
     @Autowired ProfileApi profileApi;
+    @Autowired TestJobOwner.Accessor jobOwner;
 
     @Test
     void 设置岗位画像后能查回must与nice标签和坐标() {
         long jobId = 900001L;
 
-        profileApi.setJobProfile(jobId, List.of("叉车"), List.of("质检", "打包"), 31.2304, 121.4737);
+        profileApi.setJobProfile(jobId, List.of("叉车"), List.of("质检", "打包"), 31.2304, 121.4737, jobOwner.of(jobId));
 
         ProfileApi.JobProfileView view = profileApi.findJobProfile(jobId).orElseThrow();
         assertThat(view.mustTags()).containsExactly("叉车");
@@ -42,7 +44,7 @@ class JobProfileTest {
     @Test
     void must标签不在受控词表内报错() {
         assertThatThrownBy(() ->
-                profileApi.setJobProfile(900002L, List.of("拧螺丝的"), List.of(), 31.0, 121.0))
+                profileApi.setJobProfile(900002L, List.of("拧螺丝的"), List.of(), 31.0, 121.0, jobOwner.of(900002L)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("受控词表");
     }
@@ -50,7 +52,7 @@ class JobProfileTest {
     @Test
     void nice标签不在受控词表内同样报错() {
         assertThatThrownBy(() ->
-                profileApi.setJobProfile(900003L, List.of("普工"), List.of("会飞"), 31.0, 121.0))
+                profileApi.setJobProfile(900003L, List.of("普工"), List.of("会飞"), 31.0, 121.0, jobOwner.of(900003L)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("受控词表");
     }
@@ -58,9 +60,9 @@ class JobProfileTest {
     @Test
     void 重复设置同一岗位画像是更新不是报重复键() {
         long jobId = 900004L;
-        profileApi.setJobProfile(jobId, List.of("普工"), List.of(), 31.0, 121.0);
+        profileApi.setJobProfile(jobId, List.of("普工"), List.of(), 31.0, 121.0, jobOwner.of(jobId));
 
-        profileApi.setJobProfile(jobId, List.of("电工"), List.of("焊工"), 32.0, 122.0);
+        profileApi.setJobProfile(jobId, List.of("电工"), List.of("焊工"), 32.0, 122.0, jobOwner.of(jobId));
 
         ProfileApi.JobProfileView view = profileApi.findJobProfile(jobId).orElseThrow();
         assertThat(view.mustTags()).containsExactly("电工");

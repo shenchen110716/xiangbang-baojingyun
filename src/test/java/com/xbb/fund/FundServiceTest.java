@@ -1,6 +1,7 @@
 package com.xbb.fund;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.fund.api.AccountType;
 import com.xbb.fund.api.FundApi;
 import com.xbb.fund.internal.Payout;
@@ -24,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class FundServiceTest {
 
     @DynamicPropertySource
@@ -33,6 +34,7 @@ class FundServiceTest {
     }
 
     @Autowired FundApi fundApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired PayoutRepository payouts;
 
     private static final AtomicLong SETTLEMENT_ID_SEQ = new AtomicLong(900_000);
@@ -48,7 +50,7 @@ class FundServiceTest {
     void 待发放记录可以发放() {
         long payoutId = pendingPayout(1000);
 
-        fundApi.disburse(payoutId);
+        fundApi.disburse(payoutId, ops.userId());
 
         var view = fundApi.findById(payoutId).orElseThrow();
         assertThat(view.status()).isEqualTo(Payout.Status.PAID);
@@ -60,10 +62,10 @@ class FundServiceTest {
         // 对支付类接口这才是正确语义——网络重试不该报错。真正要守住的不变量是
         // **钱只出一次**,而不是"第二次调用抛异常"。
         long payoutId = pendingPayout(1100);
-        fundApi.disburse(payoutId);
+        fundApi.disburse(payoutId, ops.userId());
         long balanceAfterFirst = fundApi.balanceOf(AccountType.USER_FUNDS);
 
-        fundApi.disburse(payoutId);
+        fundApi.disburse(payoutId, ops.userId());
 
         assertThat(fundApi.balanceOf(AccountType.USER_FUNDS)).isEqualTo(balanceAfterFirst);
         assertThat(fundApi.findById(payoutId).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
@@ -83,7 +85,7 @@ class FundServiceTest {
             ready.countDown();
             awaitLatch(go);
             try {
-                fundApi.disburse(payoutId);
+                fundApi.disburse(payoutId, ops.userId());
                 successCount.incrementAndGet();
             } catch (Exception e) {
                 failures.add(e);

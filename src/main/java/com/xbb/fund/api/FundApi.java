@@ -17,10 +17,10 @@ public interface FundApi {
      * 通过微工卡通道代发。失败不抛异常而是落 FAILED 记录并原路退回预扣款,
      * 由调用方决定何时重发(§6.4.2"失败可重发")。
      */
-    void disburse(long payoutId);
+    void disburse(long payoutId, long callerUserId);
 
     /** 重发失败的代发。用同一个幂等单号,通道侧去重,不会重复打钱。 */
-    void retryDisbursement(long payoutId);
+    void retryDisbursement(long payoutId, long callerUserId);
 
     Optional<PayoutView> findById(long payoutId);
 

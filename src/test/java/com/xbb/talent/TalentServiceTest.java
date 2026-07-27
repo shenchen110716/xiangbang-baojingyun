@@ -1,6 +1,7 @@
 package com.xbb.talent;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.engagement.api.EngagementCompleted;
@@ -28,7 +29,7 @@ import static org.awaitility.Awaitility.await;
 
 /** 人才库(§4.2 通用域):档案沉淀复用,订阅画像事件。 */
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class TalentServiceTest {
 
     @DynamicPropertySource
@@ -37,6 +38,7 @@ class TalentServiceTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
@@ -111,7 +113,7 @@ class TalentServiceTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "人才库厂", "91110000000000181X", legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
         AtomicLong jobIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "普工", "描述", 30000, legalRep)));
@@ -159,7 +161,7 @@ class TalentServiceTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "仓管厂", "91110000000000182X", legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
         AtomicLong jobIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "仓管", "描述", 30000, legalRep)));

@@ -4,6 +4,7 @@ import com.xbb.AbstractOutboxEvent;
 import com.xbb.AbstractOutboxRelay;
 import com.xbb.OutboxAdmin;
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.fund.api.AccountType;
 import com.xbb.fund.api.FundApi;
 import com.xbb.fund.api.FundsDisbursed;
@@ -41,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "xbb.outbox.stuck-threshold=2"                 // 两次就算卡死,省得为了测试硬造五次失败
 })
 @Import({TestcontainersConfig.class, TestCodeAccessor.class,
-        OutboxRetryPolicyTest.BreakableConsumerConfig.class})
+        OutboxRetryPolicyTest.BreakableConsumerConfig.class, TestPlatformOps.class})
 class OutboxRetryPolicyTest {
 
     @DynamicPropertySource
@@ -68,6 +69,7 @@ class OutboxRetryPolicyTest {
     }
 
     @Autowired FundApi fundApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired PayoutRepository payouts;
     @Autowired FundOutboxRepository outbox;
     @Autowired FundOutboxRelay relay;
@@ -88,7 +90,7 @@ class OutboxRetryPolicyTest {
         long payoutId = payouts.save(new Payout(settlementId, payeeUserId, 7_000L)).getId();
         fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "测试备资");
         BreakableConsumerConfig.broken = true;
-        fundApi.disburse(payoutId);
+        fundApi.disburse(payoutId, ops.userId());
         relay.publishPending();
         return payoutId;
     }

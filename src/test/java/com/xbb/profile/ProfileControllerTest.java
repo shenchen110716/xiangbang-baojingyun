@@ -28,6 +28,7 @@ class ProfileControllerTest {
     }
 
     @Autowired MockMvc mvc;
+    @Autowired TestCodeAccessor codes;
     @Autowired ObjectMapper json;
 
     @Test
@@ -64,11 +65,8 @@ class ProfileControllerTest {
     }
 
     private String tokenFor(String phone) throws Exception {
-        String codeBody = mvc.perform(post("/api/identity/code")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phone\":\"%s\"}".formatted(phone)))
-                .andReturn().getResponse().getContentAsString();
-        String code = json.readTree(codeBody).get("code").asText();
+        // 验证码不再经 HTTP 回显(那是漏洞),从测试钩子取
+        String code = codes.issue(phone);
 
         String loginBody = mvc.perform(post("/api/identity/login")
                         .contentType(MediaType.APPLICATION_JSON)

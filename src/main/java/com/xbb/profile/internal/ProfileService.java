@@ -5,6 +5,7 @@ import com.xbb.profile.api.JobProfileUpdated;
 import com.xbb.profile.api.ProfileApi;
 import com.xbb.profile.api.ProfileUpdated;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,16 +22,38 @@ class ProfileService implements ProfileApi {
     private final OpsApi opsApi;
     private final ProfileOutboxRepository outbox;
     private final ObjectMapper json;
+    private final PostedJobRefRepository postedJobs;
+    private final ProfileApprovedOrgRepository approvedOrgs;
 
     ProfileService(ProfileTagRepository tags, JobProfileRepository jobProfiles,
                     WorkerPreferenceRepository workerPreferences, OpsApi opsApi,
-                     ProfileOutboxRepository outbox, ObjectMapper json) {
+                     ProfileOutboxRepository outbox, ObjectMapper json,
+                    PostedJobRefRepository postedJobs, ProfileApprovedOrgRepository approvedOrgs) {
         this.tags = tags;
         this.jobProfiles = jobProfiles;
         this.workerPreferences = workerPreferences;
         this.opsApi = opsApi;
         this.outbox = outbox;
         this.json = json;
+        this.postedJobs = postedJobs;
+        this.approvedOrgs = approvedOrgs;
+    }
+
+    /**
+     * 岗位画像只能由该岗位所属组织的法人代表修改。
+     *
+     * <p>此前这里完全不校验:任何登录用户都能把竞品岗位的 must 标签改成没人有的词、
+     * 把坐标挪到一千公里外,该岗位在推荐里彻底消失,而工厂在自己页面上看一切正常
+     * (岗位详情读的是 job 域,不含画像)。
+     */
+    private void requireJobOwner(long jobId, long callerUserId) {
+        PostedJobRef job = postedJobs.findById(jobId)
+                .orElseThrow(() -> new IllegalArgumentException("岗位不存在"));
+        ApprovedOrg org = approvedOrgs.findById(job.getOrgId())
+                .orElseThrow(() -> new IllegalStateException("组织未通过审核"));
+        if (org.getLegalRepUserId() != callerUserId) {
+            throw new AccessDeniedException("只有该岗位所属组织的法人代表可以修改岗位画像");
+        }
     }
 
     private String serialize(Object event) {
@@ -65,7 +88,9 @@ class ProfileService implements ProfileApi {
 
     @Override
     @Transactional("profileTransactionManager")
-    public void setJobProfile(long jobId, List<String> mustTags, List<String> niceTags, double lat, double lon) {
+    public void setJobProfile(long jobId, List<String> mustTags, List<String> niceTags,
+                               double lat, double lon, long callerUserId) {
+        requireJobOwner(jobId, callerUserId);
         mustTags.forEach(this::requireInVocabulary);
         niceTags.forEach(this::requireInVocabulary);
         JobProfile profile = jobProfiles.findById(jobId)

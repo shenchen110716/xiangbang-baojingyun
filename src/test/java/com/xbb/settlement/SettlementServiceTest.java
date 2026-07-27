@@ -1,6 +1,7 @@
 package com.xbb.settlement;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.identity.TestCodeAccessor;
@@ -25,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class SettlementServiceTest {
 
     @DynamicPropertySource
@@ -34,6 +35,7 @@ class SettlementServiceTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
@@ -54,7 +56,7 @@ class SettlementServiceTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, suffix + "号工厂", "9111000000000" + suffix + "9X", legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
 
         AtomicLong jobIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
@@ -83,7 +85,7 @@ class SettlementServiceTest {
     void 待结算记录可以作废() {
         long settlementId = pendingSettlement("13100000005", "13100000006", "a3", 3200);
 
-        settlementApi.voidSettlement(settlementId, "岗位取消");
+        settlementApi.voidSettlement(settlementId, "岗位取消", ops.userId());
 
         var view = settlementApi.findById(settlementId).orElseThrow();
         assertThat(view.status()).isEqualTo(Settlement.Status.VOIDED);

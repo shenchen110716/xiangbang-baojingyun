@@ -40,8 +40,9 @@ class BrokerController {
     }
 
     @PutMapping("/commission/{id}/pay")
-    ResponseEntity<Void> payCommission(@PathVariable long id) {
-        brokerApi.payCommission(id);
+    ResponseEntity<Void> payCommission(@PathVariable long id,
+                                        @AuthenticationPrincipal AuthenticatedUser caller) {
+        brokerApi.payCommission(id, caller.userId());
         return ResponseEntity.noContent().build();
     }
 

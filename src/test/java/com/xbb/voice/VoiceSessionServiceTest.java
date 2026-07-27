@@ -1,6 +1,7 @@
 package com.xbb.voice;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
@@ -27,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class, VoiceSessionServiceTest.MovableClockConfig.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, VoiceSessionServiceTest.MovableClockConfig.class, TestPlatformOps.class})
 class VoiceSessionServiceTest {
 
     @DynamicPropertySource
@@ -58,6 +59,7 @@ class VoiceSessionServiceTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
@@ -73,7 +75,7 @@ class VoiceSessionServiceTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
         // job 域的已审核组织副本是异步落地的,等它出现再发单
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobApi.checkWageAnomaly(orgId, 20_000));

@@ -1,6 +1,7 @@
 package com.xbb.notification;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.fund.api.AccountType;
@@ -31,7 +32,7 @@ import static org.awaitility.Awaitility.await;
 
 /** 通知统一出口(§4.2):各域只发事件,通知域决定要不要打扰人、说什么。 */
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class NotificationTest {
 
     @DynamicPropertySource
@@ -40,6 +41,7 @@ class NotificationTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
@@ -64,7 +66,7 @@ class NotificationTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
         AtomicLong jobIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 jobIdHolder.set(jobApi.postJob(orgId, "普工", "描述", 30_000, legalRep)));
@@ -130,7 +132,7 @@ class NotificationTest {
             payoutHolder.set(fundApi.findBySettlementId(settlementId).orElseThrow().id());
         });
         fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "备资");
-        fundApi.disburse(payoutHolder.get());
+        fundApi.disburse(payoutHolder.get(), ops.userId());
 
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
             List<NotificationApi.NotificationView> inbox = notificationApi.inbox(ids[2], 20);

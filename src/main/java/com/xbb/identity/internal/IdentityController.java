@@ -1,6 +1,7 @@
 package com.xbb.identity.internal;
 
 import com.xbb.identity.api.IdentityApi;
+import jakarta.validation.Valid;
 import com.xbb.security.AuthenticatedUser;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.ResponseEntity;
@@ -25,10 +26,18 @@ class IdentityController {
     record LoginRequest(@NotBlank String phone, @NotBlank String code) { }
     record RealNameRequest(@NotBlank String realName, @NotBlank String idNumber) { }
 
+    /**
+     * 申请验证码。**绝不把验证码回给调用方**——这个端点是 permitAll 的,
+     * 回显等于任何人报一个手机号就能登录那个账号(包括平台管理员),
+     * 整套鉴权与 RBAC 直接失效。
+     *
+     * <p>真实短信通道尚未接入时,验证码只能从服务端日志/测试钩子取,
+     * 不能走 HTTP 响应。这一条由 AuthenticationBoundaryTest 守着。
+     */
     @PostMapping("/code")
-    ResponseEntity<Map<String, String>> requestCode(@RequestBody PhoneRequest req) {
-        // 开发期直接返回验证码;接入真实短信后改为只返回 ok
-        return ResponseEntity.ok(Map.of("code", codes.issue(req.phone())));
+    ResponseEntity<Map<String, String>> requestCode(@RequestBody @Valid PhoneRequest req) {
+        codes.issue(req.phone());
+        return ResponseEntity.ok(Map.of("status", "sent"));
     }
 
     @PostMapping("/login")

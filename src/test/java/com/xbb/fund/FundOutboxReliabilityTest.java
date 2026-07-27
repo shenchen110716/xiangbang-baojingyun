@@ -2,6 +2,7 @@ package com.xbb.fund;
 
 import com.xbb.AbstractOutboxEvent;
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.fund.api.AccountType;
 import com.xbb.fund.api.FundApi;
 import com.xbb.fund.api.FundsDisbursed;
@@ -31,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 // 关掉后台中继,投递完全由测试驱动;默认值在 src/test/resources/application.properties
 @SpringBootTest(properties = "xbb.outbox.relay.fund.interval-ms=3600000")
 @Import({TestcontainersConfig.class, TestCodeAccessor.class,
-        FundOutboxReliabilityTest.BreakableConsumerConfig.class})
+        FundOutboxReliabilityTest.BreakableConsumerConfig.class, TestPlatformOps.class})
 class FundOutboxReliabilityTest {
 
     @DynamicPropertySource
@@ -59,6 +60,7 @@ class FundOutboxReliabilityTest {
     }
 
     @Autowired FundApi fundApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired PayoutRepository payouts;
     @Autowired FundOutboxRepository outbox;
     @Autowired FundOutboxRelay relay;
@@ -83,7 +85,7 @@ class FundOutboxReliabilityTest {
         long payoutId = pendingPayout(9_600_001L, 9_600_101L, 5_000L);
         fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "测试备资");
 
-        fundApi.disburse(payoutId);
+        fundApi.disburse(payoutId, ops.userId());
 
         assertThat(fundApi.findById(payoutId).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
         assertThat(outboxRowOf(payoutId).getStatus()).isEqualTo(AbstractOutboxEvent.Status.PENDING);
@@ -96,7 +98,7 @@ class FundOutboxReliabilityTest {
         fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "测试备资");
         BreakableConsumerConfig.broken = true;
 
-        fundApi.disburse(payoutId);
+        fundApi.disburse(payoutId, ops.userId());
         relay.publishPending();
 
         // 钱已经出去了,这是既成事实;不能因为下游炸了就假装没发过

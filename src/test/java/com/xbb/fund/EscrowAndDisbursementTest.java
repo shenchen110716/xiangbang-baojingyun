@@ -1,6 +1,7 @@
 package com.xbb.fund;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.fund.api.AccountType;
 import com.xbb.fund.api.DisbursementStatus;
 import com.xbb.fund.api.FundApi;
@@ -25,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 主文档把税务合规定性为"灵活用工能否规模化的生死线,不是可选项"。
  */
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class, MockWorkCardChannelAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, MockWorkCardChannelAccessor.class, TestPlatformOps.class})
 class EscrowAndDisbursementTest {
 
     @DynamicPropertySource
@@ -34,6 +35,7 @@ class EscrowAndDisbursementTest {
     }
 
     @Autowired FundApi fundApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired PayoutRepository payouts;
     @Autowired MockWorkCardChannelAccessor channel;
 
@@ -72,7 +74,7 @@ class EscrowAndDisbursementTest {
         long balance = fundApi.balanceOf(AccountType.USER_FUNDS);
         long payoutId = pendingPayout(balance + 1_000_000);
 
-        assertThatThrownBy(() -> fundApi.disburse(payoutId))
+        assertThatThrownBy(() -> fundApi.disburse(payoutId, ops.userId()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("余额不足");
     }
@@ -84,7 +86,7 @@ class EscrowAndDisbursementTest {
         fundApi.topUp(AccountType.USER_FUNDS, 200_000, "备资");
         long payoutId = pendingPayout(30_000);
 
-        fundApi.disburse(payoutId);
+        fundApi.disburse(payoutId, ops.userId());
 
         FundApi.DisbursementView view = fundApi.findDisbursement(payoutId).orElseThrow();
         assertThat(view.status()).isEqualTo(DisbursementStatus.SUCCESS);
@@ -99,7 +101,7 @@ class EscrowAndDisbursementTest {
         long before = fundApi.balanceOf(AccountType.USER_FUNDS);
         long payoutId = pendingPayout(30_000);
 
-        fundApi.disburse(payoutId);
+        fundApi.disburse(payoutId, ops.userId());
 
         assertThat(fundApi.balanceOf(AccountType.USER_FUNDS)).isEqualTo(before - 30_000);
     }
@@ -108,10 +110,10 @@ class EscrowAndDisbursementTest {
     void 重复代发同一笔不会重复打钱() {
         fundApi.topUp(AccountType.USER_FUNDS, 200_000, "备资");
         long payoutId = pendingPayout(30_000);
-        fundApi.disburse(payoutId);
+        fundApi.disburse(payoutId, ops.userId());
         long afterFirst = fundApi.balanceOf(AccountType.USER_FUNDS);
 
-        fundApi.disburse(payoutId);   // 再调一次
+        fundApi.disburse(payoutId, ops.userId());   // 再调一次
 
         assertThat(fundApi.balanceOf(AccountType.USER_FUNDS)).isEqualTo(afterFirst);
     }
@@ -125,7 +127,7 @@ class EscrowAndDisbursementTest {
         long payoutId = pendingPayout(30_000);
         channel.failNext("payout-" + payoutId, "收款账户异常");
 
-        fundApi.disburse(payoutId);
+        fundApi.disburse(payoutId, ops.userId());
 
         FundApi.DisbursementView view = fundApi.findDisbursement(payoutId).orElseThrow();
         assertThat(view.status()).isEqualTo(DisbursementStatus.FAILED);
@@ -141,11 +143,11 @@ class EscrowAndDisbursementTest {
         fundApi.topUp(AccountType.USER_FUNDS, 200_000, "备资");
         long payoutId = pendingPayout(30_000);
         channel.failNext("payout-" + payoutId, "网络超时");
-        fundApi.disburse(payoutId);
+        fundApi.disburse(payoutId, ops.userId());
         assertThat(fundApi.findDisbursement(payoutId).orElseThrow().status())
                 .isEqualTo(DisbursementStatus.FAILED);
 
-        fundApi.retryDisbursement(payoutId);
+        fundApi.retryDisbursement(payoutId, ops.userId());
 
         FundApi.DisbursementView view = fundApi.findDisbursement(payoutId).orElseThrow();
         assertThat(view.status()).isEqualTo(DisbursementStatus.SUCCESS);
@@ -157,9 +159,9 @@ class EscrowAndDisbursementTest {
     void 已成功的代发不能重发() {
         fundApi.topUp(AccountType.USER_FUNDS, 200_000, "备资");
         long payoutId = pendingPayout(30_000);
-        fundApi.disburse(payoutId);
+        fundApi.disburse(payoutId, ops.userId());
 
-        assertThatThrownBy(() -> fundApi.retryDisbursement(payoutId))
+        assertThatThrownBy(() -> fundApi.retryDisbursement(payoutId, ops.userId()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("无需重发");
     }

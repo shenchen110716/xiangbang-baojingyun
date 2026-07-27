@@ -1,6 +1,7 @@
 package com.xbb.org;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.identity.TestPlatformOps;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.org.api.OrgApi;
@@ -25,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
 class OrgServiceTest {
 
     @DynamicPropertySource
@@ -34,6 +35,7 @@ class OrgServiceTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired VerifiedUserRepository verifiedUsers;
@@ -67,7 +69,7 @@ class OrgServiceTest {
         long userId = verifiedUser("13500000002", "孙七", "110101199001019002");
         long orgId = orgApi.submit(Organization.Type.SERVICE_STATION, "七号服务站", "91110000000000003X", userId);
 
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
 
         assertThat(orgApi.findById(orgId).orElseThrow().status()).isEqualTo(Organization.Status.APPROVED);
     }
@@ -76,9 +78,9 @@ class OrgServiceTest {
     void 已审核的组织不能重复审核() {
         long userId = verifiedUser("13500000003", "周八", "110101199001019003");
         long orgId = orgApi.submit(Organization.Type.ENTERPRISE, "八号企业", "91110000000000004X", userId);
-        orgApi.approve(orgId);
+        orgApi.approve(orgId, ops.userId());
 
-        assertThatThrownBy(() -> orgApi.reject(orgId))
+        assertThatThrownBy(() -> orgApi.reject(orgId, ops.userId()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("待审核");
     }
@@ -97,7 +99,7 @@ class OrgServiceTest {
             ready.countDown();
             awaitLatch(go);
             try {
-                orgApi.approve(orgId);
+                orgApi.approve(orgId, ops.userId());
                 successCount.incrementAndGet();
             } catch (Exception e) {
                 failures.add(e);
@@ -107,7 +109,7 @@ class OrgServiceTest {
             ready.countDown();
             awaitLatch(go);
             try {
-                orgApi.reject(orgId);
+                orgApi.reject(orgId, ops.userId());
                 successCount.incrementAndGet();
             } catch (Exception e) {
                 failures.add(e);

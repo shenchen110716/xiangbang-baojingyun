@@ -37,14 +37,16 @@ class OrgController {
     }
 
     @PutMapping("/{id}/approve")
-    ResponseEntity<Void> approve(@PathVariable long id) {
-        orgApi.approve(id);
+    ResponseEntity<Void> approve(@PathVariable long id,
+                                  @AuthenticationPrincipal AuthenticatedUser caller) {
+        orgApi.approve(id, caller.userId());
         return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/{id}/reject")
-    ResponseEntity<Void> reject(@PathVariable long id) {
-        orgApi.reject(id);
+    ResponseEntity<Void> reject(@PathVariable long id,
+                                 @AuthenticationPrincipal AuthenticatedUser caller) {
+        orgApi.reject(id, caller.userId());
         return ResponseEntity.noContent().build();
     }
 

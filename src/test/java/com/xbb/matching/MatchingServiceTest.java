@@ -1,6 +1,7 @@
 package com.xbb.matching;
 
 import com.xbb.TestcontainersConfig;
+import com.xbb.profile.TestJobOwner;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.matching.api.MatchingApi;
@@ -22,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class, TestJobOwner.class})
 class MatchingServiceTest {
 
     @DynamicPropertySource
@@ -31,6 +32,7 @@ class MatchingServiceTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired TestJobOwner.Accessor jobOwner;
     @Autowired TestCodeAccessor codes;
     @Autowired ProfileApi profileApi;
     @Autowired MatchingApi matchingApi;
@@ -63,7 +65,7 @@ class MatchingServiceTest {
     }
 
     private void jobProfile(long jobId, List<String> must, List<String> nice, double lat, double lon) {
-        profileApi.setJobProfile(jobId, must, nice, lat, lon);
+        profileApi.setJobProfile(jobId, must, nice, lat, lon, jobOwner.of(jobId));
         await().atMost(Duration.ofSeconds(15)).until(() -> jobProjections.findById(jobId)
                 .filter(p -> p.getLat() != null).isPresent());
     }
@@ -133,7 +135,7 @@ class MatchingServiceTest {
         // 5 个从没设过画像的新岗(低数据):没有标签 → 硬约束天然通过,但技能维度算不出来
         for (int i = 0; i < 5; i++) {
             long jobId = 8200L + i;
-            profileApi.setJobProfile(jobId, List.of(), List.of(), LAT, LON);
+            profileApi.setJobProfile(jobId, List.of(), List.of(), LAT, LON, jobOwner.of(jobId));
             await().atMost(Duration.ofSeconds(15)).until(() -> jobProjections.findById(jobId).isPresent());
         }
 
