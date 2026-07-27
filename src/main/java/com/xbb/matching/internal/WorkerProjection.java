@@ -45,6 +45,17 @@ public class WorkerProjection {
     @Column(name = "source_event_at")
     private Instant sourceEventAt;
 
+    /**
+     * 乐观锁。**这一行有两个并发写入方**:ProfileEventListener 写标签、
+     * ReviewEventListener 写信用分,两者都是"读整行—改一个字段—整行写回",
+     * 且各自 REQUIRES_NEW。履约完成会同时触发这两条链路,谁后提交谁把对方的改动
+     * 整个盖掉——工人刚验证过的技能标签被一次信用分更新悄悄打回自述状态,
+     * 没有任何报错。加了版本号后,失败方由中继重投,基于新数据重放。
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
+
     protected WorkerProjection() { }
 
     public WorkerProjection(long userId, Map<String, Double> tags,

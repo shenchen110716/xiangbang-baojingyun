@@ -39,6 +39,15 @@ public class JobProjection {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 
+    /**
+     * 乐观锁。这一行同样有两个并发写入方(岗位事件与岗位画像事件),
+     * 都是"读整行—改一部分—整行写回"。没有版本号时后提交者会盖掉先提交者,
+     * 表现为岗位的画像标签或开放状态莫名回退。同 WorkerProjection。
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
+
     protected JobProjection() { }
 
     public JobProjection(long jobId, long orgId, long wageCents) {
