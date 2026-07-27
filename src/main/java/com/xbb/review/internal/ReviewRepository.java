@@ -12,4 +12,7 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     Optional<Review> findByApplicationIdAndRaterUserId(long applicationId, long raterUserId);
 
     List<Review> findByRateeUserIdAndVisibleTrue(long rateeUserId);
+
+    /** 信用分要把**全部**收到的评价算进去,不只公开的那些。 */
+    List<Review> findByRateeUserId(long rateeUserId);
 }

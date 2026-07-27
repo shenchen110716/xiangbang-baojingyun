@@ -41,12 +41,12 @@ class IdentityController {
     }
 
     @PostMapping("/login")
-    ResponseEntity<IdentityApi.LoginResult> login(@RequestBody LoginRequest req) {
+    ResponseEntity<IdentityApi.LoginResult> login(@RequestBody @Valid LoginRequest req) {
         return ResponseEntity.ok(identityApi.loginByPhone(req.phone(), req.code()));
     }
 
     @PutMapping("/real-name")
-    ResponseEntity<Void> verify(@AuthenticationPrincipal AuthenticatedUser caller, @RequestBody RealNameRequest req) {
+    ResponseEntity<Void> verify(@AuthenticationPrincipal AuthenticatedUser caller, @RequestBody @Valid RealNameRequest req) {
         // userId 来自校验过的 JWT,不信任请求体——否则任何人都能实名认证别人的账号(IDOR)
         identityApi.verifyRealName(caller.userId(), req.realName(), req.idNumber());
         return ResponseEntity.noContent().build();

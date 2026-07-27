@@ -1,5 +1,6 @@
 package com.xbb.agreement.internal;
 
+import jakarta.validation.Valid;
 import com.xbb.agreement.api.AgreementApi;
 import com.xbb.security.AuthenticatedUser;
 import org.springframework.http.ResponseEntity;
@@ -22,7 +23,7 @@ class AgreementController {
     @PutMapping("/{applicationId}/sign")
     ResponseEntity<Void> sign(@AuthenticationPrincipal AuthenticatedUser caller,
                                @PathVariable long applicationId,
-                               @RequestBody SignRequest req) {
+                               @RequestBody @Valid SignRequest req) {
         agreementApi.sign(applicationId, caller.userId(), req.identityFactor());
         return ResponseEntity.noContent().build();
     }

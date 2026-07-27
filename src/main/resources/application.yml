@@ -1,4 +1,18 @@
+server:
+  # 优雅停机:SIGTERM 时先停止接受新请求,已在途的跑完再退。
+  # 没有它,滚动发布会打断正在执行的代发请求。
+  shutdown: graceful
+
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  task:
+    scheduling:
+      # 11 个 outbox 中继各有一个 @Scheduled。默认线程池是 **1**,
+      # 任一域的一批跑得慢,其余十个域的事件投递全部排队等它——
+      # 资金链路的到账通知会被评价域的信用分重算堵在后面。
+      pool:
+        size: 4
   application:
     name: xbb-v1
   jpa:

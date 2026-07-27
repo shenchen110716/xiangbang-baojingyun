@@ -3,6 +3,7 @@ package com.xbb.reporting;
 import com.xbb.TestcontainersConfig;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.mall.api.MallApi;
+import com.xbb.mall.api.OrderSettlementTriggered;
 import com.xbb.mall.api.ProductSettlementMode;
 import com.xbb.reporting.api.ReportingApi;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,7 @@ class ReportingServiceTest {
     }
 
     @Autowired ReportingApi reportingApi;
+    @Autowired org.springframework.context.ApplicationEventPublisher events;
     @Autowired MallApi mallApi;
 
     @Test
@@ -129,7 +131,18 @@ class ReportingServiceTest {
                 .stream().filter(p -> p.dimensionId() == merchantId).findFirst().orElseThrow()
                 .revenueCents();
 
-        // 幂等键 (维度, id, 来源, 业务对象):同一笔订单只该记一次
         assertThat(revenue).isEqualTo(30_000);
+
+        // **真的再投一次同一笔订单的结算事件。** 之前这条只调了一次 pay(),
+        // 根本没重复过——报表域幂等键失效时商户收入翻倍,这个断言也照样绿。
+        events.publishEvent(new OrderSettlementTriggered(orderId, pid, merchantId, 64L,
+                30_000, com.xbb.mall.api.SettlementTrigger.ON_PAYMENT, java.time.Instant.now()));
+
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                assertThat(reportingApi.profitAndLoss(ReportingApi.Dimension.ORG, Map.of())
+                        .stream().filter(p -> p.dimensionId() == merchantId).findFirst().orElseThrow()
+                        .revenueCents())
+                        // 幂等键 (维度, id, 来源, 业务对象):同一笔订单只该记一次
+                        .isEqualTo(30_000));
     }
 }

@@ -1,5 +1,6 @@
 package com.xbb.profile.internal;
 
+import jakarta.validation.Valid;
 import com.xbb.profile.api.ProfileApi;
 import com.xbb.security.AuthenticatedUser;
 import org.springframework.http.ResponseEntity;
@@ -25,7 +26,7 @@ class ProfileController {
     record WorkerPreferenceRequest(long expectedWageCents, double lat, double lon) { }
 
     @PostMapping("/tags")
-    ResponseEntity<Void> submitTags(@AuthenticationPrincipal AuthenticatedUser caller, @RequestBody TagsRequest req) {
+    ResponseEntity<Void> submitTags(@AuthenticationPrincipal AuthenticatedUser caller, @RequestBody @Valid TagsRequest req) {
         profileApi.submitTags(caller.userId(), req.tags());
         return ResponseEntity.noContent().build();
     }
@@ -36,7 +37,7 @@ class ProfileController {
     }
 
     @PutMapping("/jobs/{jobId}")
-    ResponseEntity<Void> setJobProfile(@PathVariable long jobId, @RequestBody JobProfileRequest req,
+    ResponseEntity<Void> setJobProfile(@PathVariable long jobId, @RequestBody @Valid JobProfileRequest req,
                                           @AuthenticationPrincipal AuthenticatedUser caller) {
         profileApi.setJobProfile(jobId, req.mustTags(), req.niceTags(), req.lat(), req.lon(), caller.userId());
         return ResponseEntity.noContent().build();
@@ -50,7 +51,7 @@ class ProfileController {
 
     @PutMapping("/preference")
     ResponseEntity<Void> setPreference(@AuthenticationPrincipal AuthenticatedUser caller,
-                                        @RequestBody WorkerPreferenceRequest req) {
+                                        @RequestBody @Valid WorkerPreferenceRequest req) {
         profileApi.setWorkerPreference(caller.userId(), req.expectedWageCents(), req.lat(), req.lon());
         return ResponseEntity.noContent().build();
     }

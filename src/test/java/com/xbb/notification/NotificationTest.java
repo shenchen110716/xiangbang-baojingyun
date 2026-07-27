@@ -3,6 +3,7 @@ package com.xbb.notification;
 import com.xbb.TestcontainersConfig;
 import com.xbb.identity.TestPlatformOps;
 import com.xbb.agreement.api.AgreementApi;
+import com.xbb.agreement.api.AgreementGenerated;
 import com.xbb.engagement.api.EngagementApi;
 import com.xbb.fund.api.AccountType;
 import com.xbb.fund.api.FundApi;
@@ -41,6 +42,7 @@ class NotificationTest {
     }
 
     @Autowired IdentityApi identityApi;
+    @Autowired org.springframework.context.ApplicationEventPublisher events;
     @Autowired TestPlatformOps.Accessor ops;
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
@@ -154,9 +156,21 @@ class NotificationTest {
 
         long countBefore = notificationApi.inbox(ids[2], 50).stream()
                 .filter(n -> n.type() == NotificationType.AGREEMENT_PENDING).count();
+        assertThat(countBefore).isEqualTo(1);
+
+        // **真的再投一次。** 这条用例以前只断言"正常路径产生了 1 条",
+        // 全方法没有任何一行重复投递——名字说的是幂等,验的却不是,
+        // 给的是虚假的幂等信心。至少一次投递是 outbox 的既定语义,必须真的重放。
+        // 必须用**同一个业务对象**重投:幂等键是 (收件人, 类型, agreementId),
+        // 伪造一个新的 agreementId 等于换了业务对象,那不叫重复投递。
+        long agreementId = agreementApi.findByApplicationId(ids[0]).orElseThrow().id();
+        events.publishEvent(new AgreementGenerated(
+                agreementId, ids[0], ids[2], ids[1], "hash-repeat", java.time.Instant.now()));
 
         // 幂等键是 (收件人, 类型, 业务对象),重复投递应被吸收
-        assertThat(countBefore).isEqualTo(1);
+        assertThat(notificationApi.inbox(ids[2], 50).stream()
+                .filter(n -> n.type() == NotificationType.AGREEMENT_PENDING).count())
+                .isEqualTo(1);
     }
 
     @Test

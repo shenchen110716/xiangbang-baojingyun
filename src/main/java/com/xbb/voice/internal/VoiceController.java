@@ -1,5 +1,6 @@
 package com.xbb.voice.internal;
 
+import jakarta.validation.Valid;
 import com.xbb.security.AuthenticatedUser;
 import com.xbb.voice.api.VoiceApi;
 import org.springframework.http.ResponseEntity;
@@ -22,7 +23,7 @@ class VoiceController {
 
     @PostMapping("/job/draft")
     ResponseEntity<VoiceApi.Draft> draft(@AuthenticationPrincipal AuthenticatedUser caller,
-                                          @RequestBody DraftRequest req) {
+                                          @RequestBody @Valid DraftRequest req) {
         return ResponseEntity.ok(voiceApi.draftJob(caller.userId(), req.orgId(), req.title(),
                 req.headcount(), req.wageCents(), req.extra()));
     }
@@ -30,7 +31,7 @@ class VoiceController {
     @PostMapping("/job/{sessionId}/confirm")
     ResponseEntity<VoiceApi.ConfirmResult> confirm(@AuthenticationPrincipal AuthenticatedUser caller,
                                                      @PathVariable long sessionId,
-                                                     @RequestBody ConfirmRequest req) {
+                                                     @RequestBody @Valid ConfirmRequest req) {
         return ResponseEntity.ok(voiceApi.confirm(sessionId, caller.userId(), req.utterance()));
     }
 

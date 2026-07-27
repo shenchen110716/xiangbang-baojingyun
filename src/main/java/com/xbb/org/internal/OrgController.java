@@ -1,5 +1,6 @@
 package com.xbb.org.internal;
 
+import jakarta.validation.Valid;
 import com.xbb.org.api.OrgApi;
 import com.xbb.security.AuthenticatedUser;
 import jakarta.validation.constraints.NotBlank;
@@ -25,7 +26,7 @@ class OrgController {
 
     @PostMapping
     ResponseEntity<Map<String, Long>> submit(@AuthenticationPrincipal AuthenticatedUser caller,
-                                              @RequestBody SubmitRequest req) {
+                                              @RequestBody @Valid SubmitRequest req) {
         // 法人代表 = 调用者本人(来自 JWT),不信任请求体——否则任何人都能代别人提交入驻
         long id = orgApi.submit(req.type(), req.name(), req.creditCode(), caller.userId());
         return ResponseEntity.ok(Map.of("id", id));

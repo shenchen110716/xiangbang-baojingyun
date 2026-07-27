@@ -1,5 +1,6 @@
 package com.xbb.settlement.internal;
 
+import jakarta.validation.Valid;
 import com.xbb.settlement.api.SettlementApi;
 import jakarta.validation.constraints.NotBlank;
 import com.xbb.security.AuthenticatedUser;
@@ -25,7 +26,7 @@ class SettlementController {
     }
 
     @PutMapping("/{id}/void")
-    ResponseEntity<Void> voidSettlement(@PathVariable long id, @RequestBody VoidRequest req,
+    ResponseEntity<Void> voidSettlement(@PathVariable long id, @RequestBody @Valid VoidRequest req,
                                          @AuthenticationPrincipal AuthenticatedUser caller) {
         settlementApi.voidSettlement(id, req.reason(), caller.userId());
         return ResponseEntity.noContent().build();

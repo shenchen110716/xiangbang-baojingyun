@@ -1,5 +1,6 @@
 package com.xbb.review.internal;
 
+import jakarta.validation.Valid;
 import com.xbb.review.api.ReviewApi;
 import com.xbb.security.AuthenticatedUser;
 import org.springframework.http.ResponseEntity;
@@ -23,7 +24,7 @@ class ReviewController {
     @PostMapping("/{applicationId}")
     ResponseEntity<Void> submit(@AuthenticationPrincipal AuthenticatedUser caller,
                                  @PathVariable long applicationId,
-                                 @RequestBody SubmitRequest req) {
+                                 @RequestBody @Valid SubmitRequest req) {
         reviewApi.submitReview(applicationId, caller.userId(), req.tags(), req.comment());
         return ResponseEntity.noContent().build();
     }

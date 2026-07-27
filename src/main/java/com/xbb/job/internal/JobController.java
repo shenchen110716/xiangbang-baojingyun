@@ -1,5 +1,6 @@
 package com.xbb.job.internal;
 
+import jakarta.validation.Valid;
 import com.xbb.job.api.JobApi;
 import com.xbb.security.AuthenticatedUser;
 import jakarta.validation.constraints.NotBlank;
@@ -25,7 +26,7 @@ class JobController {
 
     @PostMapping
     ResponseEntity<Map<String, Long>> postJob(@AuthenticationPrincipal AuthenticatedUser caller,
-                                               @RequestBody PostJobRequest req) {
+                                               @RequestBody @Valid PostJobRequest req) {
         long id = jobApi.postJob(req.orgId(), req.title(), req.description(), req.wageCents(), caller.userId());
         return ResponseEntity.ok(Map.of("id", id));
     }

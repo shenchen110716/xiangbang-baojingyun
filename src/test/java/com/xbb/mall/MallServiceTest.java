@@ -134,9 +134,13 @@ class MallServiceTest {
     void 未支付的订单不能核销() {
         long productId = redeemGatedProduct(5);
         long orderId = mallApi.placeOrder(productId, 12L);
-
-        // 没支付就没有核销码,自然核销不了
         assertThat(mallApi.findOrder(orderId).orElseThrow().voucherCode()).isNull();
+
+        // **真的去核销一次。** 之前这条只断言"核销码是 null",根本没调 redeem()——
+        // 如果 redeem 对 voucherCode == null 走了空匹配分支(未付款也能入场),
+        // 那个断言照样绿。要验的是"核销被拒绝",就得真的核销。
+        assertThatThrownBy(() -> mallApi.redeem("任意码"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     // ---------- §6.3.2 两种结算模式 ----------

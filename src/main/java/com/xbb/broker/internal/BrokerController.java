@@ -1,5 +1,6 @@
 package com.xbb.broker.internal;
 
+import jakarta.validation.Valid;
 import com.xbb.broker.api.BrokerApi;
 import com.xbb.security.AuthenticatedUser;
 import jakarta.validation.constraints.Positive;
@@ -29,7 +30,7 @@ class BrokerController {
 
     @PostMapping("/bind")
     ResponseEntity<Map<String, Long>> bind(@AuthenticationPrincipal AuthenticatedUser caller,
-                                            @RequestBody BindRequest req) {
+                                            @RequestBody @Valid BindRequest req) {
         long invitationId = brokerApi.bindWorker(caller.userId(), req.workerUserId());
         return ResponseEntity.ok(Map.of("id", invitationId));
     }

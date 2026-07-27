@@ -170,12 +170,15 @@ class ReviewService implements ReviewApi {
     }
 
     private CreditCalculator.CreditHistory buildHistory(long workerUserId) {
-        List<CreditCalculator.Engagement> engagements = completedEngagements.findAll().stream()
-                .filter(e -> e.getWorkerUserId() == workerUserId)
+        // 原来这里是两次 findAll() 再内存过滤。它挂在**最高频的事件**上
+        // (履约完成、每收到一条评价都会重算),而这两张是只增不删的历史表:
+        // 一百万条履约时,一批 100 条事件就是 200 次全表扫描、两亿行对象化,
+        // 全程占着中继事务和本域连接。改成按人查,索引见 V5 迁移。
+        List<CreditCalculator.Engagement> engagements = completedEngagements.findByWorkerUserId(workerUserId).stream()
                 .map(e -> new CreditCalculator.Engagement(e.getCompletedAt(), true))
                 .toList();
-        List<CreditCalculator.ReceivedReview> received = reviews.findAll().stream()
-                .filter(r -> r.getRateeUserId() != null && r.getRateeUserId() == workerUserId)
+        List<CreditCalculator.ReceivedReview> received = reviews.findByRateeUserId(workerUserId).stream()
+                .filter(r -> r.getRateeUserId() != null)
                 .map(r -> new CreditCalculator.ReceivedReview(
                         r.getCreatedAt(), r.getScore(), r.getTags().contains(ReviewTag.MID_QUIT)))
                 .toList();
