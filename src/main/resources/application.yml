@@ -1,3 +1,13 @@
+management:
+  endpoints:
+    web:
+      exposure:
+        # 只暴露必要的三个。此前一个都没有,11 个中继的积压量完全是黑盒。
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
 server:
   # 优雅停机:SIGTERM 时先停止接受新请求,已在途的跑完再退。
   # 没有它,滚动发布会打断正在执行的代发请求。

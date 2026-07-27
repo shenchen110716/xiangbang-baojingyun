@@ -29,10 +29,15 @@ public final class DomainJpaSupport {
                 .bind("xbb.domains." + domain + ".datasource", Bindable.of(DataSourceProperties.class))
                 .orElseThrow(() -> new IllegalStateException("missing xbb.domains." + domain + " configuration"));
         HikariDataSource ds = props.initializeDataSourceBuilder().type(HikariDataSource.class).build();
-        // 见 xbb-v1-progress.md:测试里每个 @SpringBootTest 类都会被 Spring 测试上下文
-        // 缓存出独立的 ApplicationContext,每个上下文 × 每个域 = 一个连接池。
-        // 10 个域 × 30 多个测试类 = 300+ 个池子同时存在。
-        ds.setMaximumPoolSize(3);
+        // **可配置,不再写死。** 这个值原来是硬编码的 3——那是为测试选的
+        // (每个 @SpringBootTest 类一个 ApplicationContext,每个上下文 × 每个域 = 一个池子,
+        // 30 多个测试类 × 20 个域 = 600+ 个池子同时存在),但生产用的是同一个值。
+        //
+        // 生产侧的算术:20 个域 × 每域上限 = 单实例连接上限。取 3 就是 60,
+        // PostgreSQL 默认 max_connections = 100,**两个实例就超**——水平扩容被堵死,
+        // 而这件事没写在任何部署文档里。现在能按环境调,并在启动时把算术打出来。
+        int maxPerDomain = env.getProperty("xbb.datasource.max-pool-size-per-domain", Integer.class, 3);
+        ds.setMaximumPoolSize(maxPerDomain);
         // 关键:Hikari 默认 minimumIdle = maximumPoolSize,意味着**每个池子都会长期
         // 占住 3 条连接**,哪怕整个测试类根本没碰这个域。300 个池子就是 900 条常驻连接,
         // 这才是"每加一个域就要调大 max_connections"的真正原因。
@@ -40,6 +45,7 @@ public final class DomainJpaSupport {
         // 需求从"域数 × 上下文数 × 3"降到"实际并发用到的那几个域"。
         ds.setMinimumIdle(0);
         ds.setIdleTimeout(30_000);
+        ds.setPoolName("xbb-" + domain);
         return ds;
     }
 

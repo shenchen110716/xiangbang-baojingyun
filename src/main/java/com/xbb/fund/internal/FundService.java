@@ -21,6 +21,9 @@ import java.util.Optional;
 @Service
 class FundService implements FundApi {
 
+    /** 资金链路此前**全程零日志**。钱出了问题时,没有任何东西可查。 */
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FundService.class);
+
     private final PayoutRepository payouts;
     private final DisbursementRepository disbursements;
     private final DisbursementChannel channel;
@@ -93,8 +96,11 @@ class FundService implements FundApi {
         requirePlatformOps(callerUserId);
         Disbursement prepared = self.getObject().reserveForDisbursement(payoutId);
         if (prepared == null) {
+            log.info("代发跳过:payout={} 已成功代发过", payoutId);
             return;   // 已成功代发过,幂等
         }
+        log.info("代发开始:payout={} 收款人={} 金额={}分 幂等键={}",
+                payoutId, prepared.getPayeeUserId(), prepared.getAmountCents(), prepared.getIdempotencyKey());
         callChannelAndRecord(prepared);
     }
 
@@ -146,7 +152,12 @@ class FundService implements FundApi {
                     disbursement.getIdempotencyKey(), disbursement.getPayeeUserId(),
                     disbursement.getAmountCents(), DisbursementChannel.PayeeAccount.WECHAT_BALANCE);
             self.getObject().recordSuccess(disbursement.getId(), receipt);
+            log.info("代发成功:payout={} 金额={}分 外部单号={}",
+                    disbursement.getPayoutId(), disbursement.getAmountCents(), receipt.externalRef());
         } catch (DisbursementChannel.ChannelException e) {
+            // ERROR 而非 WARN:代发失败意味着有人的工资没到账,这不该淹没在日常噪音里
+            log.error("代发失败,已原路退回:payout={} 金额={}分 原因={}",
+                    disbursement.getPayoutId(), disbursement.getAmountCents(), e.getMessage(), e);
             self.getObject().recordFailure(disbursement.getId(), e.getMessage());
         }
     }
@@ -200,6 +211,8 @@ class FundService implements FundApi {
     @Transactional("fundTransactionManager")
     public void spendFromAccount(AccountType accountType, long amountCents, String reason,
                                   String idempotencyKey) {
+        log.info("监管账户出账:账户={} 金额={}分 事由={} 幂等键={}",
+                accountType, amountCents, reason, idempotencyKey);
         escrow.debit(accountType, amountCents, reason, idempotencyKey);
     }
 

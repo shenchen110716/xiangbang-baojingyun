@@ -25,6 +25,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // 拿 token 之前必须能免登录访问:请求验证码、拿验证码换 token
                 .requestMatchers("/api/identity/code", "/api/identity/login").permitAll()
+                // 健康检查要给编排/负载均衡探活用,必须免鉴权。
+                // 只放行 health,**不放行 metrics** —— 那里会暴露内部结构。
+                .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 // 其余全部端点(两个域)都要求带有效 JWT——谁调用由 token 决定,
                 // 不再信任请求体里客户端自己填的 userId/legalRepUserId。
                 .anyRequest().authenticated())
