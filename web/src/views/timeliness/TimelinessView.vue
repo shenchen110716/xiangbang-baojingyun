@@ -16,6 +16,8 @@ import * as factsApi from '@/api/employmentFacts'
 import type { ImportPreview } from '@/api/employmentFacts'
 import { useAuthStore } from '@/stores/auth'
 import PageCard from '@/components/PageCard.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedList } from '@/composables/usePagedList'
 
 const auth = useAuthStore()
 const isAdmin = computed(() => auth.user?.role === 'admin')
@@ -33,6 +35,8 @@ const filters = ref<TimelinessFilters>({})
 const filterOptions = ref<TimelinessFilterOptions>({
   enterprises: [], actual_employers: [], positions: [], responsible_users: [],
 })
+// 明细一多容易变成一页刷不完的长表，加分页（用户反馈 2026-07-29）。
+const { page, pageSize, total: pagedTotal, paged } = usePagedList(rows)
 
 const STATUS_LABEL: Record<string, string> = {
   timely: '及时',
@@ -274,10 +278,14 @@ async function doConfirm() {
       </el-form-item>
     </el-form>
 
-    <el-table v-loading="loading" :data="rows" size="small" stripe>
+    <el-table v-loading="loading" :data="paged" size="small" stripe>
       <el-table-column v-if="isAdmin" prop="enterprise_name" label="投保单位" width="140" />
-      <el-table-column prop="actual_employer_name" label="工作单位" width="140" />
-      <el-table-column prop="position_name" label="岗位" width="120" />
+      <el-table-column label="工作单位 / 岗位" width="180">
+        <template #default="{ row }">
+          <div>{{ row.actual_employer_name || '—' }}</div>
+          <small class="muted">{{ row.position_name || '—' }}</small>
+        </template>
+      </el-table-column>
       <el-table-column prop="person_name" label="姓名" width="90" />
       <el-table-column prop="id_number_masked" label="身份证号" width="150" />
       <el-table-column prop="actual_business_at" label="真实业务时间" width="170" />
@@ -310,6 +318,7 @@ async function doConfirm() {
       </el-table-column>
       <template #empty>暂无及时率结果，请先导入真实用工事实并重算</template>
     </el-table>
+    <TablePagination v-model:page="page" v-model:page-size="pageSize" :total="pagedTotal" />
   </PageCard>
 
   <PageCard v-if="dataQuality.length" title="数据质量队列" subtitle="待匹配与冲突记录不计入任何及时率，请先处理">
@@ -388,5 +397,8 @@ async function doConfirm() {
 }
 .filters {
   margin-bottom: 8px;
+}
+.muted {
+  color: var(--el-text-color-placeholder);
 }
 </style>
