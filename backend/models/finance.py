@@ -52,6 +52,11 @@ class Invoice(Base):
     tax_no: Mapped[str] = mapped_column(String(40), default="")
     email: Mapped[str] = mapped_column(String(160), default="")
     status: Mapped[str] = mapped_column(String(30), default="pending")
+    # 保司/平台上传的发票文件本体，跟 Policy.document_url/document_name 同一套
+    # 私有存储 + 短时签名下载的模式（用户反馈 2026-07-29：申请/上传/下载三端
+    # 齐全，之前只有申请和状态流转，没有真正的文件）。
+    document_url: Mapped[str] = mapped_column(Text, default="")
+    document_name: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

@@ -22,6 +22,14 @@ export function updateInvoiceStatus(id: number, status: string) {
   return client.patch<Invoice>(`/invoices/${id}`, { status }).then((r) => r.data)
 }
 
+export function uploadInvoiceDocument(id: number, file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return client.post<Invoice>(`/invoices/${id}/document/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((r) => r.data)
+}
+
 export function createPayment(data: { enterprise_id: number; account: 'premium' | 'usage'; amount: number }) {
   return client.post('/payments', data).then((r) => r.data)
 }

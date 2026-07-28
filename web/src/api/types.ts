@@ -377,6 +377,8 @@ export interface Invoice {
   tax_no: string
   email: string
   status: 'pending' | 'approved' | 'issued' | 'rejected'
+  document_name?: string
+  document_download_url?: string
   created_at: string
 }
 

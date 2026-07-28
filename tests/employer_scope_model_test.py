@@ -131,6 +131,9 @@ def run() -> None:
             "CREATE TABLE ledger_entries (id INTEGER PRIMARY KEY, account_id INTEGER)"
         )
         connection.exec_driver_sql(
+            "CREATE TABLE invoices (id INTEGER PRIMARY KEY, enterprise_id INTEGER, account VARCHAR(20))"
+        )
+        connection.exec_driver_sql(
             "INSERT INTO users (id, role, is_owner, enterprise_id) VALUES "
             "(1, 'enterprise', 1, 1), (2, 'enterprise', 0, 1)"
         )

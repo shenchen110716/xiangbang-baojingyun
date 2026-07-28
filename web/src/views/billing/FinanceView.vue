@@ -96,6 +96,18 @@ async function setInvoiceStatus(item: Invoice, status: string) {
     ElMessage.error((e as Error).message)
   }
 }
+
+// 平台端上传发票文件（用户反馈 2026-07-29：申请/上传/下载三端齐全）；
+// 保司端在自己的工作台上传，这里只服务平台管理员。
+async function handleInvoiceUpload(item: Invoice, file: File) {
+  try {
+    await financeApi.uploadInvoiceDocument(item.id, file)
+    ElMessage.success('发票文件已上传')
+    load()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
 </script>
 
 <template>
@@ -149,13 +161,23 @@ async function setInvoiceStatus(item: Invoice, status: string) {
             <el-tag size="small" :type="row.status === 'issued' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'">{{ INVOICE_STATUS_TEXT[row.status] }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="auth.isAdmin()" label="操作" width="180" fixed="right">
+        <el-table-column label="发票文件" min-width="130">
+          <template #default="{ row }">
+            <a v-if="row.document_download_url" :href="row.document_download_url" target="_blank">{{ row.document_name || '下载' }}</a>
+            <span v-else class="muted">未上传</span>
+          </template>
+        </el-table-column>
+        <el-table-column v-if="auth.isAdmin()" label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <template v-if="row.status !== 'issued'">
               <el-button link type="primary" size="small" @click="setInvoiceStatus(row, 'approved')">审核</el-button>
               <el-button link type="success" size="small" @click="setInvoiceStatus(row, 'issued')">已开票</el-button>
               <el-button link type="danger" size="small" @click="setInvoiceStatus(row, 'rejected')">驳回</el-button>
             </template>
+            <el-upload :show-file-list="false" :auto-upload="false" accept=".pdf,.jpg,.jpeg,.png"
+                       @change="(f: { raw: File }) => handleInvoiceUpload(row, f.raw)">
+              <el-button link type="primary" size="small">{{ row.document_download_url ? '重新上传' : '上传发票' }}</el-button>
+            </el-upload>
           </template>
         </el-table-column>
       </el-table>

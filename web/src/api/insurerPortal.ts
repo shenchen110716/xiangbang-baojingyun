@@ -100,6 +100,14 @@ export function listInsurerInvoices() {
   return client.get<Invoice[]>('/invoices').then((response) => response.data)
 }
 
+export function uploadInsurerInvoiceDocument(invoiceId: number, file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return client.post<Invoice>(`/invoices/${invoiceId}/document/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((response) => response.data)
+}
+
 export function listInsurerInsured() {
   return client.get<InsuredPerson[]>('/insurer-portal/insured').then((response) => response.data)
 }

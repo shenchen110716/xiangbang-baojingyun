@@ -3,7 +3,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { exportInsurerMonthlyPremium, flagInsuredPerson, getInsurerMonthlyPremiumDetail, getInsurerMonthlyPremiumSummary, getInsurerProfile, getInsurerSettlement, listInsurerClaimDocuments, listInsurerClaims, listInsurerInsured, listInsurerInvoices, listInsurerPlans, listInsurerPolicies, listInsurerPositionVideos, listInsurerPositions, reviewInsurerClaim, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
+import { INVOICE_STATUS_TEXT } from '@/api/finance'
+import { exportInsurerMonthlyPremium, flagInsuredPerson, getInsurerMonthlyPremiumDetail, getInsurerMonthlyPremiumSummary, getInsurerProfile, getInsurerSettlement, listInsurerClaimDocuments, listInsurerClaims, listInsurerInsured, listInsurerInvoices, listInsurerPlans, listInsurerPolicies, listInsurerPositionVideos, listInsurerPositions, reviewInsurerClaim, reviewInsurerPosition, submitInsurerProfileEdit, uploadInsurerInvoiceDocument, uploadInsurerPolicyDocument } from '@/api/insurerPortal'
 import type { InsurerMonthlyPremium, InsurerMonthlyPremiumRow, InsurerSettlement } from '@/api/insurerPortal'
 import type { Claim, ClaimDocument, Insurer, InsurancePlan, Invoice, InsuredPerson, Policy, PositionVideo, WorkPosition } from '@/api/types'
 
@@ -146,6 +147,18 @@ async function loadInvoices() {
   invoices.value = await listInsurerInvoices()
 }
 const { page: invoicesPage, pageSize: invoicesPageSize, total: invoicesTotal, paged: invoicesPaged } = usePagedList(invoices)
+
+// 保司端上传发票文件（用户反馈 2026-07-29：用户端申请、保司/平台端上传、
+// 用户端下载）。
+async function handleInvoiceUpload(invoiceId: number, file: File) {
+  try {
+    await uploadInsurerInvoiceDocument(invoiceId, file)
+    ElMessage.success('发票文件已上传')
+    loadInvoices()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
 
 const insuredList = ref<InsuredPerson[]>([])
 async function loadInsured() {
@@ -484,7 +497,23 @@ function logout() {
                 <template #default="{ row }">{{ row.account === 'premium' ? '保费' : '使用费' }}</template>
               </el-table-column>
               <el-table-column label="金额" width="100"><template #default="{ row }">{{ row.amount }}</template></el-table-column>
-              <el-table-column prop="status" label="状态" width="90" />
+              <el-table-column label="状态" width="90">
+                <template #default="{ row }">{{ INVOICE_STATUS_TEXT[row.status] || row.status }}</template>
+              </el-table-column>
+              <el-table-column label="发票文件" min-width="150">
+                <template #default="{ row }">
+                  <a v-if="row.document_download_url" :href="row.document_download_url" target="_blank">{{ row.document_name || '下载' }}</a>
+                  <span v-else class="muted">未上传</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="120">
+                <template #default="{ row }">
+                  <el-upload :show-file-list="false" :auto-upload="false" accept=".pdf,.jpg,.jpeg,.png"
+                             @change="(f: { raw: File }) => handleInvoiceUpload(row.id, f.raw)">
+                    <el-button link type="primary" size="small">{{ row.document_download_url ? '重新上传' : '上传' }}</el-button>
+                  </el-upload>
+                </template>
+              </el-table-column>
             </el-table>
             <el-empty v-if="!invoicesTotal" description="暂无发票申请" :image-size="60" />
             <TablePagination v-if="invoicesTotal" v-model:page="invoicesPage" v-model:page-size="invoicesPageSize" :total="invoicesTotal" />

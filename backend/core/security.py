@@ -35,7 +35,10 @@ SALESPERSON_ALLOWED_PREFIXES = ("/api/agent-portal/",)
 # policies, claims, invoices — see Tasks 6/7/9/11) or lives under
 # /insurer-portal/ where every route requires require_insurer_scope.
 INSURER_ALLOWED_PATHS = {"/api/auth/me", "/api/auth/password", "/api/positions", "/api/claims", "/api/invoices", "/api/policies"}
-INSURER_ALLOWED_PREFIXES = ("/api/insurer-portal/", "/api/positions/", "/api/policies/", "/api/claims/")
+# /api/invoices/ 前缀（发票文件上传/下载）用户反馈 2026-07-29 新增：之前只放行了
+# /api/invoices 精确路径（列表/申请），/api/invoices/{id}/document/upload 这类子
+# 路径会被这里挡掉，跟 policies/claims 已经用前缀放开子路径的做法不一致。
+INSURER_ALLOWED_PREFIXES = ("/api/insurer-portal/", "/api/positions/", "/api/policies/", "/api/claims/", "/api/invoices/")
 # /api/insured/{item_id}/insurer-flag (Task 10) is deliberately allowed by
 # *suffix*, not by adding a broad "/api/insured/" prefix above — a prefix
 # would also open PATCH /api/insured/{id} and PATCH /api/insured/{id}/status
