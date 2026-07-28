@@ -33,6 +33,10 @@ spring:
 xbb:
   # 凭据一律不带默认值:漏配环境变量时应用必须启动失败,
   # 而不是悄悄用仓库里公开的那个字符串当密钥/口令。
+  mall:
+    # 核销码签名密钥。不带默认值:漏配即启动失败(铁律 6)。
+    # 原来硬编码在 VoucherCode.java 里,等于任何人都能离线伪造核销码。
+    voucher-secret: ${XBB_MALL_VOUCHER_SECRET}
   jwt:
     secret: ${JWT_SECRET}
     ttl-minutes: 120

@@ -18,17 +18,19 @@ class MallService implements MallApi {
     private final Clock clock;
     private final MallOutboxRepository outbox;
     private final ObjectMapper json;
+    private final VoucherCode vouchers;
 
     MallService(ProductRepository products, MallOrderRepository orders,
                  SettlementTriggerPolicy triggerPolicy,
                  Clock clock,
-                     MallOutboxRepository outbox, ObjectMapper json) {
+                     MallOutboxRepository outbox, ObjectMapper json, VoucherCode vouchers) {
         this.products = products;
         this.orders = orders;
         this.triggerPolicy = triggerPolicy;
         this.clock = clock;
         this.outbox = outbox;
         this.json = json;
+        this.vouchers = vouchers;
     }
 
     private String serialize(Object event) {
@@ -68,7 +70,7 @@ class MallService implements MallApi {
         MallOrder order = loadOrder(orderId);
         Product product = loadProduct(order.getProductId());
 
-        order.markPaid(VoucherCode.generate(order.getId(), order.getProductId(), order.getBuyerUserId()));
+        order.markPaid(vouchers.generate(order.getId(), order.getProductId(), order.getBuyerUserId()));
         orders.save(order);
 
         // §6.3.7:两类商品殊途同归,只是触发时机不同
@@ -87,7 +89,7 @@ class MallService implements MallApi {
         Product product = loadProduct(order.getProductId());
 
         // 防伪校验:码里带签名,伪造的码即使猜中订单号也过不了
-        if (!VoucherCode.verify(voucherCode, order.getId(), order.getProductId(), order.getBuyerUserId())) {
+        if (!vouchers.verify(voucherCode, order.getId(), order.getProductId(), order.getBuyerUserId())) {
             throw new IllegalStateException("核销码签名校验失败");
         }
         order.redeem();
