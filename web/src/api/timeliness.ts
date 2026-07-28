@@ -6,9 +6,25 @@ export interface TimelinessFilters {
   timeliness_status?: string
   responsibility_reason?: string
   responsible_user_id?: number
+  enterprise_id?: number
   actual_employer_id?: number
+  position_id?: number
+  person_name?: string
+  id_number?: string
   since?: string
   until?: string
+}
+
+export interface TimelinessFilterOption {
+  id: number
+  name: string
+}
+
+export interface TimelinessFilterOptions {
+  enterprises: TimelinessFilterOption[]
+  actual_employers: TimelinessFilterOption[]
+  positions: TimelinessFilterOption[]
+  responsible_users: TimelinessFilterOption[]
 }
 
 function clean(filters: TimelinessFilters): Record<string, string | number> {
@@ -29,6 +45,12 @@ export function getTimelinessDetails(filters: TimelinessFilters = {}) {
   return client
     .get<{ items: TimelinessDetail[] }>('/timeliness/details', { params: clean(filters) })
     .then((response) => response.data.items)
+}
+
+export function getTimelinessFilterOptions() {
+  return client
+    .get<TimelinessFilterOptions>('/timeliness/filter-options')
+    .then((response) => response.data)
 }
 
 export function getTimelinessDataQuality() {

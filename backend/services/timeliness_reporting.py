@@ -16,7 +16,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import EmploymentTimelinessResult, User
+from ..models import ActualEmployer, Enterprise, EmploymentTimelinessResult, InsuredPerson, User, WorkPosition
 from .employer_scopes import allowed_employer_ids
 from .timeliness_engine import summarise
 
@@ -71,12 +71,30 @@ def scoped_results(session: Session, user: User, **filters) -> list[EmploymentTi
         "responsibility_reason": EmploymentTimelinessResult.responsibility_reason,
         "responsible_user_id": EmploymentTimelinessResult.responsible_user_id,
         "actual_employer_id": EmploymentTimelinessResult.actual_employer_id,
+        "enterprise_id": EmploymentTimelinessResult.enterprise_id,
         "feedback_status": EmploymentTimelinessResult.feedback_status,
     }
     for key, column in column_filters.items():
         value = filters.get(key)
         if value is not None and value != "":
             stmt = stmt.where(column == value)
+
+    # 岗位/姓名/身份证号不是结果表自己的字段，要连参保人员表查（用户反馈
+    # 2026-07-29：平台端/企业端都要能按这几项查询和统计）。这三项只对已经
+    # 匹配到具体人员的记录有意义——待匹配事实本来就不进正式口径，这里查不
+    # 到人也在情理之中，不必单独处理。
+    position_id = filters.get("position_id")
+    person_name = (filters.get("person_name") or "").strip()
+    id_number = (filters.get("id_number") or "").strip()
+    if position_id or person_name or id_number:
+        person_stmt = select(InsuredPerson.id)
+        if position_id:
+            person_stmt = person_stmt.where(InsuredPerson.position_id == position_id)
+        if person_name:
+            person_stmt = person_stmt.where(InsuredPerson.name.like(f"%{person_name}%"))
+        if id_number:
+            person_stmt = person_stmt.where(InsuredPerson.id_number.like(f"%{id_number}%"))
+        stmt = stmt.where(EmploymentTimelinessResult.person_id.in_(person_stmt))
 
     since, until = filters.get("since"), filters.get("until")
     if since:
@@ -149,7 +167,87 @@ def serialize_result(row: EmploymentTimelinessResult) -> dict:
 
 
 def detail_rows(session: Session, user: User, **filters) -> list[dict]:
-    return [serialize_result(r) for r in scoped_results(session, user, **filters)]
+    """结果表本身只存 id——批量把单位/岗位/人员/责任人的名字补上，明细表格
+    才不用只能显示一串数字（用户反馈 2026-07-29：查询/统计要能按这些维度
+    看）。批量查而不是逐行查，避免明细行数一多就是 N+1。"""
+    from ..core.id_number import mask_id_number
+
+    rows = scoped_results(session, user, **filters)
+    person_ids = {r.person_id for r in rows if r.person_id}
+    people = {p.id: p for p in session.scalars(
+        select(InsuredPerson).where(InsuredPerson.id.in_(person_ids)))} if person_ids else {}
+    position_ids = {p.position_id for p in people.values() if p.position_id}
+    positions = {p.id: p for p in session.scalars(
+        select(WorkPosition).where(WorkPosition.id.in_(position_ids)))} if position_ids else {}
+    employer_ids = {r.actual_employer_id for r in rows}
+    employers = {e.id: e for e in session.scalars(
+        select(ActualEmployer).where(ActualEmployer.id.in_(employer_ids)))} if employer_ids else {}
+    enterprise_ids = {r.enterprise_id for r in rows}
+    enterprises = {e.id: e for e in session.scalars(
+        select(Enterprise).where(Enterprise.id.in_(enterprise_ids)))} if enterprise_ids else {}
+    responsible_ids = {r.responsible_user_id for r in rows if r.responsible_user_id}
+    responsible_users = {u.id: u for u in session.scalars(
+        select(User).where(User.id.in_(responsible_ids)))} if responsible_ids else {}
+
+    payloads = []
+    for row in rows:
+        person = people.get(row.person_id)
+        position = positions.get(person.position_id) if person else None
+        employer = employers.get(row.actual_employer_id)
+        enterprise = enterprises.get(row.enterprise_id)
+        responsible = responsible_users.get(row.responsible_user_id)
+        payload = serialize_result(row)
+        payload.update({
+            "enterprise_name": enterprise.name if enterprise else "",
+            "actual_employer_name": employer.name if employer else "",
+            "position_name": position.name if position else "",
+            "person_name": person.name if person else "",
+            "id_number_masked": mask_id_number(person.id_number) if person and person.id_number else "",
+            "responsible_user_name": responsible.name if responsible else "",
+        })
+        payloads.append(payload)
+    return payloads
+
+
+def filter_options(session: Session, user: User) -> dict:
+    """按当前用户可见范围，只列出及时率结果里实际出现过的单位/岗位/责任人
+    ——下拉选一个查出来空空如也没有意义（用户反馈 2026-07-29）。平台端可
+    以看投保单位下拉，企业端已经天然限定在自己单位，不需要这一项。"""
+    stmt = _scoped(session, user)
+    if stmt is None:
+        return {"enterprises": [], "actual_employers": [], "positions": [], "responsible_users": []}
+    rows = list(session.scalars(stmt))
+
+    enterprises: list[dict] = []
+    if user.role == "admin":
+        enterprise_ids = {r.enterprise_id for r in rows}
+        if enterprise_ids:
+            enterprises = [{"id": e.id, "name": e.name} for e in session.scalars(
+                select(Enterprise).where(Enterprise.id.in_(enterprise_ids)).order_by(Enterprise.name))]
+
+    employer_ids = {r.actual_employer_id for r in rows}
+    actual_employers = [{"id": e.id, "name": e.name} for e in session.scalars(
+        select(ActualEmployer).where(ActualEmployer.id.in_(employer_ids)).order_by(ActualEmployer.name))] if employer_ids else []
+
+    person_ids = {r.person_id for r in rows if r.person_id}
+    position_ids: set[int] = set()
+    if person_ids:
+        position_ids = {pid for pid, in session.execute(
+            select(InsuredPerson.position_id).where(
+                InsuredPerson.id.in_(person_ids), InsuredPerson.position_id.is_not(None)))}
+    positions = [{"id": p.id, "name": p.name} for p in session.scalars(
+        select(WorkPosition).where(WorkPosition.id.in_(position_ids)).order_by(WorkPosition.name))] if position_ids else []
+
+    responsible_ids = {r.responsible_user_id for r in rows if r.responsible_user_id}
+    responsible_users = [{"id": u.id, "name": u.name} for u in session.scalars(
+        select(User).where(User.id.in_(responsible_ids)).order_by(User.name))] if responsible_ids else []
+
+    return {
+        "enterprises": enterprises,
+        "actual_employers": actual_employers,
+        "positions": positions,
+        "responsible_users": responsible_users,
+    }
 
 
 # --- §13.4 带审计的 XLSX 导出 -------------------------------------------

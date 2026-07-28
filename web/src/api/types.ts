@@ -682,6 +682,12 @@ export interface TimelinessDetail {
   product_rule_version: number
   calculation_version: number
   calculated_at: string | null
+  enterprise_name: string
+  actual_employer_name: string
+  position_name: string
+  person_name: string
+  id_number_masked: string
+  responsible_user_name: string
 }
 
 /** v4.2 §5.1 业务员可见的产品视图——白名单，绝不含成本构成。 */

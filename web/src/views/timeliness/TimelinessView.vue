@@ -5,8 +5,10 @@ import {
   exportTimeliness,
   getTimelinessDataQuality,
   getTimelinessDetails,
+  getTimelinessFilterOptions,
   getTimelinessSummary,
   recalculateTimeliness,
+  type TimelinessFilterOptions,
   type TimelinessFilters,
 } from '@/api/timeliness'
 import type { TimelinessDetail, TimelinessSummary } from '@/api/types'
@@ -16,6 +18,7 @@ import { useAuthStore } from '@/stores/auth'
 import PageCard from '@/components/PageCard.vue'
 
 const auth = useAuthStore()
+const isAdmin = computed(() => auth.user?.role === 'admin')
 const isOwner = computed(() => auth.user?.role === 'admin' || auth.user?.enterprise_role === 'owner')
 
 const summary = ref<TimelinessSummary | null>(null)
@@ -25,6 +28,11 @@ const loading = ref(true)
 const exporting = ref(false)
 const recalculating = ref(false)
 const filters = ref<TimelinessFilters>({})
+// 投保单位/工作单位/岗位/责任人下拉只列当前范围内实际出现过的选项，避免
+// 选了一个查出来空空如也（用户反馈 2026-07-29：平台端/企业端查询与统计）。
+const filterOptions = ref<TimelinessFilterOptions>({
+  enterprises: [], actual_employers: [], positions: [], responsible_users: [],
+})
 
 const STATUS_LABEL: Record<string, string> = {
   timely: '及时',
@@ -85,7 +93,18 @@ async function load() {
   }
 }
 
-onMounted(load)
+async function loadFilterOptions() {
+  try {
+    filterOptions.value = await getTimelinessFilterOptions()
+  } catch (error) {
+    ElMessage.error((error as Error).message)
+  }
+}
+
+onMounted(() => {
+  load()
+  loadFilterOptions()
+})
 
 function reset() {
   filters.value = {}
@@ -115,7 +134,7 @@ async function runRecalculate() {
   try {
     const result = await recalculateTimeliness()
     ElMessage.success(`已重算 ${result.processed} 条${result.failed ? `，${result.failed} 条失败` : ''}`)
-    await load()
+    await Promise.all([load(), loadFilterOptions()])
   } catch (error) {
     ElMessage.error((error as Error).message)
   } finally {
@@ -207,6 +226,32 @@ async function doConfirm() {
     </el-row>
 
     <el-form :inline="true" class="filters">
+      <el-form-item v-if="isAdmin" label="投保单位">
+        <el-select v-model="filters.enterprise_id" clearable filterable placeholder="全部" style="width: 160px">
+          <el-option v-for="e in filterOptions.enterprises" :key="e.id" :label="e.name" :value="e.id" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="工作单位">
+        <el-select v-model="filters.actual_employer_id" clearable filterable placeholder="全部" style="width: 160px">
+          <el-option v-for="e in filterOptions.actual_employers" :key="e.id" :label="e.name" :value="e.id" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="岗位">
+        <el-select v-model="filters.position_id" clearable filterable placeholder="全部" style="width: 150px">
+          <el-option v-for="p in filterOptions.positions" :key="p.id" :label="p.name" :value="p.id" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="姓名">
+        <el-input v-model="filters.person_name" clearable placeholder="支持模糊查询" style="width: 130px" />
+      </el-form-item>
+      <el-form-item label="身份证号">
+        <el-input v-model="filters.id_number" clearable placeholder="支持模糊查询" style="width: 160px" />
+      </el-form-item>
+      <el-form-item label="责任人">
+        <el-select v-model="filters.responsible_user_id" clearable filterable placeholder="全部" style="width: 140px">
+          <el-option v-for="u in filterOptions.responsible_users" :key="u.id" :label="u.name" :value="u.id" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="操作类型">
         <el-select v-model="filters.operation_type" clearable placeholder="全部" style="width: 120px">
           <el-option label="参保" value="enrollment" />
@@ -230,6 +275,11 @@ async function doConfirm() {
     </el-form>
 
     <el-table v-loading="loading" :data="rows" size="small" stripe>
+      <el-table-column v-if="isAdmin" prop="enterprise_name" label="投保单位" width="140" />
+      <el-table-column prop="actual_employer_name" label="工作单位" width="140" />
+      <el-table-column prop="position_name" label="岗位" width="120" />
+      <el-table-column prop="person_name" label="姓名" width="90" />
+      <el-table-column prop="id_number_masked" label="身份证号" width="150" />
       <el-table-column prop="actual_business_at" label="真实业务时间" width="170" />
       <el-table-column label="类型" width="80">
         <template #default="{ row }">{{ row.operation_type === 'enrollment' ? '参保' : '停保' }}</template>
@@ -252,7 +302,9 @@ async function doConfirm() {
       <el-table-column label="责任原因" min-width="140">
         <template #default="{ row }">{{ REASON_LABEL[row.responsibility_reason] || row.responsibility_reason }}</template>
       </el-table-column>
-      <el-table-column prop="responsible_user_id" label="责任人" width="90" />
+      <el-table-column label="责任人" width="90">
+        <template #default="{ row }">{{ row.responsible_user_name || '—' }}</template>
+      </el-table-column>
       <el-table-column label="规则版本" width="90">
         <template #default="{ row }">v{{ row.product_rule_version }}</template>
       </el-table-column>

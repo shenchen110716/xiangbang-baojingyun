@@ -21,7 +21,7 @@ from ..models import EmploymentFact, EmploymentTimelinessResult, User
 from ..services.employer_scopes import allowed_employer_ids, is_enterprise_owner
 from ..services.timeliness_recalc import drain_due, enqueue, process_outbox, system_facts
 from ..services.timeliness_reporting import (
-    build_export, detail_rows, summary_for,
+    build_export, detail_rows, filter_options, summary_for,
 )
 
 router = APIRouter(prefix="/api", tags=["timeliness"])
@@ -85,7 +85,11 @@ def _serialize(row: EmploymentTimelinessResult) -> dict:
 @router.get("/timeliness/summary", dependencies=[Depends(_ENTERPRISE_OR_ADMIN)])
 def timeliness_summary(
     operation_type: str | None = Query(None),
+    enterprise_id: int | None = Query(None),
     actual_employer_id: int | None = Query(None),
+    position_id: int | None = Query(None),
+    person_name: str | None = Query(None),
+    id_number: str | None = Query(None),
     responsible_user_id: int | None = Query(None),
     since: str | None = Query(None),
     until: str | None = Query(None),
@@ -97,9 +101,18 @@ def timeliness_summary(
     drain_due(session)
     session.commit()
     return summary_for(session, user, operation_type=operation_type,
+                       enterprise_id=enterprise_id,
                        actual_employer_id=actual_employer_id,
+                       position_id=position_id, person_name=person_name, id_number=id_number,
                        responsible_user_id=responsible_user_id,
                        since=since, until=until)
+
+
+@router.get("/timeliness/filter-options", dependencies=[Depends(_ENTERPRISE_OR_ADMIN)])
+def timeliness_filter_options(user: User = Depends(current_user), session: Session = Depends(db)):
+    """平台端/企业端筛选下拉的候选项（用户反馈 2026-07-29：投保单位/工作
+    单位/岗位/责任人查询）——只列出当前范围内及时率结果实际用到的选项。"""
+    return filter_options(session, user)
 
 
 @router.get("/timeliness/details", dependencies=[Depends(_ENTERPRISE_OR_ADMIN)])
@@ -108,7 +121,11 @@ def timeliness_details(
     timeliness_status: str | None = Query(None),
     responsibility_reason: str | None = Query(None),
     responsible_user_id: int | None = Query(None),
+    enterprise_id: int | None = Query(None),
     actual_employer_id: int | None = Query(None),
+    position_id: int | None = Query(None),
+    person_name: str | None = Query(None),
+    id_number: str | None = Query(None),
     since: str | None = Query(None),
     until: str | None = Query(None),
     user: User = Depends(current_user),
@@ -121,7 +138,9 @@ def timeliness_details(
         timeliness_status=timeliness_status,
         responsibility_reason=responsibility_reason,
         responsible_user_id=responsible_user_id,
+        enterprise_id=enterprise_id,
         actual_employer_id=actual_employer_id,
+        position_id=position_id, person_name=person_name, id_number=id_number,
         since=since, until=until)}
 
 
@@ -173,7 +192,11 @@ def timeliness_export(
     timeliness_status: str | None = Query(None),
     responsibility_reason: str | None = Query(None),
     responsible_user_id: int | None = Query(None),
+    enterprise_id: int | None = Query(None),
     actual_employer_id: int | None = Query(None),
+    position_id: int | None = Query(None),
+    person_name: str | None = Query(None),
+    id_number: str | None = Query(None),
     since: str | None = Query(None),
     until: str | None = Query(None),
     user: User = Depends(current_user),
@@ -191,7 +214,11 @@ def timeliness_export(
         "timeliness_status": timeliness_status,
         "responsibility_reason": responsibility_reason,
         "responsible_user_id": responsible_user_id,
+        "enterprise_id": enterprise_id,
         "actual_employer_id": actual_employer_id,
+        "position_id": position_id,
+        "person_name": person_name,
+        "id_number": id_number,
         "since": since,
         "until": until,
     }
