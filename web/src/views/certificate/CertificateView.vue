@@ -81,9 +81,40 @@ const coveragePeriodText = computed(() => {
     return start ? `${start} 零时起至 ${end === '长期有效' ? '长期' : end + ' 二十四时止'}` : '—'
   }
   if (policy.value) {
-    return policy.value.start_date && policy.value.end_date ? `${policy.value.start_date} 零时起至 ${policy.value.end_date} 二十四时止` : '—'
+    // end_date 后端从来没赋过值（保单是持续有效的容器，没有固定到期日这个
+    // 概念），之前要求两个都非空才显示，结果保单证明的生效时间永远是"—"
+    // （用户反馈 2026-07-29）。改成跟"在保证明"一样：没有 end_date 就按
+    // 长期有效展示。
+    if (!policy.value.start_date) return '—'
+    return policy.value.end_date
+      ? `${policy.value.start_date} 零时起至 ${policy.value.end_date} 二十四时止`
+      : `${policy.value.start_date} 零时起至长期有效`
   }
   return '—'
+})
+
+// 按自然月查询（用户反馈 2026-07-29）：只对"保单证明"（单份保单）开放，
+// 批量证明本来就是当前快照，不涉及历史月份的问题。选中月份后只保留在
+// 那个自然月里有过在保区间（哪怕只覆盖一天）的人，打印/存为 PDF 时就是
+// 那个月份的名单。
+const queryMonth = ref('')
+const monthFilterActive = computed(() => type.value === 'policy' && !!queryMonth.value)
+const displayPeople = computed(() => {
+  if (!monthFilterActive.value) return people.value
+  const [y, m] = queryMonth.value.split('-').map(Number)
+  const monthStart = new Date(y, m - 1, 1)
+  const monthEnd = new Date(y, m, 1)
+  return people.value.filter((p) => {
+    if (!p.effective_at) return false
+    const effective = new Date(p.effective_at)
+    const terminated = p.terminated_at ? new Date(p.terminated_at) : null
+    return effective < monthEnd && (terminated === null || terminated > monthStart)
+  })
+})
+const queryMonthLabel = computed(() => {
+  if (!queryMonth.value) return ''
+  const [y, m] = queryMonth.value.split('-')
+  return `${y}年${Number(m)}月`
 })
 
 function printPage() {
@@ -97,6 +128,10 @@ function printPage() {
     <div v-else-if="notFound" class="state-text">未找到对应记录</div>
     <template v-else>
       <div class="toolbar no-print">
+        <template v-if="type === 'policy'">
+          <el-date-picker v-model="queryMonth" type="month" value-format="YYYY-MM" placeholder="按自然月查询" style="width: 160px; margin-right: 8px" />
+          <span v-if="monthFilterActive" class="month-hint">{{ queryMonthLabel }}：{{ displayPeople.length }} 人</span>
+        </template>
         <button class="print-btn" @click="printPage">打印 / 存为 PDF</button>
       </div>
       <div class="certificate">
@@ -111,6 +146,7 @@ function printPage() {
             <li>被保险人名称：{{ policy?.enterprise_name || people[0]?.enterprise_name || '—' }}</li>
             <li>保单生效期间：{{ coveragePeriodText }}</li>
             <li>保单号：{{ policy?.policy_no || people[0]?.policy_no || '—' }}</li>
+            <li v-if="monthFilterActive">查询月份：{{ queryMonthLabel }}（{{ displayPeople.length }} 人）</li>
           </template>
         </ol>
         <div v-if="isBatch" class="cert-disclaimer" style="margin-bottom:14px">批量导出可能覆盖多份保单/多个产品，具体投保产品、生效/停保时间以下表逐人明细为准。</div>
@@ -118,15 +154,14 @@ function printPage() {
         <table class="cert-table">
           <thead>
             <tr>
-              <th>序号</th><th>姓名</th><th>证件类型</th><th>证件号码</th><th>职业/工种</th>
+              <th>序号</th><th>姓名</th><th>证件号码</th><th>职业/工种</th>
               <th>生效起期时间</th><th>终止日期</th><th>投保产品</th><th>类别</th><th>工作单位</th><th>状态</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(p, index) in people" :key="p.id">
+            <tr v-for="(p, index) in displayPeople" :key="p.id">
               <td>{{ index + 1 }}</td>
               <td>{{ p.name }}</td>
-              <td>居民身份证</td>
               <td>{{ p.id_number }}</td>
               <td>{{ p.position_name || p.occupation }}</td>
               <td>{{ formatDateTime(p.effective_at) }}</td>
@@ -135,6 +170,9 @@ function printPage() {
               <td>{{ p.occupation_class }}</td>
               <td>{{ p.actual_employer_name || '—' }}</td>
               <td>{{ statusText[p.status] || p.status }}</td>
+            </tr>
+            <tr v-if="!displayPeople.length">
+              <td colspan="10" class="cert-empty">{{ monthFilterActive ? `${queryMonthLabel}无在保人员` : '暂无人员明细' }}</td>
             </tr>
           </tbody>
         </table>
@@ -163,8 +201,14 @@ function printPage() {
   width: 100%;
   max-width: 860px;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 8px;
   margin-bottom: 12px;
+}
+.month-hint {
+  font-size: 13px;
+  color: #666;
 }
 .print-btn {
   background: #3157e5;
