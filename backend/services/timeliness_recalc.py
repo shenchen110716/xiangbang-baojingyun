@@ -185,6 +185,18 @@ def recalculate(session: Session, *, fact_id: int, now: Optional[datetime] = Non
         rule = _rule_for(session, fact, operation)
         coverages = _coverages(session, fact)
 
+        if rule.get("billing_mode") == "daily":
+            # 日保（即时生效）的参停保及时率暂不纳入统计（用户反馈 2026-07-29）：
+            # 不写新结果，并把这个事实这个操作类型之前可能遗留的 current 结果
+            # 撤下，避免旧数据继续被计入卡片/明细。
+            session.execute(
+                update(EmploymentTimelinessResult)
+                .where(EmploymentTimelinessResult.employment_fact_id == fact.id,
+                       EmploymentTimelinessResult.operation_type == operation_type,
+                       EmploymentTimelinessResult.status == "current")
+                .values(status="superseded"))
+            continue
+
         if fact.status in FACT_EXCLUDED_STATUSES:
             # 未匹配/冲突的事实仍留痕，但不进正式口径（§20.6）。
             from .timeliness_engine import Verdict
@@ -238,6 +250,14 @@ def _advance_batch(session: Session, fact: EmploymentFact) -> None:
         select(EmploymentTimelinessResult.employment_fact_id).where(
             EmploymentTimelinessResult.employment_fact_id.in_(fact_ids),
             EmploymentTimelinessResult.status == "current")))
+    # 日保（即时生效）的事实永远不会有 current 结果行（recalculate() 里直接
+    # 跳过写入），但也要算"处理完了"，否则整批就会因为混了几条日保事实而
+    # 永远卡在 imported_pending_calculation（用户反馈 2026-07-29）。
+    for fid in set(fact_ids) - done:
+        fact_row = session.get(EmploymentFact, fid)
+        plan = _plan_for(session, fact_row) if fact_row else None
+        if plan is not None and plan.billing_mode == "daily":
+            done.add(fid)
     if fact_ids and all(fid in done for fid in fact_ids):
         batch.status = "completed"
         batch.updated_at = business_now()

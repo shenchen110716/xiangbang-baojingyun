@@ -71,15 +71,29 @@ def _seconds(later: datetime, earlier: datetime) -> int:
     return int((later - earlier).total_seconds())
 
 
+def _floor_to_date(value: Optional[datetime]) -> Optional[datetime]:
+    return value.replace(hour=0, minute=0, second=0, microsecond=0) if value is not None else None
+
+
 def judge_enrollment(data: EnrollmentInput) -> Verdict:
     """§9 参保阶梯，严格按序。"""
     hire = data.hire_at
+    coverages = data.coverages
+    if data.rule.get("billing_mode") == "monthly":
+        # 月保只精确到"天"：真实入职时间常带具体钟点（比如早上打卡时间），
+        # 保障生效时间又总是卡在自然日零点，逐秒比对基本不可能对上，会把
+        # 几乎所有月保参保都误判成"早"/"迟"（用户反馈 2026-07-29）。日保
+        # （即时生效）不在这条规则里——它在 recalculate() 那一层直接不纳入
+        # 统计，压根不会走到这个函数。
+        hire = _floor_to_date(hire)
+        coverages = [Coverage(_floor_to_date(c.effective_at), _floor_to_date(c.terminated_at))
+                    for c in coverages]
 
     # 入职尚未发生：不是"漏保"，只是还没到。
     if hire > data.now:
         return Verdict("pending", expected_at=hire)
 
-    live = [c for c in data.coverages if c.live_at(hire)]
+    live = [c for c in coverages if c.live_at(hire)]
     if len(live) > 1:
         # 多个候选保障期时判 conflict 而非挑一个：猜错会让该人的指标长期失真。
         return Verdict("conflict", expected_at=hire)
@@ -93,7 +107,7 @@ def judge_enrollment(data: EnrollmentInput) -> Verdict:
                        early_seconds=_seconds(hire, coverage.effective_at))
 
     # 入职时无有效保障：看之后是否补上了。
-    later = sorted((c for c in data.coverages if c.effective_at > hire),
+    later = sorted((c for c in coverages if c.effective_at > hire),
                    key=lambda c: c.effective_at)
     if later:
         first = later[0]
@@ -112,6 +126,12 @@ def judge_termination(data: TerminationInput) -> Verdict:
 
     expected = normalize_termination(data.leave_at, data.rule)
     actual = data.terminated_at
+    if data.rule.get("billing_mode") == "monthly":
+        # 同参保阶梯：月保只比"天"，不比具体钟点（用户反馈 2026-07-29）。
+        # normalize_termination 对月保本来就已经落在自然日零点，这里主要是
+        # 把实际停保时间（可能带钟点）也归到同一粒度上再比。
+        expected = _floor_to_date(expected)
+        actual = _floor_to_date(actual)
 
     if actual is None:
         # 应停时点还没到：尚未构成"漏停"。

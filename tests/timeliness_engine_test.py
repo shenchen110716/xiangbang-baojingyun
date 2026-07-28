@@ -84,6 +84,31 @@ def test_ambiguous_coverage_candidates_are_conflict_not_guessed():
     assert r.status == "conflict"
 
 
+def test_monthly_enrollment_ignores_time_of_day_when_same_calendar_day():
+    """月保只比"天"（用户反馈 2026-07-29）：真实入职时间常带具体钟点（比如
+    早上 8 点打卡），保障生效时间总是卡在自然日零点，逐秒比对基本对不上，
+    会把同一天参保误判成"早"甚至"迟"。"""
+    r = judge_enrollment(EnrollmentInput(hire_at=D(2026, 3, 1, 8, 0), now=D(2026, 4, 1),
+                                         coverages=[Coverage(D(2026, 3, 1, 0, 0), None)],
+                                         rule=RULE))
+    assert r.status == "timely", r.status
+
+
+def test_monthly_enrollment_next_day_effective_is_still_late_by_a_day():
+    """按天比对不会让次日生效方案的结构性一天等待消失，只是不再把当天的
+    钟点噪音也算进延迟——延迟应该刚好是一个自然日，不是 16 小时这种零头。"""
+    r = judge_enrollment(EnrollmentInput(hire_at=D(2026, 3, 1, 8, 0), now=D(2026, 4, 1),
+                                         coverages=[Coverage(D(2026, 3, 2, 0, 0), None)],
+                                         rule=RULE))
+    assert r.status == "late" and r.delay_seconds == 86400, (r.status, r.delay_seconds)
+
+
+def test_monthly_termination_ignores_time_of_day_when_same_calendar_day():
+    r = judge_termination(TerminationInput(leave_at=D(2026, 3, 31, 17, 0), now=D(2026, 4, 10),
+                                           terminated_at=D(2026, 4, 1, 9, 0), rule=RULE))
+    assert r.status == "timely", r.status
+
+
 # --- §10 停保阶梯 --------------------------------------------------------
 
 def test_monthly_last_working_day_expects_next_day_midnight():
