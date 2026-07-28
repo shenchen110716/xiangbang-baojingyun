@@ -38,6 +38,15 @@ const ocrHint = ref('')
 // 身份证号校验位（与后端 is_valid_id_number 同一算法），手工输入和 OCR 识别都实时提示，
 // 不用等提交时才发现号码打错/拍错
 const idNumberInvalid = computed(() => !!form.id_number && !isValidIdNumber(form.id_number))
+// 日期选择器默认时分秒都是 0：生效/停保本来就是按"零时起/二十四时止"的自然日边界算的
+// （用户反馈 2026-07-28 第 4 条），选择器打开时不该默认成当前时刻。
+const MIDNIGHT = new Date(2000, 0, 1, 0, 0, 0)
+function tomorrowMidnight() {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T00:00:00`
+}
 
 watch(visible, async (isVisible) => {
   if (!isVisible) return
@@ -62,7 +71,7 @@ watch(visible, async (isVisible) => {
       terminated_at: props.person.terminated_at ? props.person.terminated_at.replace('Z', '').slice(0, 19) : null,
     })
   } else {
-    Object.assign(form, { enterprise_id: null, actual_employer_id: null, position_id: null, name: '', id_number: '', phone: '', effective_at: null, terminated_at: null })
+    Object.assign(form, { enterprise_id: null, actual_employer_id: null, position_id: null, name: '', id_number: '', phone: '', effective_at: tomorrowMidnight(), terminated_at: null })
     dailyMode.value = 'temporary'
   }
 })
@@ -125,7 +134,7 @@ function resetPersonFields() {
   form.name = ''
   form.id_number = ''
   form.phone = ''
-  form.effective_at = null
+  form.effective_at = tomorrowMidnight()
   form.terminated_at = null
   ocrHint.value = ''
 }
@@ -211,7 +220,6 @@ async function submit() {
           <div v-if="idNumberInvalid" class="hint" style="color: var(--el-color-danger)">身份证号校验位不正确，可能拍错/打错了，请核对</div>
         </div>
       </el-form-item>
-      <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
       <el-form-item v-if="showDailyModeToggle" label="日结方式">
         <el-radio-group v-model="dailyMode">
           <el-radio value="temporary">临时日结（即时生效，24 小时后自动到期）</el-radio>
@@ -219,13 +227,16 @@ async function submit() {
         </el-radio-group>
       </el-form-item>
       <el-form-item label="生效时间">
-        <el-date-picker v-model="form.effective_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="请选择生效日期和时间" style="width: 100%" />
+        <el-date-picker v-model="form.effective_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" :default-time="MIDNIGHT" placeholder="请选择生效日期和时间" style="width: 100%" />
         <small class="hint">{{ effectiveRuleHint }}；留空则不修改</small>
       </el-form-item>
       <el-form-item v-if="!showDailyModeToggle || dailyMode === 'custom'" label="停保时间">
-        <el-date-picker v-model="form.terminated_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="请选择停保日期和时间" style="width: 100%" />
+        <el-date-picker v-model="form.terminated_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" :default-time="MIDNIGHT" placeholder="请选择停保日期和时间" style="width: 100%" />
         <small class="hint">最早为操作日次日 00:00，且必须晚于生效时间；留空则不修改</small>
       </el-form-item>
+      <!-- 手机号不是审核/参保决策的关键信息，放到表单最后，避免挡住上面更重要的
+           姓名/身份证号/生效停保时间（用户反馈 2026-07-28 第 4 条）。 -->
+      <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
 
       <div v-if="locked" class="locked-banner">
         归属信息已锁定（本次共添加 {{ addedCount }} 人），继续填写下一人信息后点"保存并继续"，或点"完成"结束。

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { listEnterprises } from '@/api/enterprises'
 import { listInsured } from '@/api/insured'
 import { listPolicies } from '@/api/reports'
 import type { InsuredPerson, Policy } from '@/api/types'
@@ -9,11 +10,17 @@ import { formatDateTime } from '@/utils/format'
 
 const route = useRoute()
 const type = computed(() => String(route.params.type))
+// enterprise/selection 两种批量模式的 :id 不是单个数字：enterprise 模式是企业 id
+// （跟其他模式一样是数字），selection 模式是逗号拼接的员工 id 列表，所以 idParam
+// 保留原始字符串，只有需要按单个数字用的地方才转 Number。
+const idParam = computed(() => String(route.params.id))
 const id = computed(() => Number(route.params.id))
 const loading = ref(true)
 const policy = ref<Policy | null>(null)
 const people = ref<InsuredPerson[]>([])
+const enterpriseName = ref('')
 const notFound = ref(false)
+const isBatch = computed(() => type.value === 'enterprise' || type.value === 'selection')
 
 const statusText: Record<string, string> = { active: '在保', pending: '待生效', stopped: '已停保' }
 
@@ -25,17 +32,37 @@ function dateOnly(value: string | null | undefined) {
 async function load() {
   loading.value = true
   try {
-    const [policies, allPeople] = await Promise.all([listPolicies(), listInsured()])
     if (type.value === 'person') {
+      const [policies, allPeople] = await Promise.all([listPolicies(), listInsured()])
       const person = allPeople.find((p) => p.id === id.value)
       if (!person) { notFound.value = true; return }
       people.value = [person]
       policy.value = policies.find((x) => x.id === person.policy_id) || null
-    } else {
+    } else if (type.value === 'policy') {
+      const policies = await listPolicies()
       const found = policies.find((x) => x.id === id.value)
       if (!found) { notFound.value = true; return }
       policy.value = found
-      people.value = allPeople.filter((p) => p.policy_id === found.id)
+      // 按 policy_id 让后端用 PolicyMember 权威解析这份保单下的人，不能靠
+      // InsuredPerson.policy_id 在前端过滤——那个字段停保/续保时会被清空或
+      // 指向别的保单，之前就是这里导致"打印证明是空的"。
+      people.value = await listInsured(undefined, found.id)
+    } else if (type.value === 'enterprise') {
+      // 整企业批量导出：按 enterprise_id 过滤，这个字段是不会为空/不会被停保
+      // 清空的稳定外键，不像 policy_id 那样有前面提到的坑，可以直接前端过滤。
+      const [enterprises, allPeople] = await Promise.all([listEnterprises(), listInsured()])
+      const enterprise = enterprises.find((e) => e.id === id.value)
+      if (!enterprise) { notFound.value = true; return }
+      enterpriseName.value = enterprise.name
+      people.value = allPeople.filter((p) => p.enterprise_id === id.value)
+    } else if (type.value === 'selection') {
+      // 批量勾选导出：:id 是逗号拼接的员工 id 列表（来自员工列表页的多选）。
+      const ids = new Set(idParam.value.split(',').map((x) => Number(x)).filter((n) => !Number.isNaN(n)))
+      if (!ids.size) { notFound.value = true; return }
+      const allPeople = await listInsured()
+      people.value = allPeople.filter((p) => ids.has(p.id))
+    } else {
+      notFound.value = true
     }
   } catch (e) {
     ElMessage.error((e as Error).message)
@@ -73,13 +100,20 @@ function printPage() {
         <button class="print-btn" @click="printPage">打印 / 存为 PDF</button>
       </div>
       <div class="certificate">
-        <h1 class="cert-title">{{ type === 'person' ? '在保证明' : '保单证明' }}</h1>
+        <h1 class="cert-title">{{ type === 'person' ? '在保证明' : isBatch ? '批量参保证明' : '保单证明' }}</h1>
         <ol class="cert-fields">
-          <li>险种名称：{{ policy?.plan_name || '—' }}</li>
-          <li>被保险人名称：{{ policy?.enterprise_name || people[0]?.enterprise_name || '—' }}</li>
-          <li>保单生效期间：{{ coveragePeriodText }}</li>
-          <li>保单号：{{ policy?.policy_no || people[0]?.policy_no || '—' }}</li>
+          <template v-if="isBatch">
+            <li>被保险人名称：{{ type === 'enterprise' ? enterpriseName : (people[0]?.enterprise_name || '—') }}</li>
+            <li>涉及人数：{{ people.length }} 人</li>
+          </template>
+          <template v-else>
+            <li>险种名称：{{ policy?.plan_name || '—' }}</li>
+            <li>被保险人名称：{{ policy?.enterprise_name || people[0]?.enterprise_name || '—' }}</li>
+            <li>保单生效期间：{{ coveragePeriodText }}</li>
+            <li>保单号：{{ policy?.policy_no || people[0]?.policy_no || '—' }}</li>
+          </template>
         </ol>
+        <div v-if="isBatch" class="cert-disclaimer" style="margin-bottom:14px">批量导出可能覆盖多份保单/多个产品，具体投保产品、生效/停保时间以下表逐人明细为准。</div>
         <div class="cert-subtitle">人员明细</div>
         <table class="cert-table">
           <thead>

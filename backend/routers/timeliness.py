@@ -149,7 +149,18 @@ def timeliness_recalculate(
         enqueue(session, fact_id=fact.id, reason="manual")
     session.commit()
 
-    result = process_outbox(session) if run else {"processed": 0, "failed": 0}
+    # process_outbox() 一次只处理 limit(默认100)条，导入/重算的量一旦超过这个数，
+    # 单次调用会漏处理剩下的——结果是这批人算出来的及时率卡在明显偏低甚至 0%，
+    # 要靠用户反复刷新页面（每次 GET /summary 的 drain_due 顺手再处理 50 条）才能
+    # 慢慢追平（用户反馈 2026-07-28 第 7 条）。这里循环处理到队列真正清空为止。
+    result = {"processed": 0, "failed": 0}
+    if run:
+        for _ in range(50):  # 安全上限：50*100=5000 条，远超单次导入/重算的量，避免真死循环
+            batch = process_outbox(session)
+            result["processed"] += batch["processed"]
+            result["failed"] += batch["failed"]
+            if batch["processed"] + batch["failed"] == 0:
+                break
     session.commit()
     audit(session, user, "recalculate", "timeliness", str(enterprise_id or "all"),
           f"queued={len(facts)} processed={result['processed']} failed={result['failed']}")

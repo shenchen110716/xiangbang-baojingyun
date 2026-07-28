@@ -252,7 +252,7 @@ function finishQuickInsure() {
       </template>
       <div class="filter-row">
         <FilterBar v-model:search="search" placeholder="按岗位名称/实际用工单位/类别搜索">
-          <el-select v-model="employerFilter" placeholder="按参保单位筛选" clearable style="width: 170px">
+          <el-select v-model="employerFilter" placeholder="按参保单位筛选" clearable filterable style="width: 170px">
             <el-option v-for="e in employers" :key="e.id" :label="e.name" :value="e.id" />
           </el-select>
           <el-select v-model="classFilter" placeholder="按类别筛选" clearable style="width: 130px">

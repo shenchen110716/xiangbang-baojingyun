@@ -1,8 +1,11 @@
 import { client } from './client'
 import type { InsuredPerson, PolicyMemberHistory } from './types'
 
-export function listInsured(q?: string) {
-  return client.get<InsuredPerson[]>('/insured', { params: q ? { q } : undefined }).then((r) => r.data)
+export function listInsured(q?: string, policyId?: number) {
+  const params: Record<string, string | number> = {}
+  if (q) params.q = q
+  if (policyId) params.policy_id = policyId
+  return client.get<InsuredPerson[]>('/insured', { params: Object.keys(params).length ? params : undefined }).then((r) => r.data)
 }
 
 export function createInsured(data: Partial<InsuredPerson>) {

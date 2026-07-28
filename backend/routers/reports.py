@@ -292,7 +292,10 @@ def export_policy(item_id:int,user:User=Depends(current_user),session:Session=De
     enterprise_export = user.role == 'enterprise'
     if enterprise_export: sheet.append(['保单号','投保单位','实际用工单位','岗位','职业类别','被保险人','身份证号','保险公司','保险方案','实际销售价','开始日期','结束日期','保单状态'])
     else: sheet.append(['保单号','投保单位','实际用工单位','岗位','职业类别','被保险人','身份证号','保险公司','保险方案','保险原价','总返佣比例','总返佣金额','保司结算底价','平台利润','销售最低价','实际销售价','业务员佣金','开始日期','结束日期','保单状态'])
-    for person in session.scalars(select(InsuredPerson).where(InsuredPerson.policy_id==policy.id).order_by(InsuredPerson.id.asc())):
+    # InsuredPerson.policy_id 会在停保/续保时被清空或改指别的保单，不是"这份保单挂了谁"的
+    # 权威来源；PolicyMember 才是（同 services/policies.py:policy_dict 的口径），按它取人才不会导出空表。
+    person_ids=[m.person_id for m in session.scalars(select(PolicyMember).where(PolicyMember.policy_id==policy.id).order_by(PolicyMember.id.asc()))]
+    for person in filter(None, (session.get(InsuredPerson, pid) for pid in dict.fromkeys(person_ids))):
         position=session.get(WorkPosition,person.position_id) if person.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None
         pricing=pricing_snapshot(plan,relation,plan_price_for_class(session,plan,person.occupation_class)) if plan else {}
         prefix=[policy.policy_no,enterprise.name if enterprise else '',employer.name if employer else (position.actual_employer if position else ''),position.name if position else person.occupation,person.occupation_class,person.name,person.id_number,plan.insurer if plan else '',plan.name if plan else '']

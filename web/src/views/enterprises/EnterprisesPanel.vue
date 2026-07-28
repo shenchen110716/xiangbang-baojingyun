@@ -102,6 +102,13 @@ function goManageAccounts(item: Enterprise) {
   router.push({ name: 'operators', query: { enterprise_id: item.id } })
 }
 
+// 整企业批量导出参保证明（用户反馈 2026-07-28 第 6 条："类似于导出三只松鼠这一
+// 整个企业的保单"），复用 CertificateView 的 enterprise 模式，按 enterprise_id
+// 过滤——这个字段稳定不会被停保清空，跟保单管理导出踩过的 policy_id 坑不是一回事。
+function exportEnterpriseCertificate(item: Enterprise) {
+  window.open(`/certificate/enterprise/${item.id}`, '_blank')
+}
+
 // ---- products (read-only) ----
 const productsVisible = ref(false)
 const productsList = ref<any[]>([])
@@ -178,17 +185,18 @@ async function approveEnterprise(item: Enterprise) {
         </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'approved' ? 'success' : 'warning'" size="small">
-              {{ row.status === 'approved' ? '已核验' : '待核验' }}
+            <el-tag :type="row.status === 'pending' ? 'warning' : row.status === 'approved' ? 'success' : 'info'" size="small">
+              {{ row.status === 'pending' ? '待核验' : row.status === 'approved' ? '已核验' : row.status === 'rejected' ? '已驳回' : row.status }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.status === 'pending'" link type="success" size="small" @click="approveEnterprise(row)">审核通过</el-button>
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-button link type="primary" size="small" @click="goManageAccounts(row)">管理账号</el-button>
             <el-button link type="primary" size="small" @click="openProducts(row)">参保产品</el-button>
+            <el-button link type="primary" size="small" @click="exportEnterpriseCertificate(row)">导出整企业保单</el-button>
             <el-button link type="danger" size="small" @click="removeEnterprise(row)">删除</el-button>
           </template>
         </el-table-column>

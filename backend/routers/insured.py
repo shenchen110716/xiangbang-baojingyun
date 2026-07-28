@@ -23,6 +23,27 @@ def _assert_min_age(id_number: str) -> None:
     birth = birth_date_from_id(id_number)
     if birth is None or age_on(birth, business_today()) < MIN_INSURE_AGE:
         raise HTTPException(400, f"被保险人未满 {MIN_INSURE_AGE} 周岁，不可参保")
+
+
+def _assert_id_number_not_active_elsewhere(session: Session, id_number: str, enterprise_id: int, exclude_person_id: int | None = None) -> None:
+    """姓名/身份证号应该唯一，避免后期出工伤理赔时对不上（用户反馈 2026-07-28 第 3 条）。
+    同一单位内已经按 id_number 去重；这里补跨单位的检查——同一人不能在两个不同单位
+    同时处于在保/待生效状态（真的会导致工伤时该由哪家单位的保单赔付说不清）。已停保的
+    历史记录不算，人换工作单位、老单位记录变成 stopped 之后应该允许在新单位重新参保。"""
+    stmt = select(InsuredPerson.id, InsuredPerson.enterprise_id).where(
+        InsuredPerson.id_number == id_number,
+        InsuredPerson.enterprise_id != enterprise_id,
+        InsuredPerson.status != "stopped",
+    )
+    if exclude_person_id is not None:
+        stmt = stmt.where(InsuredPerson.id != exclude_person_id)
+    row = session.execute(stmt.limit(1)).first()
+    if row is None:
+        return
+    other_enterprise = session.get(Enterprise, row.enterprise_id)
+    raise HTTPException(409, f"该身份证号已在「{other_enterprise.name if other_enterprise else '其他单位'}」处于在保/待生效状态，请先确认该员工是否已从原单位离职停保")
+
+
 from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
@@ -76,7 +97,7 @@ def _person_employer_access(
 
 
 @router.get("/insured")
-def insured(q: str = "", user: User = Depends(current_user), session: Session = Depends(db)):
+def insured(q: str = "", policy_id: int = 0, user: User = Depends(current_user), session: Session = Depends(db)):
     stmt = select(InsuredPerson).order_by(InsuredPerson.id.desc())
     if user.role=='enterprise' and user.enterprise_id:
         stmt=stmt.where(InsuredPerson.enterprise_id==user.enterprise_id)
@@ -84,6 +105,11 @@ def insured(q: str = "", user: User = Depends(current_user), session: Session = 
         if allowed is not None:
             stmt=stmt.join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(WorkPosition.actual_employer_id.in_(allowed))
     elif user.role!='admin': raise HTTPException(403,'无权查看参保员工')
+    if policy_id:
+        # InsuredPerson.policy_id 会在停保/续保时被清空或指向别的保单，不是"这份保单挂了谁"的
+        # 权威来源，PolicyMember 才是（同 services/policies.py:policy_dict、本文件导出接口的口径）。
+        member_person_ids=set(session.scalars(select(PolicyMember.person_id).where(PolicyMember.policy_id==policy_id)))
+        stmt=stmt.where(InsuredPerson.id.in_(member_person_ids)) if member_person_ids else stmt.where(InsuredPerson.id.is_(None))
     if q: stmt = stmt.where(or_(InsuredPerson.name.contains(q), InsuredPerson.phone.contains(q)))
     result=[]
     for x in session.scalars(stmt):
@@ -153,6 +179,7 @@ def add_person(data: PersonIn, user: User = Depends(current_user), session: Sess
     if not is_valid_id_number(data.id_number): raise HTTPException(400,'身份证号格式不正确')
     _assert_min_age(data.id_number)
     if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==data.enterprise_id,InsuredPerson.id_number==data.id_number).limit(1)): raise HTTPException(409,'该身份证号已在本单位参保，请勿重复添加')
+    _assert_id_number_not_active_elsewhere(session, data.id_number, data.enterprise_id)
     effective_at = _parse_business_time(data.effective_at, "生效")
     terminated_at = _parse_business_time(data.terminated_at, "停保")
     payload=data.model_dump(exclude={"effective_at", "terminated_at"})
@@ -184,6 +211,7 @@ def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),
         if not is_valid_id_number(values['id_number']): raise HTTPException(400,'身份证号格式不正确')
         _assert_min_age(values['id_number'])
         if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==item.enterprise_id,InsuredPerson.id_number==values['id_number'],InsuredPerson.id!=item.id).limit(1)): raise HTTPException(409,'该身份证号已在本单位参保，请勿重复添加')
+        _assert_id_number_not_active_elsewhere(session, values['id_number'], item.enterprise_id, exclude_person_id=item.id)
     if 'position_id' in values:
         position=session.get(WorkPosition,values['position_id'])
         if not position or position.enterprise_id!=item.enterprise_id or position.status!='approved': raise HTTPException(400,'只能选择本单位已审核通过的有效岗位')
@@ -290,7 +318,9 @@ def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Se
     for index,row in enumerate(data.rows,start=2):
         identity=row.id_number.strip();name=row.name.strip()
         if not name or not identity: errors.append({'row':index,'message':'姓名和身份证号必填'});continue
-        if identity in seen or session.scalar(select(InsuredPerson.id).where(InsuredPerson.id_number==identity).limit(1)): errors.append({'row':index,'message':'身份证号重复'});continue
+        if identity in seen or session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==data.enterprise_id,InsuredPerson.id_number==identity).limit(1)): errors.append({'row':index,'message':'身份证号重复'});continue
+        try: _assert_id_number_not_active_elsewhere(session, identity, data.enterprise_id)
+        except HTTPException as exc: errors.append({'row':index,'message':exc.detail});continue
         seen.add(identity);item=InsuredPerson(enterprise_id=data.enterprise_id,position_id=position.id,name=name,id_number=identity,phone=row.phone.strip(),occupation=position.name,occupation_class=position.occupation_class,status='pending');session.add(item);created.append(item)
     if errors: session.rollback();return {'ok':False,'created':0,'errors':errors}
     session.flush()
@@ -359,6 +389,8 @@ async def import_insured_file(kind:Literal['enrollment','termination']=Form(...)
         if kind=='enrollment':
             if not person_name: errors.append({'row':row_no,'message':'姓名必填'});continue
             if existing and existing.status!='stopped': errors.append({'row':row_no,'message':'该员工已在保或待审核'});continue
+            try: _assert_id_number_not_active_elsewhere(session, identity, row_enterprise_id)
+            except HTTPException as exc: errors.append({'row':row_no,'message':exc.detail});continue
             row_position=default_position if row_enterprise_id==enterprise_id and not (row_employer_name or row_position_name) else None
             if row_position is None:
                 employer=session.scalar(select(ActualEmployer).where(ActualEmployer.enterprise_id==row_enterprise_id,ActualEmployer.name==row_employer_name)) if row_employer_name else None

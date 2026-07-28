@@ -79,6 +79,14 @@ function openDetail(item: InsuredPerson) {
 function openCertificate(item: InsuredPerson) {
   window.open(`/certificate/person/${item.id}`, '_blank')
 }
+// 批量导出勾选员工的参保证明：之前只能一个个点"参保证明"单独导出，一次导出
+// 一整个企业（比如"三只松鼠"）几十上百人要点几十上百次——复用列表已有的多选
+// 勾选框，:id 传逗号拼接的员工 id 列表给 CertificateView 的 selection 模式。
+function openBatchCertificate() {
+  if (!selected.value.length) { ElMessage.error('请先勾选员工'); return }
+  const ids = selected.value.map((p) => p.id).join(',')
+  window.open(`/certificate/selection/${ids}`, '_blank')
+}
 function openEditor(item: InsuredPerson | null) {
   activePerson.value = item
   editorVisible.value = true
@@ -209,6 +217,7 @@ function exportCsv() {
             <el-option label="批量转待生效" value="pending" />
           </el-select>
           <el-button @click="runBulkAction">执行勾选操作</el-button>
+          <el-button @click="openBatchCertificate">批量导出参保证明（{{ selected.length }}）</el-button>
         </div>
       </div>
       <el-table :data="paged" size="small" max-height="560" @selection-change="(rows: InsuredPerson[]) => (selected = rows)">
