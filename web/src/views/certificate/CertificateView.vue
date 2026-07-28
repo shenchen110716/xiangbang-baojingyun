@@ -73,12 +73,55 @@ async function load() {
 }
 onMounted(load)
 
+// 按自然月查询（用户反馈 2026-07-29）：只对"保单证明"（单份保单）开放，
+// 批量证明本来就是当前快照，不涉及历史月份的问题。选中月份后只保留在
+// 那个自然月里有过在保区间（哪怕只覆盖一天）的人，打印/存为 PDF 时就是
+// 那个月份的名单。
+const queryMonth = ref('')
+const monthFilterActive = computed(() => type.value === 'policy' && !!queryMonth.value)
+function pad2(n: number) {
+  return String(n).padStart(2, '0')
+}
+function formatYMD(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+// 查询月的自然月边界：月初 00:00 起、月底 24:00（即下月 1 号 00:00）止。
+const queryMonthRange = computed(() => {
+  if (!queryMonth.value) return null
+  const [y, m] = queryMonth.value.split('-').map(Number)
+  const monthStart = new Date(y, m - 1, 1)
+  const monthEnd = new Date(y, m, 1)
+  const monthEndDisplay = new Date(y, m, 0) // 月底最后一天，用于展示；筛选仍用 monthEnd（下月 1 号）判断"是否覆盖到月底"
+  return { monthStart, monthEnd, monthEndDisplay }
+})
+const displayPeople = computed(() => {
+  if (!monthFilterActive.value || !queryMonthRange.value) return people.value
+  const { monthStart, monthEnd } = queryMonthRange.value
+  return people.value.filter((p) => {
+    if (!p.effective_at) return false
+    const effective = new Date(p.effective_at)
+    const terminated = p.terminated_at ? new Date(p.terminated_at) : null
+    return effective < monthEnd && (terminated === null || terminated > monthStart)
+  })
+})
+const queryMonthLabel = computed(() => {
+  if (!queryMonth.value) return ''
+  const [y, m] = queryMonth.value.split('-')
+  return `${y}年${Number(m)}月`
+})
+
 const coveragePeriodText = computed(() => {
   if (type.value === 'person' && people.value[0]) {
     const p = people.value[0]
     const start = dateOnly(p.effective_at)
     const end = p.terminated_at ? dateOnly(p.terminated_at) : '长期有效'
     return start ? `${start} 零时起至 ${end === '长期有效' ? '长期' : end + ' 二十四时止'}` : '—'
+  }
+  if (type.value === 'policy' && monthFilterActive.value && queryMonthRange.value) {
+    // 按月查询时，保单生效期间改成显示查询月的自然月区间（月初零时至月底
+    // 二十四时），而不是这份保单整体的生效期间——用户反馈 2026-07-29。
+    const { monthStart, monthEndDisplay } = queryMonthRange.value
+    return `${formatYMD(monthStart)} 零时起至 ${formatYMD(monthEndDisplay)} 二十四时止`
   }
   if (policy.value) {
     // end_date 后端从来没赋过值（保单是持续有效的容器，没有固定到期日这个
@@ -91,30 +134,6 @@ const coveragePeriodText = computed(() => {
       : `${policy.value.start_date} 零时起至长期有效`
   }
   return '—'
-})
-
-// 按自然月查询（用户反馈 2026-07-29）：只对"保单证明"（单份保单）开放，
-// 批量证明本来就是当前快照，不涉及历史月份的问题。选中月份后只保留在
-// 那个自然月里有过在保区间（哪怕只覆盖一天）的人，打印/存为 PDF 时就是
-// 那个月份的名单。
-const queryMonth = ref('')
-const monthFilterActive = computed(() => type.value === 'policy' && !!queryMonth.value)
-const displayPeople = computed(() => {
-  if (!monthFilterActive.value) return people.value
-  const [y, m] = queryMonth.value.split('-').map(Number)
-  const monthStart = new Date(y, m - 1, 1)
-  const monthEnd = new Date(y, m, 1)
-  return people.value.filter((p) => {
-    if (!p.effective_at) return false
-    const effective = new Date(p.effective_at)
-    const terminated = p.terminated_at ? new Date(p.terminated_at) : null
-    return effective < monthEnd && (terminated === null || terminated > monthStart)
-  })
-})
-const queryMonthLabel = computed(() => {
-  if (!queryMonth.value) return ''
-  const [y, m] = queryMonth.value.split('-')
-  return `${y}年${Number(m)}月`
 })
 
 function printPage() {
