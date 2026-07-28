@@ -35,12 +35,14 @@ def dashboard(user: User = Depends(current_user), session: Session = Depends(db)
 
     alerts=[]
     premium_agg: dict[int, dict] = {}
-    usage_recharged_total = usage_consumed_total = usage_available_total = 0.0
+    usage_recharged_total = usage_consumed_total = usage_available_total = usage_daily_total = 0.0
+    usage_active_people_total = 0
     for ent in enterprises:
         if project_scoped: continue
         uview=usage_account_view(session,ent)
         daily_usage=uview['active_people']*uview['daily_rate']
         usage_recharged_total+=uview['recharged']; usage_consumed_total+=uview['consumed']; usage_available_total+=uview['available']
+        usage_daily_total+=daily_usage; usage_active_people_total+=uview['active_people']
         active_policies=list(session.scalars(select(Policy).where(Policy.enterprise_id==ent.id,Policy.status=='active')))
         for row in premium_account_view(session, ent):
             insurer_set = set(row["insurers"])
@@ -69,7 +71,19 @@ def dashboard(user: User = Depends(current_user), session: Session = Depends(db)
         scoped_people=select(InsuredPerson.id).join(WorkPosition,InsuredPerson.position_id==WorkPosition.id).where(WorkPosition.actual_employer_id.in_(employer_filter))
         policy_query=policy_query.join(PolicyMember,Policy.id==PolicyMember.policy_id).filter(PolicyMember.person_id.in_(scoped_people)).distinct()
         claim_query=claim_query.filter(Claim.person_id.in_(scoped_people))
-    return {"portal": "enterprise" if user.role == "enterprise" else "admin", "enterprises": len(enterprises), "people": len(people), "active_people":len(active_people), "active_policies": policy_query.count(), "pending_enterprises": session.query(Enterprise).filter(Enterprise.status == "pending").count() if not enterprise_filter else 0, "pending_people": len([x for x in people if x.status == "pending"]), "claims_open": claim_query.count(), "premium_accounts": list(premium_agg.values()), "usage_balance": 0 if project_scoped else amount(usage_available_total), "usage_recharged": 0 if project_scoped else amount(usage_recharged_total), "usage_consumed": 0 if project_scoped else amount(usage_consumed_total), "usage_available": 0 if project_scoped else amount(usage_available_total), "balance_alerts": alerts, "pending_terminations_count": session.query(PendingTermination).filter(PendingTermination.status == "pending").count() if user.role == "admin" else 0}
+    # 单价：账户余额卡片汇总的是全平台（或企业自己）的服务费账户，但费率是
+    # 按投保单位各自配置的（usage_fee_daily，默认 0.1，可在单位管理里调），
+    # 平台端多单位时没有唯一的"单价"——用在保人天加权平均，代表这批余额实际
+    # 在按什么速度消耗；企业端本来就只有一家单位，加权平均自然退化成它自己
+    # 的费率。之前这里根本没往返回体里塞这个字段，前端只能显示 ¥0（用户反馈
+    # 2026-07-29）。
+    if usage_active_people_total:
+        usage_daily_rate = usage_daily_total / usage_active_people_total
+    elif enterprise_filter and enterprises:
+        usage_daily_rate = float(enterprises[0].usage_fee_daily or 0.1)
+    else:
+        usage_daily_rate = 0.0
+    return {"portal": "enterprise" if user.role == "enterprise" else "admin", "enterprises": len(enterprises), "people": len(people), "active_people":len(active_people), "active_policies": policy_query.count(), "pending_enterprises": session.query(Enterprise).filter(Enterprise.status == "pending").count() if not enterprise_filter else 0, "pending_people": len([x for x in people if x.status == "pending"]), "claims_open": claim_query.count(), "premium_accounts": list(premium_agg.values()), "usage_balance": 0 if project_scoped else amount(usage_available_total), "usage_recharged": 0 if project_scoped else amount(usage_recharged_total), "usage_consumed": 0 if project_scoped else amount(usage_consumed_total), "usage_available": 0 if project_scoped else amount(usage_available_total), "daily_rate": 0 if project_scoped else round(usage_daily_rate, 4), "balance_alerts": alerts, "pending_terminations_count": session.query(PendingTermination).filter(PendingTermination.status == "pending").count() if user.role == "admin" else 0}
 
 @router.get("/screen/products", dependencies=[Depends(require_role("admin", "enterprise", detail="业务员请在业务员门户查看本人数据"))])
 def screen_products(user: User = Depends(current_user), session: Session = Depends(db)):

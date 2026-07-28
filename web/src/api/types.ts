@@ -444,6 +444,7 @@ export interface DashboardData {
   usage_recharged: number
   usage_consumed: number
   usage_available: number
+  daily_rate: number
   pending_terminations_count: number
   balance_alerts: Array<{
     enterprise_id: number
