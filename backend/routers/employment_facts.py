@@ -68,8 +68,8 @@ def employment_template(user: User = Depends(current_user)):
     sheet = book.active
     sheet.title = "真实用工反馈模板"
     sheet.append(TEMPLATE_HEADER)
-    sheet.append(["项目 A", "E001", "张三", "340123199001011238",
-                  "2026-03-01", "", "2026-03-02", "EXT-1", ""])
+    sheet.append(["项目 A", "张三", "340123199001011238", "2026-03-01", "",
+                  "EXT-1", "", "E001", "2026-03-02"])
     for cell in sheet[1]:
         cell.font = openpyxl.styles.Font(bold=True)
         cell.fill = openpyxl.styles.PatternFill("solid", fgColor="DCE6FF")

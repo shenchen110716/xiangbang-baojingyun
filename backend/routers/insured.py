@@ -25,23 +25,23 @@ def _assert_min_age(id_number: str) -> None:
         raise HTTPException(400, f"被保险人未满 {MIN_INSURE_AGE} 周岁，不可参保")
 
 
-def _assert_id_number_not_active_elsewhere(session: Session, id_number: str, enterprise_id: int, exclude_person_id: int | None = None) -> None:
-    """姓名/身份证号应该唯一，避免后期出工伤理赔时对不上（用户反馈 2026-07-28 第 3 条）。
-    同一单位内已经按 id_number 去重；这里补跨单位的检查——同一人不能在两个不同单位
-    同时处于在保/待生效状态（真的会导致工伤时该由哪家单位的保单赔付说不清）。已停保的
-    历史记录不算，人换工作单位、老单位记录变成 stopped 之后应该允许在新单位重新参保。"""
-    stmt = select(InsuredPerson.id, InsuredPerson.enterprise_id).where(
+def _assert_id_number_matches_name(session: Session, id_number: str, name: str, exclude_person_id: int | None = None) -> None:
+    """姓名和身份证号的对应关系应该唯一，不该有错误，避免后期出工伤理赔时对不上（用户
+    反馈 2026-07-28 第 3 条，2026-07-29 澄清范围）：这不是"同一人不能重复参保"的排他
+    检查——灵活用工场景下同一人同一单位可以同时参加不同险种加大保额，也可以同一天在
+    不同单位兼职、同时处于在保/待生效状态，这些都是正常业务，不能拦。真正要拦的是数据
+    质量问题：同一个身份证号如果在系统里（不分单位、不分状态）对应过不同的姓名，大概率
+    是身份证号或姓名有一处打错了，放过去将来出工伤时可能对不上人。"""
+    stmt = select(InsuredPerson.name).where(
         InsuredPerson.id_number == id_number,
-        InsuredPerson.enterprise_id != enterprise_id,
-        InsuredPerson.status != "stopped",
+        InsuredPerson.name != name,
     )
     if exclude_person_id is not None:
         stmt = stmt.where(InsuredPerson.id != exclude_person_id)
-    row = session.execute(stmt.limit(1)).first()
-    if row is None:
+    existing_name = session.scalar(stmt.limit(1))
+    if existing_name is None:
         return
-    other_enterprise = session.get(Enterprise, row.enterprise_id)
-    raise HTTPException(409, f"该身份证号已在「{other_enterprise.name if other_enterprise else '其他单位'}」处于在保/待生效状态，请先确认该员工是否已从原单位离职停保")
+    raise HTTPException(409, f"该身份证号在系统里已登记为「{existing_name}」，与本次填写的姓名「{name}」不一致，请核对是否有一方录入错误")
 
 
 from ..core.rbac import require_role
@@ -178,8 +178,9 @@ def add_person(data: PersonIn, user: User = Depends(current_user), session: Sess
     require_usage_funded(session, enterprise, user)
     if not is_valid_id_number(data.id_number): raise HTTPException(400,'身份证号格式不正确')
     _assert_min_age(data.id_number)
-    if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==data.enterprise_id,InsuredPerson.id_number==data.id_number).limit(1)): raise HTTPException(409,'该身份证号已在本单位参保，请勿重复添加')
-    _assert_id_number_not_active_elsewhere(session, data.id_number, data.enterprise_id)
+    # 同一单位内允许同一人同时参加不同险种加大保额，不按 enterprise_id 排他；
+    # 只查身份证号对应的姓名是否前后矛盾，真正拦的是打错字的数据质量问题。
+    _assert_id_number_matches_name(session, data.id_number, data.name)
     effective_at = _parse_business_time(data.effective_at, "生效")
     terminated_at = _parse_business_time(data.terminated_at, "停保")
     payload=data.model_dump(exclude={"effective_at", "terminated_at"})
@@ -210,8 +211,7 @@ def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),
     if 'id_number' in values and values['id_number']!=item.id_number:
         if not is_valid_id_number(values['id_number']): raise HTTPException(400,'身份证号格式不正确')
         _assert_min_age(values['id_number'])
-        if session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==item.enterprise_id,InsuredPerson.id_number==values['id_number'],InsuredPerson.id!=item.id).limit(1)): raise HTTPException(409,'该身份证号已在本单位参保，请勿重复添加')
-        _assert_id_number_not_active_elsewhere(session, values['id_number'], item.enterprise_id, exclude_person_id=item.id)
+        _assert_id_number_matches_name(session, values['id_number'], values.get('name', item.name), exclude_person_id=item.id)
     if 'position_id' in values:
         position=session.get(WorkPosition,values['position_id'])
         if not position or position.enterprise_id!=item.enterprise_id or position.status!='approved': raise HTTPException(400,'只能选择本单位已审核通过的有效岗位')
@@ -318,8 +318,8 @@ def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Se
     for index,row in enumerate(data.rows,start=2):
         identity=row.id_number.strip();name=row.name.strip()
         if not name or not identity: errors.append({'row':index,'message':'姓名和身份证号必填'});continue
-        if identity in seen or session.scalar(select(InsuredPerson.id).where(InsuredPerson.enterprise_id==data.enterprise_id,InsuredPerson.id_number==identity).limit(1)): errors.append({'row':index,'message':'身份证号重复'});continue
-        try: _assert_id_number_not_active_elsewhere(session, identity, data.enterprise_id)
+        if identity in seen: errors.append({'row':index,'message':'表格内身份证号重复'});continue
+        try: _assert_id_number_matches_name(session, identity, name)
         except HTTPException as exc: errors.append({'row':index,'message':exc.detail});continue
         seen.add(identity);item=InsuredPerson(enterprise_id=data.enterprise_id,position_id=position.id,name=name,id_number=identity,phone=row.phone.strip(),occupation=position.name,occupation_class=position.occupation_class,status='pending');session.add(item);created.append(item)
     if errors: session.rollback();return {'ok':False,'created':0,'errors':errors}
@@ -389,7 +389,7 @@ async def import_insured_file(kind:Literal['enrollment','termination']=Form(...)
         if kind=='enrollment':
             if not person_name: errors.append({'row':row_no,'message':'姓名必填'});continue
             if existing and existing.status!='stopped': errors.append({'row':row_no,'message':'该员工已在保或待审核'});continue
-            try: _assert_id_number_not_active_elsewhere(session, identity, row_enterprise_id)
+            try: _assert_id_number_matches_name(session, identity, person_name)
             except HTTPException as exc: errors.append({'row':row_no,'message':exc.detail});continue
             row_position=default_position if row_enterprise_id==enterprise_id and not (row_employer_name or row_position_name) else None
             if row_position is None:

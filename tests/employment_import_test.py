@@ -26,18 +26,21 @@ from backend.models import (
     EmploymentFact,
     EmploymentFeedbackBatch,
     Enterprise,
+    InsuredPerson,
     User,
     UserEmployerScope,
 )
 from backend.services import employment_import
 from backend.services.employment_import import confirm_import, preview_import
 
-HEADER = ["实际工作单位", "外部员工编号", "姓名", "身份证号",
-          "真实入职时间", "真实离职时间", "反馈时间", "外部用工记录号", "备注"]
-GOOD = ["项目 A", "E001", "张三", "340123199001011238", "2026-03-01", "", "2026-03-02", "EXT-1", ""]
-GOOD2 = ["项目 A", "E002", "李四", "110101199003077715", "2026-03-01", "", "2026-03-02", "EXT-2", ""]
-BAD_ID = ["项目 A", "E003", "王五", "BAD-ID", "2026-03-01", "", "2026-03-02", "EXT-3", ""]
-FOR_B = ["项目 B", "E004", "赵六", "50010319900307611X", "2026-03-01", "", "2026-03-02", "EXT-4", ""]
+# 跟模块里的 TEMPLATE_HEADER 走同一份定义，不要在测试里另抄一份顺序——之前
+# 就因为这里硬编码了一份旧列序，模板调整后测试却没跟着改，直接导致整份表头
+# 校验失败（用户反馈 2026-07-29 调整列序后发现）。
+HEADER = employment_import.TEMPLATE_HEADER
+GOOD = ["项目 A", "张三", "340123199001011238", "2026-03-01", "", "EXT-1", "", "E001", "2026-03-02"]
+GOOD2 = ["项目 A", "李四", "110101199003077715", "2026-03-01", "", "EXT-2", "", "E002", "2026-03-02"]
+BAD_ID = ["项目 A", "王五", "BAD-ID", "2026-03-01", "", "EXT-3", "", "E003", "2026-03-02"]
+FOR_B = ["项目 B", "赵六", "50010319900307611X", "2026-03-01", "", "EXT-4", "", "E004", "2026-03-02"]
 
 
 def _book(rows) -> bytes:
@@ -151,6 +154,7 @@ def run() -> None:
         _test_confirm_is_atomic_on_mid_write_failure(session, ctx)
         _test_same_file_hash_cannot_be_confirmed_twice(session, ctx)
         _test_manager_rows_outside_scope_are_blocking(session, ctx)
+        _test_blank_feedback_defaults_to_hire_or_leave(session, ctx)
     print("employment import tests passed")
 
 
@@ -185,7 +189,7 @@ def _test_confirm_blocked_while_blocking_error_remains(session, ctx):
 def _test_confirm_creates_facts(session, ctx):
     """匹配到在保人员的事实进入 active；匹配不到的停在 pending_match（§20.6）。"""
     _clear(session)
-    _seed_person(session, ctx, id_number=GOOD[3])
+    _seed_person(session, ctx, id_number=GOOD[2])
     out = _preview(session, ctx, [GOOD])
     result = confirm_import(session, ctx.owner, batch_id=out["batch_id"],
                             confirm_token=out["confirm_token"])
@@ -321,6 +325,34 @@ def _test_manager_rows_outside_scope_are_blocking(session, ctx):
     allowed = _preview(session, ctx, [GOOD], user=ctx.manager)
     assert allowed["valid_rows"] == 1, allowed
     print("  manager scope blocking ok")
+
+
+def _test_blank_feedback_defaults_to_hire_or_leave(session, ctx):
+    """反馈时间选填（用户反馈 2026-07-29）：不填就按"按时反馈"处理，取这行
+    事实里最新发生的时间点作为 feedback_reported_at，不能被 judge_feedback
+    当成 reported_at=None 的"漏报"（否则及时率会被这批数据拖低/卡在 0%）。
+    """
+    _clear(session)
+    only_hire = ["项目 A", "郑七", "330106199003077005", "2026-03-01", "",
+                 "EXT-5", "", "", ""]
+    hire_and_leave = ["项目 A", "冯八", "44030119900307700X", "2026-03-01", "2026-03-10",
+                       "EXT-6", "", "", ""]
+    _seed_person(session, ctx, id_number=only_hire[2], name="郑七")
+    _seed_person(session, ctx, id_number=hire_and_leave[2], name="冯八")
+    out = _preview(session, ctx, [only_hire, hire_and_leave])
+    assert out["valid_rows"] == 2, out
+    confirm_import(session, ctx.owner, batch_id=out["batch_id"],
+                   confirm_token=out["confirm_token"])
+    session.commit()
+    facts = {f.person_id: f for f in _facts(session)}
+    by_name = {p.id: p.name for p in session.scalars(select(InsuredPerson))}
+    for fact in facts.values():
+        name = by_name[fact.person_id]
+        if name == "郑七":
+            assert fact.feedback_reported_at == fact.actual_hire_at, "只有入职时反馈时间应默认等于入职时间"
+        elif name == "冯八":
+            assert fact.feedback_reported_at == fact.actual_leave_at, "有离职时反馈时间应默认等于离职时间"
+    print("  blank feedback defaults to hire/leave ok")
 
 
 if __name__ == "__main__":

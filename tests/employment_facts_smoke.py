@@ -26,10 +26,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# §7.1 standard template columns, in order.
+# §7.1 standard template columns, in order. 外部员工编号/反馈时间两个选填
+# 字段挪到最后（用户反馈 2026-07-29）——跟 employment_import.py 的
+# TEMPLATE_HEADER 保持同一份顺序，改动模板时两边要一起改。
 TEMPLATE_HEADER = [
-    "实际工作单位", "外部员工编号", "姓名", "身份证号",
-    "真实入职时间", "真实离职时间", "反馈时间", "外部用工记录号", "备注",
+    "实际工作单位", "姓名", "身份证号", "真实入职时间", "真实离职时间",
+    "外部用工记录号", "备注", "外部员工编号", "反馈时间",
 ]
 
 VALID_ID = "340123199001011238"
@@ -189,7 +191,7 @@ def run() -> None:
 def _row(employer="项目 A", emp_no="E001", name="张三", id_number=VALID_ID,
          hire="2026-03-01", leave="", feedback="2026-03-02",
          source="EXT-1", remark=""):
-    return [employer, emp_no, name, id_number, hire, leave, feedback, source, remark]
+    return [employer, name, id_number, hire, leave, source, remark, emp_no, feedback]
 
 
 def _assert_preview_does_not_write_facts(preview_ok, facts, owner):

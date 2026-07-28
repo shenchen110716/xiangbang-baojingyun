@@ -7,6 +7,7 @@ import { listActualEmployers, listPositions } from '@/api/positions'
 import { createInsured, setInsuredStatus, updateInsured } from '@/api/insured'
 import { recognizeIdCard } from '@/api/ocr'
 import { isValidIdNumber } from '@/utils/idNumber'
+import { formatDateTime } from '@/utils/format'
 import type { ActualEmployer, Enterprise, InsurancePlan, InsuredPerson, WorkPosition } from '@/api/types'
 
 const props = defineProps<{ person: InsuredPerson | null }>()
@@ -41,12 +42,38 @@ const idNumberInvalid = computed(() => !!form.id_number && !isValidIdNumber(form
 // 日期选择器默认时分秒都是 0：生效/停保本来就是按"零时起/二十四时止"的自然日边界算的
 // （用户反馈 2026-07-28 第 4 条），选择器打开时不该默认成当前时刻。
 const MIDNIGHT = new Date(2000, 0, 1, 0, 0, 0)
+function pad(n: number) {
+  return String(n).padStart(2, '0')
+}
+function toLocalIso(d: Date) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
 function tomorrowMidnight() {
   const d = new Date()
   d.setDate(d.getDate() + 1)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T00:00:00`
+  d.setHours(0, 0, 0, 0)
+  return toLocalIso(d)
 }
+function nowIso() {
+  return toLocalIso(new Date())
+}
+function addHoursIso(iso: string, hours: number) {
+  const d = new Date(iso)
+  d.setHours(d.getHours() + hours)
+  return toLocalIso(d)
+}
+// 即时生效险"保障时长"快捷选项：默认 24 小时，也可选更长档位；停保时间 =
+// 生效时间 + 这个时长，跟月单"次日零时"的默认规则是两条不同的轴
+// （effective_mode 而不是 billing_mode），不能和已有的临时日结开关混用
+// （用户反馈 2026-07-28 第 4 条，2026-07-29 澄清：即时生效险不能套用"次日
+// 零点"默认，得是"添加时间即生效，+24 小时或自选时长为止"）。
+const durationHours = ref(24)
+const durationOptions = [
+  { label: '24 小时', value: 24 },
+  { label: '48 小时', value: 48 },
+  { label: '72 小时', value: 72 },
+  { label: '7 天', value: 24 * 7 },
+]
 
 watch(visible, async (isVisible) => {
   if (!isVisible) return
@@ -58,6 +85,7 @@ watch(visible, async (isVisible) => {
   locked.value = false
   addedCount.value = 0
   ocrHint.value = ''
+  durationHours.value = 24
   if (props.person) {
     const matchedPosition = positionList.find((p) => p.id === props.person!.position_id)
     Object.assign(form, {
@@ -110,6 +138,39 @@ const effectiveRuleHint = computed(() => selectedPlan.value?.effective_mode === 
   : '月单：生效时间不得早于操作日次日 00:00')
 const isDailyBilling = computed(() => selectedPlan.value?.billing_mode === 'daily')
 const showDailyModeToggle = computed(() => !props.person && isDailyBilling.value)
+// 即时生效险（effective_mode）跟按日结算（billing_mode）是两条独立的轴：
+// 已有的"临时日结"开关只管 billing_mode==='daily' 时的一种特定二选一，
+// 这里新增的默认值/时长选择器只管 effective_mode==='immediate'，两者可能
+// 同时命中，此时以临时日结开关的两步下单流程为准（它本来就已经在服务端
+// 按"添加时刻生效、+24 小时停保"处理），这里的默认值/时长选择器让位。
+const isImmediateEffect = computed(() => selectedPlan.value?.effective_mode === 'immediate')
+const showDurationPicker = computed(() => !props.person && isImmediateEffect.value && !showDailyModeToggle.value)
+const showTerminatedPicker = computed(() =>
+  !!props.person || (!showDailyModeToggle.value && !isImmediateEffect.value) || (showDailyModeToggle.value && dailyMode.value === 'custom'),
+)
+
+// 新增参保的生效/停保默认值：月单默认次日零时（原有规则），即时生效险默认
+// "添加时间即生效"，停保时间 = 生效时间 + 保障时长（用户反馈 2026-07-29）。
+// 只在新增流程里生效，编辑已有人员保留原始存储时间，不重算。
+function applyEffectiveDefaults() {
+  if (props.person) return
+  if (isImmediateEffect.value) {
+    form.effective_at = nowIso()
+    form.terminated_at = addHoursIso(form.effective_at, durationHours.value)
+  } else {
+    form.effective_at = tomorrowMidnight()
+    form.terminated_at = null
+  }
+}
+// 选定岗位后才知道对应险种是月单还是即时单，据此重算默认值。
+watch(() => form.position_id, (id) => {
+  if (locked.value || !id) return
+  applyEffectiveDefaults()
+})
+// 即时生效险下，保障时长变化时停保时间跟着重算。
+watch(durationHours, () => {
+  if (!props.person && isImmediateEffect.value) form.terminated_at = addHoursIso(form.effective_at || nowIso(), durationHours.value)
+})
 
 async function handleOcrFile(e: Event) {
   const input = e.target as HTMLInputElement
@@ -134,8 +195,7 @@ function resetPersonFields() {
   form.name = ''
   form.id_number = ''
   form.phone = ''
-  form.effective_at = tomorrowMidnight()
-  form.terminated_at = null
+  applyEffectiveDefaults()
   ocrHint.value = ''
 }
 
@@ -230,7 +290,13 @@ async function submit() {
         <el-date-picker v-model="form.effective_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" :default-time="MIDNIGHT" placeholder="请选择生效日期和时间" style="width: 100%" />
         <small class="hint">{{ effectiveRuleHint }}；留空则不修改</small>
       </el-form-item>
-      <el-form-item v-if="!showDailyModeToggle || dailyMode === 'custom'" label="停保时间">
+      <el-form-item v-if="showDurationPicker" label="保障时长">
+        <el-select v-model="durationHours" style="width: 100%">
+          <el-option v-for="opt in durationOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+        </el-select>
+        <small class="hint">即时生效险停保时间 = 生效时间 + 保障时长，自动算出：{{ formatDateTime(form.terminated_at) }}</small>
+      </el-form-item>
+      <el-form-item v-if="showTerminatedPicker" label="停保时间">
         <el-date-picker v-model="form.terminated_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" :default-time="MIDNIGHT" placeholder="请选择停保日期和时间" style="width: 100%" />
         <small class="hint">最早为操作日次日 00:00，且必须晚于生效时间；留空则不修改</small>
       </el-form-item>

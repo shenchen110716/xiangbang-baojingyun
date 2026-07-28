@@ -1,13 +1,20 @@
-"""Regression: 参保员工姓名/身份证号唯一性（用户反馈 2026-07-28 第 3 条）.
+"""Regression: 参保员工姓名/身份证号一致性校验（用户反馈 2026-07-28 第 3 条，
+2026-07-29 澄清范围）.
 
-Before this fix, add_person/update_person/bulk_add_people/employment-fact
-import only checked id_number uniqueness *within one enterprise* (or, for
-the old bulk_add_people path, checked *globally including stopped records*
-— the opposite mistake, blocking legitimate re-enrollment after someone
-changes employer). Neither caught the real risk: the same person actively
-enrolled (pending/active) under two *different* enterprises at once, which
-is exactly the kind of data error that causes disputes over which policy
-should pay out on a workplace injury claim.
+This file previously tested an exclusivity rule (same id_number can't be
+active/pending in two enterprises at once, can't be duplicated within one
+enterprise). The user corrected that assumption: this is a 灵活用工/gig
+platform — one person can legitimately hold multiple different insurance
+policies within one enterprise (to raise coverage), and the same person can
+be simultaneously active/pending across *different* enterprises (moonlighting
+on the same day). Blocking either of those would have broken real business
+flows.
+
+The only thing worth blocking is a data-quality problem: the same id_number
+resolving to two different names anywhere in the system, which is almost
+always a typo and would cause a workplace-injury claim to not match the
+right person. That's what _assert_id_number_matches_name enforces, and this
+file now tests that narrower rule instead.
 """
 import os
 import sys
@@ -45,49 +52,66 @@ def run():
             person = add_person(PersonIn(enterprise_id=ent_a.id, name="张三", id_number=id_number), admin, session)
             assert person["id"] is not None
 
-            # 2. 同一身份证号在乙单位（不同单位）新增参保：这个人在甲单位还是
-            #    pending 状态（没审核也没停保），应该被拒绝，不能出现"两家单位
-            #    同时参保同一个人"这种真实事故风险。
+            # 2. 同一人、同一单位再参加一次（不同险种加大保额）：不应该被当成
+            #    重复参保拦下，姓名和身份证号都对得上就该放行。
+            second_policy = add_person(PersonIn(enterprise_id=ent_a.id, name="张三", id_number=id_number), admin, session)
+            assert second_policy["id"] is not None and second_policy["id"] != person["id"], \
+                "同一单位内同一人应该允许同时参加不同险种，不能被当成重复参保拦下"
+
+            # 3. 同一身份证号在乙单位（不同单位）新增参保，姓名一致：灵活用工场景下
+            #    同一天在不同单位兼职、同时在保/待生效是正常业务，不能拦。
+            moonlighting = add_person(PersonIn(enterprise_id=ent_b.id, name="张三", id_number=id_number), admin, session)
+            assert moonlighting["id"] is not None, "跨单位同时在保（兼职）应该允许，不该被当成异常拦下"
+
+            # 4. 同一身份证号，但姓名对不上：这是真正要拦的数据质量问题——身份证号
+            #    或姓名有一处打错了，放过去将来出工伤理赔时会对不上人。
             try:
-                add_person(PersonIn(enterprise_id=ent_b.id, name="张三", id_number=id_number), admin, session)
-                raise AssertionError("同一人在另一单位处于在保/待生效状态时，跨单位重复参保应该被拒绝")
+                add_person(PersonIn(enterprise_id=ent_b.id, name="张三丰", id_number=id_number), admin, session)
+                raise AssertionError("同一身份证号对应不同姓名应该被拒绝（数据质量校验，不是排他校验）")
             except HTTPException as e:
                 assert e.status_code == 409, f"应返回 409，实际 {e.status_code}"
-                assert "唯一性测试甲单位" in e.detail, f"错误信息应该指出具体是哪家单位占用的，实际：{e.detail}"
+                assert "张三" in e.detail, f"错误信息应该指出系统里已登记的姓名，实际：{e.detail}"
 
-            # 3. update_person 把身份证号改成一个"在别的单位还在保"的号码，也要拦。
-            other_active = add_person(PersonIn(enterprise_id=ent_b.id, name="李四", id_number="340123199001019985"), admin, session)
+            # 5. update_person 把身份证号改成一个"姓名对不上"的号码，也要拦。
+            other_person = add_person(PersonIn(enterprise_id=ent_b.id, name="李四", id_number="340123199001019985"), admin, session)
             try:
                 update_person(person["id"], PersonUpdate(id_number="340123199001019985"), admin, session)
-                raise AssertionError("update_person 改成别的单位在保人员的身份证号，应该被拒绝")
+                raise AssertionError("update_person 改成姓名对不上的身份证号，应该被拒绝")
             except HTTPException as e:
                 assert e.status_code == 409, f"应返回 409，实际 {e.status_code}"
 
-            # 4. 甲单位把张三停保后，乙单位应该能正常重新参保这个人——换工作是
-            #    合法场景，不能因为历史记录就永久锁死这个身份证号。
-            item = session.get(InsuredPerson, person["id"])
-            item.status = "stopped"
-            session.commit()
-            rejoined = add_person(PersonIn(enterprise_id=ent_b.id, name="张三", id_number=id_number), admin, session)
-            assert rejoined["id"] is not None, "原单位已停保后，应该允许在新单位重新参保"
+            # 6. update_person 改成姓名一致的号码（哪怕对应另一单位在保的人），
+            #    应该放行——这不是排他校验。
+            renamed = update_person(person["id"], PersonUpdate(id_number=id_number, name="张三"), admin, session)
+            assert renamed["id"] == person["id"]
 
-            # 5. bulk_add_people（批量拍照/表格添加）同样要遵守这条规则：
-            #    批次里有一行的身份证号在另一单位还在保，只有那一行报错，
-            #    其他合法行不受影响——已知 bulk_add_people 现在整批失败就
-            #    整批回滚（errors 非空直接 rollback），所以这里验证的是
-            #    "有错误时整批不落库，且错误信息指向正确的行"。
+            # 7. bulk_add_people（批量拍照/表格添加）遵守同一条姓名一致性规则：
+            #    批次里一行的身份证号在系统里对应了不同姓名才报错，纯粹的跨单位/
+            #    同单位重复不再是错误。
             position = WorkPosition(enterprise_id=ent_a.id, name="批量测试岗位", occupation_class="1-4类", status="approved")
             session.add(position); session.commit(); session.refresh(position)
             bulk_result = bulk_add_people(
                 BulkPersonIn(enterprise_id=ent_a.id, position_id=position.id, rows=[
                     BulkPersonRow(name="王五", id_number="340123199001019993"),
-                    BulkPersonRow(name="李四", id_number="340123199001019985"),  # 乙单位在保中，应报错
+                    BulkPersonRow(name="张三", id_number=id_number),  # 姓名对得上，允许同一人再添加
                 ]),
                 admin, session,
             )
-            assert bulk_result["ok"] is False, "批次里有跨单位冲突时，整批应该失败而不是部分成功"
-            assert any("在保/待生效" in e["message"] for e in bulk_result["errors"]), f"错误信息里应该有跨单位冲突提示：{bulk_result['errors']}"
-            assert session.scalar(select(InsuredPerson.id).where(InsuredPerson.id_number == "340123199001019993")) is None, \
+            assert bulk_result["ok"] is True, f"姓名对得上时批量添加应该成功：{bulk_result}"
+            assert bulk_result["created"] == 2
+
+            # 8. 批次里出现姓名对不上的行，只有那一行报错并整批回滚（bulk_add_people
+            #    现有行为：errors 非空就整体不落库）。
+            bulk_bad = bulk_add_people(
+                BulkPersonIn(enterprise_id=ent_a.id, position_id=position.id, rows=[
+                    BulkPersonRow(name="赵六", id_number="340123199001019002"),
+                    BulkPersonRow(name="张三丰", id_number=id_number),  # 姓名对不上，应报错
+                ]),
+                admin, session,
+            )
+            assert bulk_bad["ok"] is False, "批次里有姓名不一致的行时，整批应该失败"
+            assert any("张三" in e["message"] for e in bulk_bad["errors"]), f"错误信息里应该指出已登记的姓名：{bulk_bad['errors']}"
+            assert session.scalar(select(InsuredPerson.id).where(InsuredPerson.id_number == "340123199001019002")) is None, \
                 "整批回滚后，批次里其他本来合法的行也不应该落库"
 
     print("insured cross-enterprise uniqueness test: PASS")

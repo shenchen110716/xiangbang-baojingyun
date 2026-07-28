@@ -40,12 +40,13 @@ from .employer_scopes import allowed_employer_ids
 from .employment_matching import match_person
 from .spreadsheet import read_import_rows
 
-# §7.1 标准模板字段，顺序固定。
+# §7.1 标准模板字段，顺序固定。外部员工编号/反馈时间两个选填字段挪到最后——
+# 大多数场景不用填，放前面挡着更常用的必填列（用户反馈 2026-07-29）。
 TEMPLATE_HEADER = [
-    "实际工作单位", "外部员工编号", "姓名", "身份证号",
-    "真实入职时间", "真实离职时间", "反馈时间", "外部用工记录号", "备注",
+    "实际工作单位", "姓名", "身份证号", "真实入职时间", "真实离职时间",
+    "外部用工记录号", "备注", "外部员工编号", "反馈时间",
 ]
-_EMPLOYER, _EMP_NO, _NAME, _ID, _HIRE, _LEAVE, _FEEDBACK, _SOURCE, _REMARK = range(9)
+_EMPLOYER, _NAME, _ID, _HIRE, _LEAVE, _SOURCE, _REMARK, _EMP_NO, _FEEDBACK = range(9)
 
 # Outside the web root and never statically mounted, like position videos.
 _UPLOAD_ROOT = ROOT / "uploads" / "employment"
@@ -144,6 +145,13 @@ def _build_report(session: Session, user: User, *, enterprise_id: int,
 
         if hire and leave and leave <= hire:
             errors.append("真实离职时间必须晚于真实入职时间")
+
+        # 反馈时间选填（用户反馈 2026-07-29）：不填就默认为"按时反馈"，取这行
+        # 事实里最新发生的时间点——有离职就用离职时间，只有入职就用入职时间。
+        # 这样导入时不强制企业额外填一列，也不会把这批数据在及时率统计里错误
+        # 计入"漏报"（judge_feedback 对 reported_at=None 才会判 missing）。
+        if feedback is None:
+            feedback = leave or hire
 
         if source_event_id:
             if source_event_id in seen_source_ids:
