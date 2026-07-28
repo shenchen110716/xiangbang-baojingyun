@@ -87,6 +87,86 @@ function openBatchCertificate() {
   const ids = selected.value.map((p) => p.id).join(',')
   window.open(`/certificate/selection/${ids}`, '_blank')
 }
+
+// ---- 创建投保证明：按月份/派遣单位/姓名查询候选人员，再用穿梭框手工挑选
+// 具体生成证明的名单（用户反馈 2026-07-29，按参考截图的交互）。跟上面
+// "勾选后批量导出"是两条互补路径：这条路径不用先在几百行的表格里翻页找人，
+// 查询条件本身就是筛选器；表格勾选路径留给已经在列表里定位到具体人的场景。
+const createCertVisible = ref(false)
+const createCertMonth = ref('')
+const createCertEmployerName = ref('')
+const createCertPersonName = ref('')
+const createCertIncludeInactive = ref(false)
+const createCertCandidates = ref<InsuredPerson[]>([])
+const createCertTargetKeys = ref<number[]>([])
+const createCertQueried = ref(false)
+
+const createCertEmployerOptions = computed(() => {
+  const names = new Set<string>()
+  for (const x of list.value) if (x.actual_employer_name) names.add(x.actual_employer_name)
+  return Array.from(names).sort()
+})
+
+function openCreateCertificate() {
+  createCertVisible.value = true
+  createCertMonth.value = ''
+  createCertEmployerName.value = ''
+  createCertPersonName.value = ''
+  createCertIncludeInactive.value = false
+  createCertCandidates.value = []
+  createCertTargetKeys.value = []
+  createCertQueried.value = false
+}
+
+function queryCreateCertCandidates() {
+  if (!createCertMonth.value) { ElMessage.error('请先选择月份'); return }
+  const [y, m] = createCertMonth.value.split('-').map(Number)
+  const monthStart = new Date(y, m - 1, 1)
+  const monthEnd = new Date(y, m, 1)
+  let rows = list.value
+  if (createCertEmployerName.value) rows = rows.filter((p) => p.actual_employer_name === createCertEmployerName.value)
+  if (createCertPersonName.value.trim()) {
+    const q = createCertPersonName.value.trim()
+    rows = rows.filter((p) => p.name.includes(q))
+  }
+  if (!createCertIncludeInactive.value) {
+    // 默认只保留查询月份里有过在保区间（哪怕只覆盖一天）的人；勾选"是否包含
+    // 不在保"后才把整个月都没有在保区间的人也纳入候选（比如查更早离职的人）。
+    rows = rows.filter((p) => {
+      if (!p.effective_at) return false
+      const effective = new Date(p.effective_at)
+      const terminated = p.terminated_at ? new Date(p.terminated_at) : null
+      return effective < monthEnd && (terminated === null || terminated > monthStart)
+    })
+  }
+  createCertCandidates.value = rows
+  createCertTargetKeys.value = []
+  createCertQueried.value = true
+}
+
+function resetCreateCertQuery() {
+  createCertMonth.value = ''
+  createCertEmployerName.value = ''
+  createCertPersonName.value = ''
+  createCertIncludeInactive.value = false
+  createCertCandidates.value = []
+  createCertTargetKeys.value = []
+  createCertQueried.value = false
+}
+
+const createCertTransferData = computed(() =>
+  createCertCandidates.value.map((p) => ({
+    key: p.id,
+    label: `${p.name} · ${p.actual_employer_name || '无派遣单位'}${p.id_number ? ' · ' + p.id_number.slice(-4) : ''}`,
+  })),
+)
+
+function submitCreateCertificate() {
+  if (!createCertTargetKeys.value.length) { ElMessage.error('请至少选择一名人员'); return }
+  const ids = createCertTargetKeys.value.join(',')
+  window.open(`/certificate/selection/${ids}`, '_blank')
+  createCertVisible.value = false
+}
 function openEditor(item: InsuredPerson | null) {
   activePerson.value = item
   editorVisible.value = true
@@ -218,6 +298,7 @@ function exportCsv() {
           </el-select>
           <el-button @click="runBulkAction">执行勾选操作</el-button>
           <el-button @click="openBatchCertificate">批量导出参保证明（{{ selected.length }}）</el-button>
+          <el-button type="primary" plain @click="openCreateCertificate">创建投保证明</el-button>
         </div>
       </div>
       <el-table :data="paged" size="small" max-height="560" @selection-change="(rows: InsuredPerson[]) => (selected = rows)">
@@ -285,6 +366,42 @@ function exportCsv() {
         <el-button type="danger" :loading="stopSaving" @click="submitStop">确认停保</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="createCertVisible" title="创建投保证明" width="900px">
+      <el-form :inline="true" class="cert-query-form">
+        <el-form-item label="月份" required>
+          <el-date-picker v-model="createCertMonth" type="month" value-format="YYYY-MM" placeholder="请选择月份" style="width: 160px" />
+        </el-form-item>
+        <el-form-item label="派遣单位(可选)">
+          <el-select v-model="createCertEmployerName" clearable filterable placeholder="不限" style="width: 180px">
+            <el-option v-for="name in createCertEmployerOptions" :key="name" :label="name" :value="name" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="姓名(可选)">
+          <el-input v-model="createCertPersonName" clearable placeholder="支持模糊查询" style="width: 140px" />
+        </el-form-item>
+        <el-form-item>
+          <el-checkbox v-model="createCertIncludeInactive">是否包含不在保</el-checkbox>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="queryCreateCertCandidates">查询人员</el-button>
+          <el-button @click="resetCreateCertQuery">重置</el-button>
+        </el-form-item>
+      </el-form>
+      <el-transfer
+        v-model="createCertTargetKeys"
+        :data="createCertTransferData"
+        filterable
+        filter-placeholder="请输入搜索内容"
+        :titles="['可用人员', '生成证明的人员']"
+        class="cert-transfer"
+      />
+      <p v-if="createCertQueried && !createCertCandidates.length" class="dialog-hint">没有符合条件的人员，换个查询条件试试。</p>
+      <template #footer>
+        <el-button @click="createCertVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitCreateCertificate">提交</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -318,5 +435,17 @@ function exportCsv() {
   font-weight: 600;
   padding: 6px 14px;
   margin-right: 4px;
+}
+.dialog-hint {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin: 4px 0 12px;
+}
+.cert-query-form {
+  margin-bottom: 8px;
+}
+.cert-transfer {
+  display: flex;
+  justify-content: center;
 }
 </style>
