@@ -35,5 +35,18 @@ Page({
       } });
     } });
   },
+  // 保司/平台上传发票文件后，这里补上下载入口（用户反馈 2026-07-29：用户端
+  // 之前完全没有下载功能，只能看状态文案）。document_download_url 是带短时
+  // 签名 token 的 /api/... 绝对路径（跟理赔材料预览同一套模式，见 claim-
+  // detail.js 的 preview()），downloadAndOpen 期望的是相对 apiBase 的路径，
+  // 所以这里要先把 apiBase 末尾的 /api 去掉再拼接，否则会拼出 /api/api/...。
+  downloadInvoice(e) {
+    const url = e.currentTarget.dataset.url;
+    const name = e.currentTarget.dataset.name || '发票.pdf';
+    if (!url) return;
+    const fullUrl = /^https?:/.test(url) ? url : `${app.globalData.apiBase.replace(/\/api$/, '')}${url}`;
+    const fileType = String(name).split('.').pop().toLowerCase();
+    app.downloadAndOpen(fullUrl, { filename: name, fileType, loadingTitle: '正在下载发票' }).catch(() => {});
+  },
   onShareAppMessage() { return app.share('/pages/billing/billing', 'from=share'); }
 });
