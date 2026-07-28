@@ -372,6 +372,7 @@ export interface Invoice {
   enterprise_id: number
   enterprise_name: string
   account: 'premium' | 'usage'
+  invoice_type: string
   amount: number
   title: string
   tax_no: string

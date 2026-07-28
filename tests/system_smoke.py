@@ -271,7 +271,7 @@ def run():
             roster_data = asyncio.run(response_body(roster_export))
             assert roster_data.startswith(b'\xef\xbb\xbf') and '身份证号'.encode() in roster_data
 
-            invoice = create_invoice(InvoiceIn(enterprise_id=enterprise_id, account="premium", amount=88.5, title="冒烟测试企业"), user, session)
+            invoice = create_invoice(InvoiceIn(enterprise_id=enterprise_id, account="premium", amount=88.5, title="冒烟测试企业", tax_no="91330000MA2XXXXX1X"), user, session)
             reviewed = update_invoice(invoice["id"], InvoiceUpdate(status="issued"), admin, session)
             assert reviewed["status"] == "issued"
 

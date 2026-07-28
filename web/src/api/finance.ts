@@ -14,6 +14,14 @@ export function getInvoiceMonthlySummary(enterpriseId: number) {
   return client.get<InvoiceMonthlySummary>('/invoices/monthly-summary', { params: { enterprise_id: enterpriseId } }).then((r) => r.data)
 }
 
+export interface InvoiceTitleHistory {
+  title: string
+  tax_no: string
+}
+export function getInvoiceTitles(enterpriseId: number) {
+  return client.get<InvoiceTitleHistory[]>('/invoices/titles', { params: { enterprise_id: enterpriseId } }).then((r) => r.data)
+}
+
 export function createInvoice(data: { enterprise_id: number; account: 'premium' | 'usage'; invoice_type?: string; amount: number; title: string; tax_no?: string; email?: string }) {
   return client.post<Invoice>('/invoices', data).then((r) => r.data)
 }

@@ -20,11 +20,18 @@ Page({
     const item = this.data.items[0];
     wx.navigateTo({ url: `/pages/recharge-request/recharge-request?enterpriseId=${item ? item.id : 0}&tab=records` });
   },
+  // 发票抬头/纳税人识别号现在后端必填（用户反馈 2026-07-29）：小程序端用最近
+  // 一次申请（invoices 列表按创建时间倒序，[0] 就是最近一次）当默认值，用户
+  // 不输入直接确认时自动复用，不用每次重新打字；小程序端没有下拉选择控件，
+  // 有多条历史抬头时只带出最近一条，跟电脑端的多条下拉选择不是同一套体验。
   invoice() {
     const account = this.data.items[0]; if (!account) { wx.showToast({ title: '暂无可开票账户', icon: 'none' }); return; }
-    wx.showModal({ title: '发票抬头', editable: true, placeholderText: account.enterprise_name, success: (titleResult) => { if (!titleResult.confirm) return; const title = String(titleResult.content || account.enterprise_name).trim(); if (!title) { wx.showToast({ title: '请填写发票抬头', icon: 'none' }); return; }
-      wx.showModal({ title: '开票金额', editable: true, placeholderText: '请输入开票金额', success: (amountResult) => { if (!amountResult.confirm) return; const amount = Number(amountResult.content); if (!amount || amount <= 0) { wx.showToast({ title: '请输入有效金额', icon: 'none' }); return; }
-        app.request('/invoices', { method: 'POST', data: { enterprise_id: account.id, account: 'premium', amount, title, tax_no: '', email: '' } }).then(() => { wx.showToast({ title: '发票申请已提交' }); this.load(); });
+    const last = this.data.invoices[0] || {};
+    wx.showModal({ title: '发票抬头', editable: true, placeholderText: last.title || account.enterprise_name, success: (titleResult) => { if (!titleResult.confirm) return; const title = String(titleResult.content || last.title || account.enterprise_name).trim(); if (!title) { wx.showToast({ title: '请填写发票抬头', icon: 'none' }); return; }
+      wx.showModal({ title: '纳税人识别号', editable: true, placeholderText: last.tax_no || '必填', success: (taxResult) => { if (!taxResult.confirm) return; const tax_no = String(taxResult.content || last.tax_no || '').trim(); if (!tax_no) { wx.showToast({ title: '请填写纳税人识别号', icon: 'none' }); return; }
+        wx.showModal({ title: '开票金额', editable: true, placeholderText: '请输入开票金额', success: (amountResult) => { if (!amountResult.confirm) return; const amount = Number(amountResult.content); if (!amount || amount <= 0) { wx.showToast({ title: '请输入有效金额', icon: 'none' }); return; }
+          app.request('/invoices', { method: 'POST', data: { enterprise_id: account.id, account: 'premium', amount, title, tax_no, email: '' } }).then(() => { wx.showToast({ title: '发票申请已提交' }); this.load(); });
+        } });
       } });
     } });
   },

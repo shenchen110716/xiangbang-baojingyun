@@ -77,6 +77,23 @@ def invoice_monthly_summary(enterprise_id: int = Query(...), user: User = Depend
     }
 
 
+@router.get("/invoices/titles", dependencies=[Depends(require_role("admin", "enterprise", detail="无权查看发票抬头历史"))])
+def invoice_titles(enterprise_id: int = Query(...), user: User = Depends(current_user), session: Session = Depends(db)):
+    """该单位历史用过的发票抬头/税号组合，最近一次用的排最前，供申请发票时
+    自动带出、多条时下拉选择，不用每次重新手打（用户反馈 2026-07-29）。"""
+    assert_enterprise_scope(user, enterprise_id, "无权查看其他单位")
+    seen_pairs: set[tuple[str, str]] = set()
+    result = []
+    stmt = select(Invoice).where(Invoice.enterprise_id == enterprise_id, Invoice.title != "").order_by(Invoice.id.desc())
+    for inv in session.scalars(stmt):
+        key = (inv.title, inv.tax_no)
+        if key in seen_pairs:
+            continue
+        seen_pairs.add(key)
+        result.append({"title": inv.title, "tax_no": inv.tax_no})
+    return result
+
+
 @router.get("/invoices")
 def invoices(user:User=Depends(current_user),session:Session=Depends(db)):
     stmt=select(Invoice).order_by(Invoice.id.desc())

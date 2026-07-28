@@ -493,10 +493,18 @@ function logout() {
           <PageCard title="名下投保单位发票申请" :count="invoicesTotal">
             <el-table :data="invoicesPaged" size="small">
               <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
+              <el-table-column label="发票抬头 / 税号" min-width="160">
+                <template #default="{ row }">
+                  <div>{{ row.title }}</div>
+                  <small class="muted">{{ row.tax_no || '未填税号' }}</small>
+                </template>
+              </el-table-column>
+              <el-table-column label="票类" width="110"><template #default="{ row }">{{ row.invoice_type }}</template></el-table-column>
               <el-table-column prop="account" label="费用类型" width="100">
                 <template #default="{ row }">{{ row.account === 'premium' ? '保费' : '使用费' }}</template>
               </el-table-column>
               <el-table-column label="金额" width="100"><template #default="{ row }">{{ row.amount }}</template></el-table-column>
+              <el-table-column label="接收邮箱" min-width="140"><template #default="{ row }">{{ row.email || '未填' }}</template></el-table-column>
               <el-table-column label="状态" width="90">
                 <template #default="{ row }">{{ INVOICE_STATUS_TEXT[row.status] || row.status }}</template>
               </el-table-column>

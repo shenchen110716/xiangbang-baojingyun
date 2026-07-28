@@ -66,15 +66,39 @@ async function refreshInvoiceAmount() {
     invoiceForm.amount = invoiceSummary.value[invoiceForm.account].amount
   } catch { invoiceSummary.value = null }
 }
+// 发票抬头/税号填过一次就记住，下次申请直接带出来，不用重新输入；同一单位
+// 用过多个抬头时，允许在下方下拉里选（用户反馈 2026-07-29）。
+const invoiceTitleHistory = ref<financeApi.InvoiceTitleHistory[]>([])
+async function refreshInvoiceTitles() {
+  if (!invoiceForm.enterprise_id) { invoiceTitleHistory.value = []; return }
+  try {
+    invoiceTitleHistory.value = await financeApi.getInvoiceTitles(invoiceForm.enterprise_id)
+    if (invoiceTitleHistory.value.length === 1 && !invoiceForm.title && !invoiceForm.tax_no) {
+      applyInvoiceTitle(invoiceTitleHistory.value[0])
+    }
+  } catch { invoiceTitleHistory.value = [] }
+}
+function invoiceTitleSuggestions(query: string, callback: (results: { value: string; tax_no: string }[]) => void) {
+  const options = invoiceTitleHistory.value.map((h) => ({ value: h.title, tax_no: h.tax_no }))
+  callback(query ? options.filter((o) => o.value.toLowerCase().includes(query.toLowerCase())) : options)
+}
+function applyInvoiceTitle(entry: financeApi.InvoiceTitleHistory | { value: string; tax_no: string }) {
+  invoiceForm.title = 'value' in entry ? entry.value : entry.title
+  invoiceForm.tax_no = entry.tax_no
+}
 function openInvoiceCreate() {
   Object.assign(invoiceForm, { enterprise_id: auth.isEnterprise() ? auth.user?.enterprise_id ?? null : null, account: 'premium', invoice_type: '增值税普通发票', amount: 0, title: '', tax_no: '', email: '' })
   invoiceSummary.value = null
+  invoiceTitleHistory.value = []
   invoiceVisible.value = true
   refreshInvoiceAmount()
+  refreshInvoiceTitles()
 }
 watch(() => [invoiceForm.enterprise_id, invoiceForm.account], refreshInvoiceAmount)
+watch(() => invoiceForm.enterprise_id, refreshInvoiceTitles)
 async function submitInvoice() {
-  if (!invoiceForm.enterprise_id || invoiceForm.amount <= 0 || !invoiceForm.title) { ElMessage.error('请选择投保单位、填写金额和发票抬头'); return }
+  if (!invoiceForm.enterprise_id || invoiceForm.amount <= 0) { ElMessage.error('请选择投保单位、填写金额'); return }
+  if (!invoiceForm.title.trim() || !invoiceForm.tax_no.trim()) { ElMessage.error('发票抬头和纳税人识别号必须填写完整才能申请'); return }
   try {
     await financeApi.createInvoice({ ...invoiceForm, enterprise_id: invoiceForm.enterprise_id })
     ElMessage.success('发票申请已提交')
@@ -147,14 +171,20 @@ async function handleInvoiceUpload(item: Invoice, file: File) {
       <el-table :data="pagedInvoices" size="small">
         <el-table-column label="申请时间" width="150"><template #default="{ row }">{{ formatDateTime(row.created_at) }}</template></el-table-column>
         <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
-        <el-table-column label="发票抬头" min-width="140">
+        <el-table-column label="发票抬头 / 税号" min-width="160">
           <template #default="{ row }">
             <div>{{ row.title }}</div>
             <small class="muted">{{ row.tax_no || '未填税号' }}</small>
           </template>
         </el-table-column>
+        <el-table-column label="票类" width="110">
+          <template #default="{ row }">{{ row.invoice_type }}</template>
+        </el-table-column>
         <el-table-column label="账户 / 金额" width="140">
           <template #default="{ row }">{{ row.account === 'premium' ? '保费' : '使用费' }} · {{ money(row.amount) }}</template>
+        </el-table-column>
+        <el-table-column label="接收邮箱" min-width="140">
+          <template #default="{ row }">{{ row.email || '未填' }}</template>
         </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
@@ -235,8 +265,18 @@ async function handleInvoiceUpload(item: Invoice, file: File) {
             <span v-if="invoiceAlreadyDone" style="color: var(--el-color-warning)"> · 本月该账户已申请过发票</span>
           </div>
         </el-form-item>
-        <el-form-item label="发票抬头" required><el-input v-model="invoiceForm.title" /></el-form-item>
-        <el-form-item label="纳税人识别号"><el-input v-model="invoiceForm.tax_no" /></el-form-item>
+        <el-form-item label="发票抬头" required>
+          <el-autocomplete
+            v-model="invoiceForm.title"
+            :fetch-suggestions="invoiceTitleSuggestions"
+            placeholder="必填，用过的抬头会自动列出"
+            style="width: 100%"
+            @select="applyInvoiceTitle"
+          />
+        </el-form-item>
+        <el-form-item label="纳税人识别号" required>
+          <el-input v-model="invoiceForm.tax_no" placeholder="必填" />
+        </el-form-item>
         <el-form-item label="接收邮箱"><el-input v-model="invoiceForm.email" /></el-form-item>
       </el-form>
       <template #footer>
