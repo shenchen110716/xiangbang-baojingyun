@@ -324,6 +324,15 @@ function exportCsv() {
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="insuredStatusLabel(row).type">{{ insuredStatusLabel(row).text }}</el-tag></template>
         </el-table-column>
+        <!-- 生效/停保时间前移到保司标注前面，操作模块留在最后——生效/停保时间
+             是查这张表时最常用的信息，保司标注/添加时间更多是辅助信息，尽量把
+             重要信息往前放（用户反馈 2026-07-30 第 3 条）。 -->
+        <el-table-column label="生效时间" width="150">
+          <template #default="{ row }">{{ formatCoverageDate(row.effective_at, row.effective_mode) }}</template>
+        </el-table-column>
+        <el-table-column label="停保时间" width="150">
+          <template #default="{ row }">{{ formatCoverageDate(row.terminated_at, row.effective_mode) }}</template>
+        </el-table-column>
         <el-table-column label="保司标注" width="140">
           <template #default="{ row }">
             <el-tag v-if="row.insurer_flag_reason" type="danger" size="small">{{ row.insurer_flag_reason }}</el-tag>
@@ -331,12 +340,6 @@ function exportCsv() {
         </el-table-column>
         <el-table-column label="添加时间" width="150">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column label="生效时间" width="150">
-          <template #default="{ row }">{{ formatCoverageDate(row.effective_at, row.effective_mode) }}</template>
-        </el-table-column>
-        <el-table-column label="停保时间" width="150">
-          <template #default="{ row }">{{ formatCoverageDate(row.terminated_at, row.effective_mode) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="330" fixed="right">
           <template #default="{ row }">

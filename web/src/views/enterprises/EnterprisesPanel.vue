@@ -13,6 +13,7 @@ import FilterBar from '@/components/FilterBar.vue'
 import DetailModal from '@/components/DetailModal.vue'
 import StatTile from '@/components/StatTile.vue'
 import TablePagination from '@/components/TablePagination.vue'
+import WorkUnitsPanel from './WorkUnitsPanel.vue'
 import { usePagedList } from '@/composables/usePagedList'
 
 const router = useRouter()
@@ -117,6 +118,17 @@ async function openProducts(item: Enterprise) {
   productsList.value = await enterprisesApi.listEnterpriseProducts(item.id)
 }
 
+// ---- 实际用工单位管理（总后台端入口，用户反馈 2026-07-30 第 1 条：总后台
+// 之前完全没有新增实际用工单位的入口，只有企业自己能在岗位参保方案页管理）。
+// 复用企业端同一个 WorkUnitsPanel.vue，传具体投保单位 id 表示"以平台身份
+// 代管这一家单位"，不需要另开一套页面。
+const workUnitsVisible = ref(false)
+const workUnitsTarget = ref<Enterprise | null>(null)
+function openWorkUnits(item: Enterprise) {
+  workUnitsTarget.value = item
+  workUnitsVisible.value = true
+}
+
 async function removeEnterprise(item: Enterprise) {
   try {
     await ElMessageBox.confirm(`确定删除投保单位「${item.name}」吗？`, '删除确认', { type: 'warning' })
@@ -190,12 +202,13 @@ async function approveEnterprise(item: Enterprise) {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="操作" width="380" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.status === 'pending'" link type="success" size="small" @click="approveEnterprise(row)">审核通过</el-button>
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-button link type="primary" size="small" @click="goManageAccounts(row)">管理账号</el-button>
             <el-button link type="primary" size="small" @click="openProducts(row)">参保产品</el-button>
+            <el-button link type="primary" size="small" @click="openWorkUnits(row)">实际用工单位</el-button>
             <el-button link type="primary" size="small" @click="exportEnterpriseCertificate(row)">导出整企业保单</el-button>
             <el-button link type="danger" size="small" @click="removeEnterprise(row)">删除</el-button>
           </template>
@@ -250,6 +263,10 @@ async function approveEnterprise(item: Enterprise) {
         </el-table-column>
       </el-table>
     </DetailModal>
+
+    <el-dialog v-model="workUnitsVisible" :title="`实际用工单位管理 · ${workUnitsTarget?.name ?? ''}`" width="960px" destroy-on-close>
+      <WorkUnitsPanel v-if="workUnitsTarget" :enterprise-id="workUnitsTarget.id" />
+    </el-dialog>
   </div>
 </template>
 

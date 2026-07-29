@@ -85,7 +85,8 @@ def run() -> None:
         return ok("POST", "/api/operators", token, body)
 
     def add_employer(token: str, name: str):
-        return ok("POST", "/api/actual-employers", token, {"name": name})
+        # credit_code 现在必填且要过校验位（用户反馈 2026-07-30 第 2 条）。
+        return ok("POST", "/api/actual-employers", token, {"name": name, "credit_code": "91110108551385082Q"})
 
     def add_position(token: str, employer: dict):
         return call(
@@ -456,7 +457,9 @@ def run() -> None:
                 "POST",
                 "/api/actual-employers",
                 manager_token,
-                {"name": "越权新建单位"},
+                # credit_code 必填且要通过校验位，不然会先被 422 挡掉，测不到这里
+                # 真正要验的权限 403（用户反馈 2026-07-30 第 2 条）。
+                {"name": "越权新建单位", "credit_code": "91110108551385082Q"},
             )[0] == 403
             assert add_claim(
                 manager_token, enterprise_id, person_b["id"], "越权"

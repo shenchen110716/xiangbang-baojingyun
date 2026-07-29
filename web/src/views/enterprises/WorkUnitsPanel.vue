@@ -2,12 +2,20 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as positionsApi from '@/api/positions'
+import { recognizeBusinessLicense } from '@/api/ocr'
+import { isValidCreditCode } from '@/utils/creditCode'
 import type { ActualEmployer } from '@/api/types'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import StatTile from '@/components/StatTile.vue'
 import TablePagination from '@/components/TablePagination.vue'
 import { usePagedList } from '@/composables/usePagedList'
+
+// enterpriseId 为空时是企业端自助管理（原有行为，归属单位由后端按登录账号的
+// enterprise_id 解析）；总后台端从投保单位列表进来时会传具体的 enterpriseId，
+// 表示"以平台身份管理这一家单位的实际用工单位"——之前总后台完全没有入口能
+// 新增实际用工单位（用户反馈 2026-07-30 第 1 条）。
+const props = defineProps<{ enterpriseId?: number | null }>()
 
 const loading = ref(true)
 const list = ref<ActualEmployer[]>([])
@@ -16,7 +24,8 @@ const search = ref('')
 async function load() {
   loading.value = true
   try {
-    list.value = await positionsApi.listActualEmployers()
+    const all = await positionsApi.listActualEmployers()
+    list.value = props.enterpriseId ? all.filter((x) => x.enterprise_id === props.enterpriseId) : all
   } finally {
     loading.value = false
   }
@@ -34,19 +43,50 @@ const pausedCount = computed(() => list.value.filter((x) => x.status === 'paused
 
 const formVisible = ref(false)
 const editingId = ref<number | null>(null)
-const form = reactive({ name: '', credit_code: '', contact: '', phone: '' })
+// enterprise_id 只有总后台端（有 enterpriseId prop）才用得到，传给后端指定归属
+// 单位；企业端自己新增时后端按登录账号解析，这个字段会被忽略，留着不影响。
+const form = reactive({ name: '', credit_code: '', contact: '', phone: '', enterprise_id: null as number | null })
+// 营业执照 OCR 识别，跟 EnterprisesPanel.vue（投保单位新增）同一套能力，自动带出
+// 单位名称/统一社会信用代码，减少手打出错——之前这里完全没有校验（用户反馈
+// 2026-07-30 第 2 条）。
+const ocrLoading = ref(false)
+const ocrHint = ref('')
+async function handleLicenseFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  ocrLoading.value = true
+  ocrHint.value = ''
+  try {
+    const res = await recognizeBusinessLicense(file)
+    form.name = res.name
+    if (res.credit_code) form.credit_code = res.credit_code
+    ocrHint.value = res.mock ? '模拟识别结果，请核对后再保存' : '已识别，请核对后再保存'
+  } catch (e) {
+    ElMessage.error((e as Error).message || '识别失败，请手动填写')
+  } finally {
+    ocrLoading.value = false
+  }
+}
+const creditCodeInvalid = computed(() => !!form.credit_code && !isValidCreditCode(form.credit_code))
+
 function openCreate() {
   editingId.value = null
-  Object.assign(form, { name: '', credit_code: '', contact: '', phone: '' })
+  Object.assign(form, { name: '', credit_code: '', contact: '', phone: '', enterprise_id: props.enterpriseId ?? null })
+  ocrHint.value = ''
   formVisible.value = true
 }
 function openEdit(item: ActualEmployer) {
   editingId.value = item.id
   Object.assign(form, { name: item.name, credit_code: item.credit_code, contact: item.contact, phone: item.phone })
+  ocrHint.value = ''
   formVisible.value = true
 }
 async function submitForm() {
-  if (!form.name) { ElMessage.error('请填写单位名称'); return }
+  if (!form.name.trim() || form.name.trim().length < 2) { ElMessage.error('请填写完整的单位名称'); return }
+  if (!form.credit_code.trim()) { ElMessage.error('请填写统一社会信用代码'); return }
+  if (creditCodeInvalid.value) { ElMessage.error('统一社会信用代码格式或校验位不正确，请核对'); return }
   try {
     if (editingId.value) await positionsApi.updateActualEmployer(editingId.value, form)
     else await positionsApi.createActualEmployer(form)
@@ -126,8 +166,19 @@ async function removeItem(item: ActualEmployer) {
 
     <el-dialog v-model="formVisible" :title="editingId ? '编辑工作单位' : '新增实际工作单位'" width="480px">
       <el-form :model="form" label-width="140px">
+        <el-form-item v-if="!editingId" label="营业执照">
+          <input type="file" accept="image/*" @change="handleLicenseFile" />
+          <div v-if="ocrLoading" class="hint">正在识别…</div>
+          <div v-else-if="ocrHint" class="hint" style="color: var(--el-color-success)">{{ ocrHint }}</div>
+          <div v-else class="hint">上传营业执照照片可自动带出单位名称/统一社会信用代码，也可直接手工填写</div>
+        </el-form-item>
         <el-form-item label="单位名称" required><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="统一社会信用代码"><el-input v-model="form.credit_code" /></el-form-item>
+        <el-form-item label="统一社会信用代码" required>
+          <div style="width: 100%">
+            <el-input v-model="form.credit_code" :class="{ 'is-invalid-code': creditCodeInvalid }" />
+            <div v-if="creditCodeInvalid" class="hint" style="color: var(--el-color-danger)">格式或校验位不正确，可能拍错/打错了，请核对</div>
+          </div>
+        </el-form-item>
         <el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item>
         <el-form-item label="联系电话"><el-input v-model="form.phone" /></el-form-item>
       </el-form>
@@ -155,5 +206,14 @@ async function removeItem(item: ActualEmployer) {
 }
 .filter-row {
   padding: 0 20px 14px;
+}
+.hint {
+  display: block;
+  color: var(--el-text-color-placeholder);
+  font-size: 11px;
+  margin-top: 4px;
+}
+.is-invalid-code :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px var(--el-color-danger) inset;
 }
 </style>

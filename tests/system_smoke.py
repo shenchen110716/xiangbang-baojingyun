@@ -108,7 +108,7 @@ def run():
             except HTTPException as error:
                 assert error.status_code == 403
 
-            employer = add_actual_employer(ActualEmployerIn(name="实际工作单位 A"), user, session)
+            employer = add_actual_employer(ActualEmployerIn(name="实际工作单位 A", credit_code="91110108551385082Q"), user, session)
             employer_id = employer["id"]
             updated = update_actual_employer(employer_id, ActualEmployerUpdate(contact="联系人"), user, session)
             assert updated["contact"] == "联系人"
@@ -289,7 +289,7 @@ def run():
 
             assert change_password(PasswordChangeIn(current_password="smoke123", new_password="smoke456"), user, session)["ok"]
             assert pwd.verify("smoke456", user.password_hash)
-            unused = add_actual_employer(ActualEmployerIn(name="待删除工作单位"), user, session)
+            unused = add_actual_employer(ActualEmployerIn(name="待删除工作单位", credit_code="91110108551385082Q"), user, session)
             assert delete_actual_employer(unused["id"], user, session)["ok"]
             logs = audit_logs(100, admin, session)
             assert any(item["object_type"] == "invoice" for item in logs)

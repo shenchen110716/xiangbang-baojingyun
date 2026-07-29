@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..core import storage
 from ..core.audit import audit
+from ..core.credit_code import is_valid_credit_code
 from ..core.db import db
 from ..core.file_tokens import make_download_token, verify_download_token
 from ..core.rbac import require_role
@@ -145,6 +146,10 @@ def add_actual_employer(data:ActualEmployerIn,user:User=Depends(current_user),se
     eid=user.enterprise_id if user.role=='enterprise' else data.enterprise_id
     if not eid or not session.get(Enterprise,eid): raise HTTPException(400,'请指定有效投保单位')
     _require_employer_master_manager(user,eid)
+    # 校验企业名称及信用代码的准确性（用户反馈 2026-07-30 第 2 条）：名称非空/
+    # 最短长度已经在 schema 里管了，这里补统一社会信用代码的校验位——格式对
+    # 但校验位算错的假代码，之前直接原样落库，没人拦。
+    if not is_valid_credit_code(data.credit_code): raise HTTPException(400,'统一社会信用代码格式或校验位不正确')
     item=ActualEmployer(enterprise_id=eid,name=data.name,credit_code=data.credit_code,contact=data.contact,phone=data.phone);session.add(item);session.commit();session.refresh(item);audit(session,user,'create','actual_employer',str(item.id));return serialize(item)
 
 @router.patch("/actual-employers/{item_id}")
@@ -153,6 +158,7 @@ def update_actual_employer(item_id:int,data:ActualEmployerUpdate,user:User=Depen
     if not item: raise HTTPException(404,'实际工作单位不存在')
     _require_employer_master_manager(user,item.enterprise_id)
     if user.role=='enterprise' and _employer_has_active_people(session,item.id): raise HTTPException(400,"该实际用工单位下已有参保员工，不能修改，如需变更请联系平台")
+    if data.credit_code is not None and not is_valid_credit_code(data.credit_code): raise HTTPException(400,'统一社会信用代码格式或校验位不正确')
     for key,value in data.model_dump(exclude_unset=True).items():
         if value is not None: setattr(item,key,value.strip() if isinstance(value,str) else value)
     for position in session.scalars(select(WorkPosition).where(WorkPosition.actual_employer_id==item.id)):

@@ -154,7 +154,7 @@ def run():
             assert status == 403, f"enterprise self-recharge must be blocked, got {status}: {body}"
 
             # --- signed download links ---
-            emp = call_json("POST", "/api/actual-employers", admin, {"enterprise_id": ent_a["id"], "name": "安全测试用工单位"})[1]
+            emp = call_json("POST", "/api/actual-employers", admin, {"enterprise_id": ent_a["id"], "name": "安全测试用工单位", "credit_code": "91110108551385082Q"})[1]
             pos = call_json("POST", "/api/positions", admin, {"enterprise_id": ent_a["id"], "actual_employer_id": emp["id"], "actual_employer": emp["name"], "name": "安全测试岗位", "occupation_class": "1-3类"})[1]
             call_json("POST", f"/api/positions/{pos['id']}/videos", admin, {"name": "v", "url": "http://example.com/x.mp4"})
             video = call_json("GET", f"/api/positions/{pos['id']}/videos", admin)[1][0]

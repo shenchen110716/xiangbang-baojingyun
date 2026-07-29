@@ -148,6 +148,14 @@ const showDurationPicker = computed(() => !props.person && isImmediateEffect.val
 const showTerminatedPicker = computed(() =>
   !!props.person || (!showDailyModeToggle.value && !isImmediateEffect.value) || (showDailyModeToggle.value && dailyMode.value === 'custom'),
 )
+// 月单生效/停保时间必须准确到 00:00:00（用户反馈 2026-07-30 第 3 条）：原来
+// 用的是 type="datetime"，:default-time 只影响首次打开时面板的初始时分秒，
+// 用户仍然能手动滚动选出非零点的时间。月单场景直接换成 type="date"（只能
+// 选日期，没有时间滚轮），从控件层面就不给选非零点的机会；即时生效险的
+// 生效/停保时间本来就该是精确到分钟的真实时刻，不受这条约束。
+const dateOnlyMode = computed(() => !isImmediateEffect.value)
+const dateType = computed(() => (dateOnlyMode.value ? 'date' : 'datetime'))
+const dateDisplayFormat = computed(() => (dateOnlyMode.value ? 'YYYY-MM-DD' : 'YYYY-MM-DD HH:mm'))
 
 // 新增参保的生效/停保默认值：月单默认次日零时（原有规则），即时生效险默认
 // "添加时间即生效"，停保时间 = 生效时间 + 保障时长（用户反馈 2026-07-29）。
@@ -287,7 +295,7 @@ async function submit() {
         </el-radio-group>
       </el-form-item>
       <el-form-item label="生效时间">
-        <el-date-picker v-model="form.effective_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" :default-time="MIDNIGHT" placeholder="请选择生效日期和时间" style="width: 100%" />
+        <el-date-picker v-model="form.effective_at" :type="dateType" :format="dateDisplayFormat" value-format="YYYY-MM-DDTHH:mm:ss" :default-time="MIDNIGHT" placeholder="请选择生效日期和时间" style="width: 100%" />
         <small class="hint">{{ effectiveRuleHint }}；留空则不修改</small>
       </el-form-item>
       <el-form-item v-if="showDurationPicker" label="保障时长">
@@ -297,7 +305,7 @@ async function submit() {
         <small class="hint">即时生效险停保时间 = 生效时间 + 保障时长，自动算出：{{ formatDateTime(form.terminated_at) }}</small>
       </el-form-item>
       <el-form-item v-if="showTerminatedPicker" label="停保时间">
-        <el-date-picker v-model="form.terminated_at" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm:ss" :default-time="MIDNIGHT" placeholder="请选择停保日期和时间" style="width: 100%" />
+        <el-date-picker v-model="form.terminated_at" :type="dateType" :format="dateDisplayFormat" value-format="YYYY-MM-DDTHH:mm:ss" :default-time="MIDNIGHT" placeholder="请选择停保日期和时间" style="width: 100%" />
         <small class="hint">最早为操作日次日 00:00，且必须晚于生效时间；留空则不修改</small>
       </el-form-item>
       <!-- 手机号不是审核/参保决策的关键信息，放到表单最后，避免挡住上面更重要的

@@ -202,7 +202,7 @@ def run():
             plan_b = add_plan(PlanIn(insurer="第二保司", name="共享账户方案B", price=150, effective_mode="immediate"), admin, session)
             assert plan_a["billing_mode"] == "daily" and plan_b["billing_mode"] == "daily"
 
-            shared_employer = add_actual_employer(ActualEmployerIn(name="共享账户测试工作单位", enterprise_id=enterprise_id), admin, session)
+            shared_employer = add_actual_employer(ActualEmployerIn(name="共享账户测试工作单位", enterprise_id=enterprise_id, credit_code="91110108551385082Q"), admin, session)
             position_a = add_position(PositionIn(enterprise_id=enterprise_id, actual_employer_id=shared_employer["id"], actual_employer=shared_employer["name"], name="共享账户岗位A", occupation_class="1-3类", plan_id=plan_a["id"]), admin, session)
             position_b = add_position(PositionIn(enterprise_id=enterprise_id, actual_employer_id=shared_employer["id"], actual_employer=shared_employer["name"], name="共享账户岗位B", occupation_class="1-3类", plan_id=plan_b["id"]), admin, session)
             session.get(WorkPosition, position_a["id"]).status = "approved"

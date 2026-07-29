@@ -123,7 +123,8 @@ def run() -> None:
                   body={"username": username, "password": password, "portal": portal})["access_token"]
 
     def add_employer(token: str, name: str):
-        return ok("POST", "/api/actual-employers", token, {"name": name})
+        # credit_code 现在必填且要过校验位（用户反馈 2026-07-30 第 2 条）。
+        return ok("POST", "/api/actual-employers", token, {"name": name, "credit_code": "91110108551385082Q"})
 
     def facts(token: str):
         return ok("GET", "/api/employment-facts", token)["items"]

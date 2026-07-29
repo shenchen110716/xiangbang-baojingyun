@@ -318,6 +318,12 @@ def bulk_add_people(data:BulkPersonIn,user:User=Depends(current_user),session:Se
     for index,row in enumerate(data.rows,start=2):
         identity=row.id_number.strip();name=row.name.strip()
         if not name or not identity: errors.append({'row':index,'message':'姓名和身份证号必填'});continue
+        # 批量添加之前只查了姓名-身份证号一致性，没查校验位和年龄——单个添加和
+        # 表格导入两条路径都查了，这条路径漏了，同一个假身份证号能从这里混进来
+        # （用户反馈 2026-07-30 第 4 条：姓名和身份证号需要校验准确性及真实性）。
+        if not is_valid_id_number(identity): errors.append({'row':index,'message':'身份证号格式或校验位不正确'});continue
+        try: _assert_min_age(identity)
+        except HTTPException as exc: errors.append({'row':index,'message':exc.detail});continue
         if identity in seen: errors.append({'row':index,'message':'表格内身份证号重复'});continue
         try: _assert_id_number_matches_name(session, identity, name)
         except HTTPException as exc: errors.append({'row':index,'message':exc.detail});continue
@@ -389,6 +395,10 @@ async def import_insured_file(kind:Literal['enrollment','termination']=Form(...)
         if kind=='enrollment':
             if not person_name: errors.append({'row':row_no,'message':'姓名必填'});continue
             if existing and existing.status!='stopped': errors.append({'row':row_no,'message':'该员工已在保或待审核'});continue
+            # 表格导入这条路径本来就查了身份证号校验位（上面 378 行），但漏了
+            # 年龄——跟单个添加/批量添加统一补齐（用户反馈 2026-07-30 第 4 条）。
+            try: _assert_min_age(identity)
+            except HTTPException as exc: errors.append({'row':row_no,'message':exc.detail});continue
             try: _assert_id_number_matches_name(session, identity, person_name)
             except HTTPException as exc: errors.append({'row':row_no,'message':exc.detail});continue
             row_position=default_position if row_enterprise_id==enterprise_id and not (row_employer_name or row_position_name) else None
