@@ -202,7 +202,10 @@ async function approveEnterprise(item: Enterprise) {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="380" fixed="right">
+        <!-- 操作列按钮从原来 5 个涨到 7 个（含"实际用工单位"），380px 装不下，
+             固定列超宽会被裁掉/挤没——这正是用户反馈"找不到这个操作"的原因，
+             不是没部署到，是按钮被挤到看不见了（用户反馈 2026-07-30）。 -->
+        <el-table-column label="操作" width="620" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.status === 'pending'" link type="success" size="small" @click="approveEnterprise(row)">审核通过</el-button>
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
