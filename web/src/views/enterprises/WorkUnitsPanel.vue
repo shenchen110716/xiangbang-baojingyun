@@ -45,7 +45,11 @@ const formVisible = ref(false)
 const editingId = ref<number | null>(null)
 // enterprise_id 只有总后台端（有 enterpriseId prop）才用得到，传给后端指定归属
 // 单位；企业端自己新增时后端按登录账号解析，这个字段会被忽略，留着不影响。
-const form = reactive({ name: '', credit_code: '', contact: '', phone: '', enterprise_id: null as number | null })
+// 类型必须是 number | undefined（不能是 null）——ActualEmployer.enterprise_id
+// 是 number，Partial<ActualEmployer> 只允许 number | undefined，传 null 会让
+// vue-tsc 类型检查失败，导致 npm run build 整个失败、Render 部署被卡住（这才是
+// 用户反馈"改了还是看不到"的真正原因：不是没推送，是构建从这里就没成功过）。
+const form = reactive({ name: '', credit_code: '', contact: '', phone: '', enterprise_id: undefined as number | undefined })
 // 营业执照 OCR 识别，跟 EnterprisesPanel.vue（投保单位新增）同一套能力，自动带出
 // 单位名称/统一社会信用代码，减少手打出错——之前这里完全没有校验（用户反馈
 // 2026-07-30 第 2 条）。
@@ -73,7 +77,7 @@ const creditCodeInvalid = computed(() => !!form.credit_code && !isValidCreditCod
 
 function openCreate() {
   editingId.value = null
-  Object.assign(form, { name: '', credit_code: '', contact: '', phone: '', enterprise_id: props.enterpriseId ?? null })
+  Object.assign(form, { name: '', credit_code: '', contact: '', phone: '', enterprise_id: props.enterpriseId ?? undefined })
   ocrHint.value = ''
   formVisible.value = true
 }
