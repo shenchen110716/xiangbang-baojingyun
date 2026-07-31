@@ -2,6 +2,8 @@ package com.xbb.mall.internal;
 
 import com.xbb.mall.api.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbb.fund.api.AccountType;
+import com.xbb.fund.api.FundApi;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,11 +21,12 @@ class MallService implements MallApi {
     private final MallOutboxRepository outbox;
     private final ObjectMapper json;
     private final VoucherCode vouchers;
+    private final FundApi fundApi;
 
     MallService(ProductRepository products, MallOrderRepository orders,
                  SettlementTriggerPolicy triggerPolicy,
                  Clock clock,
-                     MallOutboxRepository outbox, ObjectMapper json, VoucherCode vouchers) {
+                     MallOutboxRepository outbox, ObjectMapper json, VoucherCode vouchers, FundApi fundApi) {
         this.products = products;
         this.orders = orders;
         this.triggerPolicy = triggerPolicy;
@@ -31,6 +34,7 @@ class MallService implements MallApi {
         this.outbox = outbox;
         this.json = json;
         this.vouchers = vouchers;
+        this.fundApi = fundApi;
     }
 
     private String serialize(Object event) {
@@ -72,6 +76,13 @@ class MallService implements MallApi {
 
         order.markPaid(vouchers.generate(order.getId(), order.getProductId(), order.getBuyerUserId()));
         orders.save(order);
+
+        // **钱要真的进账本。** 此前这里只发一个事件给报表域,报表上出现收入,
+        // 而监管账户一分钱没动——账实不符,且是静默的,对账时才会发现。
+        // §4.1 决策#1:资金域是唯一动钱者,商城不自己记账。
+        // 幂等键用订单号:重放不会重复入账(两个域是两个事务,重试是常态)。
+        fundApi.topUp(AccountType.PLATFORM_REVENUE, order.getAmountCents(),
+                "商城订单收款 order#" + order.getId());
 
         // §6.3.7:两类商品殊途同归,只是触发时机不同
         SettlementTrigger trigger = triggerPolicy.decide(

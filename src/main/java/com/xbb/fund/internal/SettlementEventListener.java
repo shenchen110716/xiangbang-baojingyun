@@ -2,6 +2,7 @@ package com.xbb.fund.internal;
 
 import com.xbb.settlement.api.SettlementCalculated;
 import com.xbb.settlement.api.SettlementVoided;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -12,6 +13,9 @@ import static org.springframework.transaction.event.TransactionPhase.AFTER_COMMI
 // 显式命名:broker 域也有个同名类 SettlementEventListener,默认 bean 名会撞车
 @Component("fundSettlementEventListener")
 class SettlementEventListener {
+
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(SettlementEventListener.class);
 
     private final PayoutRepository payouts;
 
@@ -30,12 +34,35 @@ class SettlementEventListener {
     @EventListener
     @Transactional(transactionManager = "fundTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(SettlementCalculated event) {
-        // 中继是至少一次投递,同一事件会重复到达。表上 settlement_id UNIQUE 已经挡住了第二笔钱,
-        // 但仅靠它会让中继撞约束、永远重试,事件卡在 FAILED。这里显式吸收重复,重试才能收敛。
+        // 中继是至少一次投递,同一事件会重复到达。
+        //
+        // **先查后插在并发下是无效的**:多实例(或多个测试上下文)的中继同时投递同一条
+        // SettlementCalculated 时,两边都查到"不存在",然后都插入,一个撞
+        // settlement_id UNIQUE。这正是铁律 4 里写过的那条——去重要让数据库裁决,
+        // 不能靠"查一下再写"。
+        //
+        // 先查一次仍然保留:绝大多数重复投递不是并发的,查一次能省掉一次异常。
+        // 但真撞上了就把它当成"已经有人建好了",而不是让事件卡在 FAILED 永远重试。
         if (payouts.findBySettlementId(event.settlementId()).isPresent()) {
             return;
         }
-        payouts.save(new Payout(event.settlementId(), event.workerUserId(), event.amountCents()));
+        try {
+            payouts.save(new Payout(event.settlementId(), event.workerUserId(), event.amountCents()));
+        } catch (DataIntegrityViolationException e) {
+            // **只在确认记录真的已存在时才吞。**
+            //
+            // 不能见到 DataIntegrityViolation 就当成"重复"——那会把真实的写库失败
+            // 也一并吞掉,事件被标 PUBLISHED、工资单永远不生成,而且无声无息。
+            // (我第一版就是这么写的,被"真实消费方写库失败时事件也必须留在表里可重试"
+            //  这条测试当场抓住。)
+            //
+            // 再查一次:查得到 = 并发的另一次投递赢了,目的已达成;
+            // 查不到 = 是别的写库问题,必须抛出去让中继重试。
+            if (payouts.findBySettlementId(event.settlementId()).isEmpty()) {
+                throw e;
+            }
+            log.info("待发放记录已由并发的另一次投递创建,跳过。settlementId={}", event.settlementId());
+        }
     }
 
     /**

@@ -17,6 +17,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Component("reportingDomainEventListener")
 class DomainEventListener {
 
+    /**
+     * 平台自身在报表里的维度 id。
+     *
+     * <p>平台不是某一个组织,用固定负数 id 与真实组织隔开——真实 org id 都是正数,
+     * 不会撞上。这样"平台的成本"和"某家工厂的收入"能在同一张 ORG 维度表里共存。
+     */
+    static final long PLATFORM_DIMENSION_ID = -1L;
+
     private final ReportingService reporting;
 
     DomainEventListener(ReportingService reporting) {
@@ -32,8 +40,14 @@ class DomainEventListener {
     @EventListener
     @Transactional(transactionManager = "reportingTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(FundsDisbursed event) {
+        // 同一笔钱是**两条事实**,记在不同维度上:
         reporting.record(ReportingApi.Dimension.WORKER, event.payeeUserId(),
                 LedgerFact.EntryType.REVENUE, event.amountCents(),
+                "FUNDS_DISBURSED", event.payoutId(), event.occurredAt());
+        // 对平台是真金白银的支出。此前**只记了上面那条**,DIRECT_COST 一次都没被写入,
+        // profitAndLoss 里的成本列永远是 0 —— 平台盈亏被系统性高估。
+        reporting.record(ReportingApi.Dimension.ORG, PLATFORM_DIMENSION_ID,
+                LedgerFact.EntryType.DIRECT_COST, event.amountCents(),
                 "FUNDS_DISBURSED", event.payoutId(), event.occurredAt());
     }
 
@@ -48,6 +62,10 @@ class DomainEventListener {
     void on(CommissionGenerated event) {
         reporting.record(ReportingApi.Dimension.BROKER, event.brokerUserId(),
                 LedgerFact.EntryType.REVENUE, event.amountCents(),
+                "COMMISSION", event.commissionId(), event.occurredAt());
+        // 佣金同理:经纪人的收入 = 平台的成本
+        reporting.record(ReportingApi.Dimension.ORG, PLATFORM_DIMENSION_ID,
+                LedgerFact.EntryType.DIRECT_COST, event.amountCents(),
                 "COMMISSION", event.commissionId(), event.occurredAt());
     }
 
