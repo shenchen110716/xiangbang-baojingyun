@@ -23,6 +23,14 @@ public class JwtService {
 
     public JwtService(@Value("${xbb.jwt.secret}") String secret,
                        @Value("${xbb.jwt.ttl-minutes}") long ttlMinutes) {
+        // **空串也要拒绝。** 变量未设置会被 Spring 挡住,但"设了但为空"不会——
+        // 空密钥签发的 token 谁都能伪造,而应用会一切正常地启动。
+        // 同类问题在 VoucherCode 里被容器化实测抓到,这里是同一个模式。
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException(
+                    "xbb.jwt.secret 不能为空。空密钥签发的 token 可被任意伪造。"
+                    + "请设置环境变量 JWT_SECRET。");
+        }
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.ttlMinutes = ttlMinutes;
     }

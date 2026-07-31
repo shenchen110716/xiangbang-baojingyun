@@ -25,6 +25,14 @@ class VoucherCode {
     private final String secret;
 
     VoucherCode(@org.springframework.beans.factory.annotation.Value("${xbb.mall.voucher-secret}") String secret) {
+        // **空串也要拒绝。** "变量没设置"会被 Spring 挡住,但"变量设了但是空的"
+        // 不会——它是个合法的值,于是注入空密钥、签名形同虚设、启动却一切正常。
+        // 这个洞是容器化实测时发现的:.env 里把值留空,应用照常起来了。
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException(
+                    "xbb.mall.voucher-secret 不能为空。核销码靠它签名,空密钥等于任何人都能伪造。"
+                    + "请设置环境变量 XBB_MALL_VOUCHER_SECRET。");
+        }
         this.secret = secret;
     }
 
