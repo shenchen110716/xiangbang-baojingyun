@@ -1,0 +1,48 @@
+# Render 蓝图。仓库连上 Render 后按此自动建服务,不用在界面里手工填十几项。
+#
+# 关于凭据:所有密钥都写 `sync: false` —— 意思是"值不在这个文件里,去仪表盘/API 设"。
+# 绝不用 `value:` 直接写死,那等于把密钥提交进仓库。
+# 也没用 `generateValue: true`:生成的值字符集不受控,而 DOMAIN_DB_PASSWORD
+# 要参与 entrypoint 里的 sed 替换,含特殊字符会被误解释(entrypoint 里有显式拒绝)。
+
+services:
+  - type: web
+    name: xbb-v1-test
+    runtime: docker
+    plan: free
+    region: singapore          # 与数据库同区,否则跨区延迟压在每次查询上
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health   # 这个端点已放行匿名访问(铁律 7 的守卫盯着)
+    autoDeploy: true
+    envVars:
+      # 托管库连接串。entrypoint 会把它拆成 JDBC 串 + 管理员用户/口令,
+      # 所以这三样都不必单独配,也就不会有第二处需要同步的凭据。
+      - key: DATABASE_URL
+        fromDatabase:
+          name: xbb-v1-test-db
+          property: connectionString
+
+      # 20 个域数据库用户共用的口令。必须是字母数字(见 entrypoint 的检查)。
+      - key: DOMAIN_DB_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: XBB_MALL_VOUCHER_SECRET
+        sync: false
+
+      # 代发/电子签/推送三个外部通道走 mock。
+      # 铁律 6:mock 会**静默成功** —— 扣监管账户、标 SUCCESS、写假的完税凭证号、
+      # 通知工人"工资已发放",而钱一分没出去。这是测试环境,绝不能这样上生产。
+      - key: XBB_CHANNEL_MODE
+        value: mock
+
+      # 免费档 512MB:20 个域 × 每域 1 条连接 = 20 条,再多就把内存吃光。
+      - key: XBB_DATASOURCE_MAX_POOL_SIZE_PER_DOMAIN
+        value: "1"
+
+databases:
+  - name: xbb-v1-test-db
+    plan: free
+    region: singapore
+    # 免费档 30 天后 Render 自动删除。这是测试用途,清楚了再用。
