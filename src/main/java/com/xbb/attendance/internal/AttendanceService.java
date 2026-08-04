@@ -175,6 +175,18 @@ class AttendanceService implements AttendanceApi {
                 .stream().mapToInt(Workday::getMinutes).sum();
     }
 
+    @Override
+    @Transactional(transactionManager = "attendanceTransactionManager", readOnly = true)
+    public ConfirmedSummary confirmedSummary(long applicationId) {
+        // 同一次查询里算两个值:分两次查的话,两次之间考勤可能被改,
+        // 算出来的工资就对应两个不同时刻的考勤,而且账面上看不出来。
+        var confirmed = workdays.findByApplicationIdAndStatus(applicationId, Workday.Status.CONFIRMED);
+        int minutes = confirmed.stream().mapToInt(Workday::getMinutes).sum();
+        // 只有真的有工时的那天才算出勤 —— 录了 0 分钟的那天不该顶一天日薪
+        int days = (int) confirmed.stream().filter(w -> w.getMinutes() > 0).count();
+        return new ConfirmedSummary(minutes, days);
+    }
+
     // ── 私有 ──
 
     private EngagedWorker requireEngaged(long applicationId) {

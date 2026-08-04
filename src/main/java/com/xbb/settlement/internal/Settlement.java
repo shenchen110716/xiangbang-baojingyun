@@ -34,6 +34,23 @@ public class Settlement {
     @Column(name = "void_reason")
     private String voidReason;
 
+    /** 按哪个方案版本算的。null = 没有生效方案,退回按岗位工价一口价(旧行为)。 */
+    @Column(name = "pay_plan_id")
+    private Long payPlanId;
+
+    /** 算这笔工资时用的已确认工时(分钟)。存下来是为了事后能解释金额怎么来的。 */
+    @Column(nullable = false)
+    private int minutes;
+
+    /**
+     * 明细快照(JSON):基本/浮动/固定/各调整项各多少。
+     *
+     * <p>**存下来而不是每次重算**:方案可以发新版本,但已出的工资单必须永远解释得通。
+     * 老系统的工资单只有一个总额,出账疑问时只能靠人回忆。
+     */
+    @Column(columnDefinition = "text")
+    private String breakdown;
+
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -41,6 +58,15 @@ public class Settlement {
     private long version;
 
     protected Settlement() { }
+
+    /** 带方案与工时的构造。金额由 WageCalculator 算好后传进来。 */
+    Settlement(long applicationId, long jobId, long workerUserId, long amountCents,
+               Long payPlanId, int minutes, String breakdown) {
+        this(applicationId, jobId, workerUserId, amountCents);
+        this.payPlanId = payPlanId;
+        this.minutes = minutes;
+        this.breakdown = breakdown;
+    }
 
     public Settlement(long applicationId, long jobId, long workerUserId, long amountCents) {
         this.applicationId = applicationId;
@@ -62,4 +88,8 @@ public class Settlement {
     public long getAmountCents() { return amountCents; }
     public Status getStatus() { return status; }
     public String getVoidReason() { return voidReason; }
+
+    public Long getPayPlanId() { return payPlanId; }
+    public int getMinutes() { return minutes; }
+    public String getBreakdown() { return breakdown; }
 }

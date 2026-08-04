@@ -20,14 +20,25 @@ import java.time.Instant;
 @Component
 class EngagementEventListener {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(EngagementEventListener.class);
+
     private final SettlementRepository settlements;
     private final SettlementOutboxRepository outbox;
+    private final PayPlanRepository payPlans;
+    private final PayPlanFactorRepository payPlanFactors;
+    private final com.xbb.attendance.api.AttendanceApi attendanceApi;
     private final ObjectMapper json;
 
     EngagementEventListener(SettlementRepository settlements, SettlementOutboxRepository outbox,
+                             PayPlanRepository payPlans, PayPlanFactorRepository payPlanFactors,
+                             com.xbb.attendance.api.AttendanceApi attendanceApi,
                              ObjectMapper json) {
         this.settlements = settlements;
         this.outbox = outbox;
+        this.payPlans = payPlans;
+        this.payPlanFactors = payPlanFactors;
+        this.attendanceApi = attendanceApi;
         this.json = json;
     }
 
@@ -46,14 +57,16 @@ class EngagementEventListener {
         // 而撞约束会让中继永远重试、事件卡死(表上那条约束是最后一道防线,不是幂等手段)。
         if (settlements.findByApplicationId(event.applicationId()).isPresent()) return;
 
+        Computed computed = computeAmount(event);
         Settlement settlement = settlements.save(new Settlement(
-                event.applicationId(), event.jobId(), event.workerUserId(), event.wageCents()));
+                event.applicationId(), event.jobId(), event.workerUserId(),
+                computed.amountCents(), computed.payPlanId(), computed.minutes(), computed.breakdown()));
 
         // 关键:结算记录与 outbox 行**在同一个事务里**落库。
         // 要么都成功要么都回滚,不会出现"结算生成了但下游永远收不到通知"。
         SettlementCalculated calculated = new SettlementCalculated(
                 settlement.getId(), event.applicationId(), event.workerUserId(),
-                event.wageCents(), Instant.now());
+                computed.amountCents(), Instant.now());
         outbox.save(new SettlementOutboxEvent(
                 event.eventId(), SettlementCalculated.class.getName(), serialize(calculated)));
     }
@@ -64,5 +77,53 @@ class EngagementEventListener {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("结算事件序列化失败", e);
         }
+    }
+
+    private record Computed(long amountCents, Long payPlanId, int minutes, String breakdown) { }
+
+    /**
+     * 按生效的计薪方案与已确认工时算钱。
+     *
+     * <p><b>没有生效方案时退回原行为</b>(按岗位工价一口价)。这不是偷懒:
+     * 计薪方案是后加的、按岗位逐个启用的,已经在跑的履约链路不该因为这次改动断掉。
+     * 退回时 payPlanId 记 null,事后一眼能看出这笔是按老口径算的。
+     */
+    private Computed computeAmount(EngagementCompleted event) {
+        PayPlan plan = payPlans.findByJobIdAndStatus(event.jobId(), PayPlan.Status.ACTIVE).orElse(null);
+        if (plan == null) {
+            return new Computed(event.wageCents(), null, 0, null);
+        }
+        var summary = attendanceApi.confirmedSummary(event.applicationId());
+        var factors = payPlanFactors.findByPlanId(plan.getId()).stream()
+                .map(f -> new WageCalculator.Factor(
+                        WageCalculator.FactorType.valueOf(f.getFactorType().name()),
+                        f.getName(), f.getAmountCents()))
+                .toList();
+
+        WageCalculator.Result r;
+        try {
+            r = WageCalculator.compute(new WageCalculator.Plan(
+                            WageCalculator.PayType.valueOf(plan.getPayType().name()),
+                            plan.getBasicSalaryCents(), plan.getFloatSalaryCents(),
+                            plan.getFixedSalaryCents(), factors),
+                    summary.minutes(), summary.workDays());
+        } catch (RuntimeException e) {
+            // 算不出来时**不静默退回一口价** —— 那会让"方案配错了"变成一笔看起来正常的工资。
+            // 抛出去让事件留在 outbox 里重试,运营改完方案就能补上。
+            log.error("按方案计薪失败: application={} job={} plan={} 原因={}",
+                    event.applicationId(), event.jobId(), plan.getId(), e.getMessage());
+            throw e;
+        }
+
+        String breakdown;
+        try {
+            breakdown = json.writeValueAsString(r.lines());
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("工资明细序列化失败", e);
+        }
+        log.info("按方案计薪: application={} plan=v{} 工时={}分 出勤={}天 应发={}分",
+                event.applicationId(), plan.getVersion(), summary.minutes(), summary.workDays(),
+                r.grossCents());
+        return new Computed(r.grossCents(), plan.getId(), summary.minutes(), breakdown);
     }
 }

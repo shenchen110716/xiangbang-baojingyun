@@ -55,4 +55,16 @@ public interface AttendanceApi {
 
     /** 计薪用:某履约单已确认的总分钟数。 */
     int confirmedMinutes(long applicationId);
+
+    /**
+     * 计薪汇总:已确认的总工时与出勤天数。
+     *
+     * <p>一次拿两个值而不是调两遍 —— 两遍之间考勤可能被改,
+     * 那样算出来的工资对应的是两个不同时刻的考勤,而且没人看得出来。
+     *
+     * @param workDays 有工时的天数(minutes > 0 才算一天)。按天计薪时用
+     */
+    record ConfirmedSummary(int minutes, int workDays) { }
+
+    ConfirmedSummary confirmedSummary(long applicationId);
 }
