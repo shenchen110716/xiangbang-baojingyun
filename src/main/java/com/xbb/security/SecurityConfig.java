@@ -23,6 +23,11 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                // ERROR 分派放行。**这不是把 /error 端点对外开放** ——
+                // 它只在容器内部转发时命中。不放行的话,任何未被 @ExceptionHandler
+                // 截住的异常都会变成 401:JWT 过滤器不跑 ERROR 分派,请求在那一刻是未认证的。
+                // 于是"字段填错"和"没登录"在前端看起来一模一样。
+                .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
                 // 拿 token 之前必须能免登录访问:请求验证码、拿验证码换 token
                 .requestMatchers("/api/identity/code", "/api/identity/login").permitAll()
                 // 取验证码的开发端点。这里放行只是让请求能到达控制器——

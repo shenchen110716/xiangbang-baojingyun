@@ -20,7 +20,9 @@ FROM maven:3.9-eclipse-temurin-21 AS builder
 WORKDIR /build
 # 先只拷 pom,让"下载依赖"单独成层。改代码不改依赖时这一层直接命中缓存。
 COPY pom.xml .
-RUN mvn -B -q dependency:go-offline
+# go-offline 抓不全(它按 pom 静态解析,拿不到插件运行时才知道要的东西),
+# 所以它只是**加速缓存**,不是"离线可用"的保证。
+RUN mvn -B -q dependency:go-offline || true
 COPY src ./src
 # 覆盖在 COPY src 之后:静态资源是**构建产物**,不进版本库,
 # 以本地残留为准会让"我这儿好好的"和线上不一致。
@@ -28,7 +30,10 @@ COPY --from=web /app/src/main/resources/static ./src/main/resources/static
 # 跳过测试:390 个测试里有相当一部分要 Testcontainers(需要 Docker daemon),
 # 构建环境里没有。测试在本地与 CI 跑,不在镜像构建时跑 —— 这是取舍,不是省事:
 # 构建阶段跑不了的测试,硬塞进来只会变成"构建时被跳过但看不出来"。
-RUN mvn -B -q clean package -DskipTests
+# -U:强制重新检查上一步没解析成功的构件。
+# 不加的话 Maven 会把"找不到"缓存进 _remote.repositories,下次直接判定 absent 不再去拉
+# —— 上一次部署就是这么挂的,清缓存重试才过。
+RUN mvn -B -q -U -Dmaven.wagon.http.retryHandler.count=3 clean package -DskipTests
 
 FROM eclipse-temurin:21-jdk-alpine AS jre-builder
 # 只保留实际用到的模块。全量 JRE 镜像 624MB,裁完 348MB。
