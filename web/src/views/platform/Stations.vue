@@ -87,6 +87,18 @@ async function saveMove() {
   finally { busy.value = '' }
 }
 
+async function runDemotion() {
+  busy.value = 'demote'; err.value = ''; msg.value = ''
+  try {
+    const r = await api<{ processed: number }>('/api/broker/salesmen/run-demotion', { method: 'POST' })
+    msg.value = r.processed === 0
+      ? '没有需要降级的业务员'
+      : `已处理 ${r.processed} 名业务员（有下级的被架空并上提，无下级的标记降级）`
+    await load()
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
+
 const CHANGE_TYPE: Record<string, string> = { STATION: '服务站', PARENT: '上级', STATUS: '状态' }
 const inStation = (orgId: number) => brokers.value.filter(b => b.stationOrgId === orgId)
 onMounted(load)
@@ -213,6 +225,19 @@ onMounted(load)
       </div>
       <div class="field" style="flex:none"><button class="ghost" @click="moving = null">取消</button></div>
     </div>
+  </div>
+
+  <div class="card note">
+    <h3>降级规则</h3>
+    <p class="hint" style="margin:0 0 12px">
+      定时任务每天凌晨 3 点跑。超过「业务员降级天数」没有活跃的：
+      <strong>有下级的被架空</strong>（下级上提到他的上级，他自己活跃时间重置，相当于缓刑一轮）；
+      <strong>无下级的标记降级</strong>——注意是标记，不删除，否则他名下已产生的佣金归属就断了。
+      <strong>根业务员永不降级。</strong>天数在「参数设置」里改。
+    </p>
+    <button :disabled="busy === 'demote'" @click="runDemotion">
+      {{ busy === 'demote' ? '处理中…' : '立即跑一次降级' }}
+    </button>
   </div>
 
   <div class="card">

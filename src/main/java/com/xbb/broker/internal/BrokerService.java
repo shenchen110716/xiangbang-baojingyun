@@ -26,6 +26,7 @@ class BrokerService implements BrokerApi {
     private final StationRepository stations;
     private final BrokerChangeLogRepository changeLogs;
     private final com.xbb.ops.api.OpsApi opsApi;
+    private final org.springframework.beans.factory.ObjectProvider<BrokerDemotionTask> demotionTask;
     private final InvitationRepository invitations;
     private final CommissionRepository commissions;
     private final BrokerVerifiedUserRepository verifiedUsers;
@@ -39,7 +40,9 @@ class BrokerService implements BrokerApi {
                      BrokerOutboxRepository outbox, ObjectMapper json,
                        IdentityApi identityApi, FundApi fundApi,
                   StationRepository stations, BrokerChangeLogRepository changeLogs,
-                  com.xbb.ops.api.OpsApi opsApi) {
+                  com.xbb.ops.api.OpsApi opsApi,
+                  org.springframework.beans.factory.ObjectProvider<BrokerDemotionTask> demotionTask) {
+        this.demotionTask = demotionTask;
         this.stations = stations;
         this.changeLogs = changeLogs;
         this.opsApi = opsApi;
@@ -275,5 +278,13 @@ class BrokerService implements BrokerApi {
                 oldValue == null ? null : String.valueOf(oldValue),
                 newValue == null ? null : String.valueOf(newValue),
                 operator, reason));
+    }
+
+    @Override
+    public int runDemotionNow(long callerUserId) {
+        requirePlatformOps(callerUserId);
+        // 不在这里开事务:任务内部按人各自开 REQUIRES_NEW,
+        // 外面再包一层大事务会让"一人一事务"失去意义(一个失败全回滚)。
+        return demotionTask.getObject().run();
     }
 }

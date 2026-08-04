@@ -61,6 +61,15 @@ public interface BrokerApi {
     /** 业务员活跃打点。降级任务按这个时间判定。 */
     void touchBroker(long brokerUserId);
 
+    /**
+     * 手动跑一次降级任务,返回处理人数。要 PLATFORM_OPS。
+     *
+     * <p>定时任务每天凌晨 3 点自动跑。留一个手动入口是因为:
+     * 改完降级天数想立刻看效果、或者服务停过一段时间要补跑,
+     * 没有入口就只能等到明天凌晨。
+     */
+    int runDemotionNow(long callerUserId);
+
     /** 变更记录;brokerUserId 为 null 时返回最近 100 条。 */
     List<BrokerChangeView> brokerChanges(Long brokerUserId, long callerUserId);
 }

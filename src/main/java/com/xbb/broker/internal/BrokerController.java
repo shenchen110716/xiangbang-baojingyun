@@ -103,4 +103,10 @@ class BrokerController {
             @AuthenticationPrincipal AuthenticatedUser caller) {
         return ResponseEntity.ok(brokerApi.brokerChanges(brokerUserId, caller.userId()));
     }
+
+    /** 手动跑一次降级。定时任务每天凌晨 3 点自动跑,这里是补跑/验证入口。 */
+    @PostMapping("/salesmen/run-demotion")
+    ResponseEntity<Map<String, Integer>> runDemotion(@AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(Map.of("processed", brokerApi.runDemotionNow(caller.userId())));
+    }
 }
