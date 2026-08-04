@@ -66,7 +66,7 @@ class EngagementEventListener {
         // 要么都成功要么都回滚,不会出现"结算生成了但下游永远收不到通知"。
         SettlementCalculated calculated = new SettlementCalculated(
                 settlement.getId(), event.applicationId(), event.workerUserId(),
-                computed.amountCents(), Instant.now());
+                computed.amountCents(), computed.commissionBaseCents(), Instant.now());
         outbox.save(new SettlementOutboxEvent(
                 event.eventId(), SettlementCalculated.class.getName(), serialize(calculated)));
     }
@@ -79,7 +79,9 @@ class EngagementEventListener {
         }
     }
 
-    private record Computed(long amountCents, Long payPlanId, int minutes, String breakdown) { }
+    /** commissionBaseCents:佣金基数。有方案时是浮动部分,没方案时等于应发(旧行为)。 */
+    private record Computed(long amountCents, long commissionBaseCents,
+                            Long payPlanId, int minutes, String breakdown) { }
 
     /**
      * 按生效的计薪方案与已确认工时算钱。
@@ -91,7 +93,8 @@ class EngagementEventListener {
     private Computed computeAmount(EngagementCompleted event) {
         PayPlan plan = payPlans.findByJobIdAndStatus(event.jobId(), PayPlan.Status.ACTIVE).orElse(null);
         if (plan == null) {
-            return new Computed(event.wageCents(), null, 0, null);
+            // 没有方案 → 基数退回应发总额,和改动前一致
+            return new Computed(event.wageCents(), event.wageCents(), null, 0, null);
         }
         var summary = attendanceApi.confirmedSummary(event.applicationId());
         var factors = payPlanFactors.findByPlanId(plan.getId()).stream()
@@ -124,6 +127,6 @@ class EngagementEventListener {
         log.info("按方案计薪: application={} plan=v{} 工时={}分 出勤={}天 应发={}分",
                 event.applicationId(), plan.getVersion(), summary.minutes(), summary.workDays(),
                 r.grossCents());
-        return new Computed(r.grossCents(), plan.getId(), summary.minutes(), breakdown);
+        return new Computed(r.grossCents(), r.commissionBaseCents(), plan.getId(), summary.minutes(), breakdown);
     }
 }

@@ -31,7 +31,8 @@ import static org.awaitility.Awaitility.await;
  * <p>守的都是**工资会算错**的路径:同时存在两个生效方案、改方案把历史工资单的依据抹掉、
  * 别人替你设方案、全零方案让人白干。
  *
- * <p>号段 174,信用代码 …a xx。
+ * <p>号段 174,身份证 …1301–1310。
+ * (原来用 1001 段,和 broker 的两个测试撞了 —— "测试零隔离、靠手工分号段"这个已知弱点真的会咬人)
  */
 @SpringBootTest
 @Import({TestcontainersConfig.class, TestCodeAccessor.class, TestPlatformOps.class})
@@ -78,7 +79,7 @@ class PayPlanTest {
 
     @Test
     void 发新版本会让旧版失效_同时只有一个生效() {
-        Job j = job("17400000001", "110101199001011001", "9111000000000a01X");
+        Job j = job("17400000001", "110101199001011301", "9111000000000a01X");
 
         long v1 = settlementApi.publishPayPlan(j.jobId(), "初版", "HOURLY",
                 2_500, 500, 0, FROM, List.of(), j.boss());
@@ -96,7 +97,7 @@ class PayPlanTest {
 
     @Test
     void 旧版本失效但不删除_已出工资单还要靠它解释金额() {
-        Job j = job("17400000002", "110101199001011002", "9111000000000a02X");
+        Job j = job("17400000002", "110101199001011302", "9111000000000a02X");
         long v1 = settlementApi.publishPayPlan(j.jobId(), "初版", "HOURLY",
                 2_500, 0, 0, FROM, List.of(), j.boss());
         settlementApi.publishPayPlan(j.jobId(), "二版", "HOURLY",
@@ -113,7 +114,7 @@ class PayPlanTest {
 
     @Test
     void 版本号递增() {
-        Job j = job("17400000003", "110101199001011003", "9111000000000a03X");
+        Job j = job("17400000003", "110101199001011303", "9111000000000a03X");
         settlementApi.publishPayPlan(j.jobId(), "v1", "DAILY", 20_000, 0, 0, FROM, List.of(), j.boss());
         settlementApi.publishPayPlan(j.jobId(), "v2", "DAILY", 21_000, 0, 0, FROM, List.of(), j.boss());
         settlementApi.publishPayPlan(j.jobId(), "v3", "DAILY", 22_000, 0, 0, FROM, List.of(), j.boss());
@@ -125,7 +126,7 @@ class PayPlanTest {
 
     @Test
     void 调整项跟着版本走() {
-        Job j = job("17400000004", "110101199001011004", "9111000000000a04X");
+        Job j = job("17400000004", "110101199001011304", "9111000000000a04X");
         settlementApi.publishPayPlan(j.jobId(), "带扣款", "HOURLY", 2_500, 0, 0, FROM,
                 List.of(new SettlementApi.FactorSpec("BONUS", "全勤奖", 10_000),
                         new SettlementApi.FactorSpec("DEDUCTION", "宿舍水电", 3_000)), j.boss());
@@ -138,8 +139,8 @@ class PayPlanTest {
 
     @Test
     void 不是法人代表不能设方案() {
-        Job j = job("17400000005", "110101199001011005", "9111000000000a05X");
-        long outsider = verified("17400000006", "路人", "110101199001011006");
+        Job j = job("17400000005", "110101199001011305", "9111000000000a05X");
+        long outsider = verified("17400000006", "路人", "110101199001011306");
 
         assertThatThrownBy(() -> settlementApi.publishPayPlan(j.jobId(), "越权", "HOURLY",
                 2_500, 0, 0, FROM, List.of(), outsider))
@@ -150,7 +151,7 @@ class PayPlanTest {
 
     @Test
     void 全零方案被拒绝() {
-        Job j = job("17400000007", "110101199001011007", "9111000000000a06X");
+        Job j = job("17400000007", "110101199001011307", "9111000000000a06X");
         // 全零方案算出来永远是 0 工资。让它建成功等于埋一个"发不出钱"的雷,
         // 而且要等到发工资那天才炸
         assertThatThrownBy(() -> settlementApi.publishPayPlan(j.jobId(), "空方案", "HOURLY",
@@ -160,7 +161,7 @@ class PayPlanTest {
 
     @Test
     void 不支持的计薪方式与调整项类型被拒() {
-        Job j = job("17400000008", "110101199001011008", "9111000000000a07X");
+        Job j = job("17400000008", "110101199001011308", "9111000000000a07X");
         assertThatThrownBy(() -> settlementApi.publishPayPlan(j.jobId(), "x", "WEEKLY",
                 2_500, 0, 0, FROM, List.of(), j.boss()))
                 .hasMessageContaining("计薪方式");
@@ -172,7 +173,7 @@ class PayPlanTest {
 
     @Test
     void 调整项金额必须为正() {
-        Job j = job("17400000009", "110101199001011009", "9111000000000a08X");
+        Job j = job("17400000009", "110101199001011309", "9111000000000a08X");
         // 金额存正数、方向由类型决定,是为了不让两种写法并存 —— 迟早有人加错符号
         assertThatThrownBy(() -> settlementApi.publishPayPlan(j.jobId(), "x", "HOURLY",
                 2_500, 0, 0, FROM,
@@ -182,7 +183,7 @@ class PayPlanTest {
 
     @Test
     void 岗位副本还没落地时明确报错() {
-        Job j = job("17400000010", "110101199001011010", "9111000000000a09X");
+        Job j = job("17400000010", "110101199001011310", "9111000000000a09X");
         // 用一个不存在的岗位:错误要说清是"副本没落地",而不是含糊的空指针
         assertThatThrownBy(() -> settlementApi.publishPayPlan(77_777_777L, "x", "HOURLY",
                 2_500, 0, 0, FROM, List.of(), j.boss()))

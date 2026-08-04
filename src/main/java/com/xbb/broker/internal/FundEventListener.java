@@ -31,6 +31,7 @@ class FundEventListener {
     private final CommissionRepository commissions;
     private final BrokerRepository brokers;
     private final StationRepository stations;
+    private final CommissionBaseRepository bases;
     private final BrokerOutboxRepository outbox;
     private final OpsApi opsApi;
     private final FundApi fundApi;
@@ -38,11 +39,13 @@ class FundEventListener {
 
     FundEventListener(InvitationRepository invitations, CommissionRepository commissions,
                       BrokerRepository brokers, StationRepository stations,
+                      CommissionBaseRepository bases,
                       BrokerOutboxRepository outbox, OpsApi opsApi, FundApi fundApi, ObjectMapper json) {
         this.invitations = invitations;
         this.commissions = commissions;
         this.brokers = brokers;
         this.stations = stations;
+        this.bases = bases;
         this.outbox = outbox;
         this.opsApi = opsApi;
         this.fundApi = fundApi;
@@ -80,9 +83,20 @@ class FundEventListener {
         Broker direct = brokers.findById(directBrokerId).orElse(null);
         Long stationOrgId = direct == null ? null : direct.getStationOrgId();
 
+        // **佣金基数是浮动工资,不是发放总额。**
+        // 老系统 JobComputerService 就是拿 floatSalary 算的 —— 用总额会让佣金随基本工资一起涨。
+        // 副本还没到(两个事件顺序不保证)时退回用发放金额,和改动前一致。
+        long base = bases.findById(event.settlementId())
+                .map(CommissionBase::getBaseCents)
+                .orElseGet(() -> {
+                    log.warn("结算 {} 的佣金基数副本尚未到达,本次退回按发放金额 {} 分计算",
+                            event.settlementId(), event.amountCents());
+                    return event.amountCents();
+                });
+
         CommissionSplitter.Rates rates = ratesFor(stationOrgId);
         CommissionSplitter.Split split = CommissionSplitter.split(
-                event.amountCents(), directBrokerId, stationOrgId, ancestorsOf(direct), rates);
+                base, directBrokerId, stationOrgId, ancestorsOf(direct), rates);
 
         for (CommissionSplitter.Share s : split.shares()) {
             Commission saved = s.tier() == CommissionSplitter.Tier.STATION
@@ -107,8 +121,9 @@ class FundEventListener {
                     "佣金分账 · 平台 settlement#" + event.settlementId());
         }
 
-        log.info("佣金分账完成: settlement={} 基数={}分 平台={}分 分账{}笔",
-                event.settlementId(), event.amountCents(), split.platformCents(), split.shares().size());
+        log.info("佣金分账完成: settlement={} 基数={}分(发放{}分) 平台={}分 分账{}笔",
+                event.settlementId(), base, event.amountCents(),
+                split.platformCents(), split.shares().size());
     }
 
     /** 服务站单独设过比例就用它,否则跟随平台默认。 */
