@@ -3,9 +3,14 @@ package com.xbb.ops.internal;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbb.ops.api.OpsApi;
+import com.xbb.identity.api.IdentityApi;
+import com.xbb.identity.api.Role;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -13,13 +18,35 @@ import java.util.Optional;
 @Service
 class OpsService implements OpsApi {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(OpsService.class);
+
+    /**
+     * 参数缓存的存活时间。
+     *
+     * <p>参数在信用分、匹配打分这类热路径上被反复读,每次查库不划算。
+     * 但缓存意味着**改动不是立刻全局生效**:多实例部署时,别的实例最多晚这么久看到新值。
+     * 60 秒是取舍——运营改完等一分钟可以接受,而热路径省掉的查询是每次请求都有的。
+     */
+    private static final Duration SETTING_TTL = Duration.ofSeconds(60);
+
     private final DictionaryItemRepository items;
     private final AgreementTemplateRepository templates;
+    private final PlatformSettingRepository settings;
+    private final PlatformSettingChangeRepository settingChanges;
+    private final IdentityApi identityApi;
     private final ObjectMapper json;
 
-    OpsService(DictionaryItemRepository items, AgreementTemplateRepository templates, ObjectMapper json) {
+    private volatile java.util.Map<String, String> settingCache = java.util.Map.of();
+    private volatile Instant cacheLoadedAt = Instant.EPOCH;
+
+    OpsService(DictionaryItemRepository items, AgreementTemplateRepository templates,
+               PlatformSettingRepository settings, PlatformSettingChangeRepository settingChanges,
+               IdentityApi identityApi, ObjectMapper json) {
         this.items = items;
         this.templates = templates;
+        this.settings = settings;
+        this.settingChanges = settingChanges;
+        this.identityApi = identityApi;
         this.json = json;
     }
 
@@ -147,6 +174,127 @@ class OpsService implements OpsApi {
         } catch (Exception e) {
             // 属性直接参与算分,坏数据静默当成空属性会让扣分凭空消失——宁可炸,不要悄悄算错。
             throw new IllegalStateException("字典项属性 JSON 损坏: " + raw, e);
+        }
+    }
+
+    // ─────────────── 平台参数 ───────────────
+
+    @Override
+    @Transactional(transactionManager = "opsTransactionManager", readOnly = true)
+    public long settingInt(String key, long fallback) {
+        String v = rawSetting(key);
+        if (v == null) {
+            return fallback;
+        }
+        try {
+            return Long.parseLong(v.trim());
+        } catch (NumberFormatException e) {
+            // 值存坏了就退回兜底,并**吼一声**。静默用兜底会让"改了没生效"变成无症状故障。
+            log.error("参数 {} 的值不是整数: {},本次改用兜底值 {}", key, v, fallback);
+            return fallback;
+        }
+    }
+
+    @Override
+    @Transactional(transactionManager = "opsTransactionManager", readOnly = true)
+    public BigDecimal settingDecimal(String key, BigDecimal fallback) {
+        String v = rawSetting(key);
+        if (v == null) {
+            return fallback;
+        }
+        try {
+            return new BigDecimal(v.trim());
+        } catch (NumberFormatException e) {
+            log.error("参数 {} 的值不是数字: {},本次改用兜底值 {}", key, v, fallback);
+            return fallback;
+        }
+    }
+
+    private String rawSetting(String key) {
+        java.util.Map<String, String> cache = settingCache;
+        if (Instant.now().isAfter(cacheLoadedAt.plus(SETTING_TTL))) {
+            cache = settings.findAll().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
+                    PlatformSetting::getKey, PlatformSetting::getValue));
+            settingCache = cache;
+            cacheLoadedAt = Instant.now();
+        }
+        return cache.get(key);
+    }
+
+    @Override
+    @Transactional(transactionManager = "opsTransactionManager", readOnly = true)
+    public List<SettingView> allSettings() {
+        return settings.findAllByOrderByCategoryAscKeyAsc().stream()
+                .map(s -> new SettingView(s.getKey(), s.getValue(), s.getValueType().name(),
+                        s.getCategory(), s.getLabel(), s.getDescription(), s.getUpdatedAt(), s.getUpdatedBy()))
+                .toList();
+    }
+
+    @Override
+    @Transactional("opsTransactionManager")
+    public void updateSetting(String key, String value, String reason, long callerUserId) {
+        requirePlatformOps(callerUserId);
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("必须填写改动理由");
+        }
+        PlatformSetting s = settings.findById(key)
+                .orElseThrow(() -> new IllegalArgumentException("参数不存在: " + key));
+
+        String normalized = validateAndNormalize(s, value);
+        String old = s.getValue();
+        if (normalized.equals(old)) {
+            return;   // 没变就不留一条噪音记录
+        }
+        s.changeTo(normalized, callerUserId);
+        settings.save(s);
+        settingChanges.save(new PlatformSettingChange(key, old, normalized, callerUserId, reason.trim()));
+        // 本实例立刻失效;别的实例等 TTL
+        cacheLoadedAt = Instant.EPOCH;
+        log.warn("平台参数变更: {} {} → {} 操作人={} 理由={}", key, old, normalized, callerUserId, reason);
+    }
+
+    /** 按声明的类型校验。存进去一个非法值,后果是热路径上每次读都退兜底——要在入口就挡住。 */
+    private static String validateAndNormalize(PlatformSetting s, String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new IllegalArgumentException("参数值不能为空");
+        }
+        String v = raw.trim();
+        switch (s.getValueType()) {
+            case INT -> {
+                try { Long.parseLong(v); } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("「" + s.getLabel() + "」必须是整数");
+                }
+            }
+            case DECIMAL -> {
+                try { new BigDecimal(v); } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("「" + s.getLabel() + "」必须是数字");
+                }
+            }
+            case BOOLEAN -> {
+                if (!v.equalsIgnoreCase("true") && !v.equalsIgnoreCase("false")) {
+                    throw new IllegalArgumentException("「" + s.getLabel() + "」只能是 true 或 false");
+                }
+                v = v.toLowerCase();
+            }
+            case STRING -> { /* 不额外约束 */ }
+        }
+        return v;
+    }
+
+    @Override
+    @Transactional(transactionManager = "opsTransactionManager", readOnly = true)
+    public List<SettingChangeView> settingChanges(String key, long callerUserId) {
+        requirePlatformOps(callerUserId);
+        List<PlatformSettingChange> rows = (key == null || key.isBlank())
+                ? settingChanges.findTop50ByOrderByChangedAtDesc()
+                : settingChanges.findByKeyOrderByChangedAtDesc(key);
+        return rows.stream().map(c -> new SettingChangeView(c.getId(), c.getKey(), c.getOldValue(),
+                c.getNewValue(), c.getChangedBy(), c.getChangedAt(), c.getReason())).toList();
+    }
+
+    private void requirePlatformOps(long callerUserId) {
+        if (!identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            throw new IllegalStateException("需要平台运维角色");
         }
     }
 }

@@ -43,6 +43,7 @@ export const NAV: Record<RoleKey, { to: string; label: string; badge?: boolean }
     { to: '/notifications', label: '消息', badge: true },
   ],
   platform: [
+    { to: '/settings', label: '参数设置' },
     { to: '/review-orgs', label: '组织审核' },
     { to: '/payouts', label: '资金与代发' },
     { to: '/settlements', label: '结算处理' },

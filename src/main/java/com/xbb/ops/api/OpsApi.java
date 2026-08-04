@@ -1,5 +1,6 @@
 package com.xbb.ops.api;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -77,4 +78,39 @@ public interface OpsApi {
 
     /** 按版本号回溯——纠纷举证时用,拿协议上记的版本号翻出当时的模板。 */
     Optional<AgreementTemplateView> templateVersion(String templateKey, int version);
+
+    // ─────────────── 平台参数 ───────────────
+
+    record SettingView(String key, String value, String valueType, String category,
+                       String label, String description, java.time.Instant updatedAt, Long updatedBy) { }
+
+    record SettingChangeView(long id, String key, String oldValue, String newValue,
+                             long changedBy, java.time.Instant changedAt, String reason) { }
+
+    /**
+     * 读整数参数。**键用 {@link SettingKeys} 的常量。**
+     *
+     * <p>{@code fallback} 是代码里编译进去的兜底值,只在参数行不存在时用。
+     * 正常情况下所有键都由迁移种下,不会走到兜底 —— 走到了说明有人加了读取却忘了种子,
+     * 这一条由 {@code SettingsCoverageTest} 守。
+     *
+     * <p>为什么不在缺失时抛异常:参数缺失让整个应用起不来,代价比"用回原来的常量"大得多,
+     * 而后者的行为和改动前完全一致。风险由守卫测试在 CI 阶段消掉,不留到运行期。
+     */
+    long settingInt(String key, long fallback);
+
+    BigDecimal settingDecimal(String key, BigDecimal fallback);
+
+    /** 全部参数,按分组排序。平台端「参数设置」页用。 */
+    List<SettingView> allSettings();
+
+    /**
+     * 改参数。要 {@link com.xbb.identity.api.Role#PLATFORM_OPS},并**强制留痕**。
+     *
+     * @param reason 改动理由,必填。佣金比例这类东西事后要能解释为什么改
+     */
+    void updateSetting(String key, String value, String reason, long callerUserId);
+
+    /** 改动记录。key 为 null 时返回最近 50 条(全部键)。 */
+    List<SettingChangeView> settingChanges(String key, long callerUserId);
 }
