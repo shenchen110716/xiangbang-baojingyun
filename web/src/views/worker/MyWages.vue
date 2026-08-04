@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api, yuan } from '../../api'
+import { zhStatus, statusTone } from '../../i18n'
 
 const settlements = ref<any[]>([])
 const payouts = ref<any[]>([])
@@ -26,8 +27,8 @@ onMounted(load)
 
   <div v-if="err" class="msg bad">{{ err }}</div>
 
-  <div class="card" style="background:#fdf3e0;border-color:#f2e2c4">
-    <p class="hint" style="margin:0;color:#94661a">
+  <div class="card note">
+    <p class="hint" style="margin:0">
       测试环境：代发通道是 mock，「已发放」不代表钱真的到账。
     </p>
   </div>
@@ -35,7 +36,7 @@ onMounted(load)
   <div class="grid">
     <div class="card">
       <h3>累计已发放</h3>
-      <div style="font-size:26px;font-weight:600;color:var(--primary-dark)">{{ yuan(total()) }}</div>
+      <div style="font-size:28px;font-weight:650;color:var(--primary);font-family:var(--mono);text-shadow:0 0 18px rgba(34,211,238,.35)">{{ yuan(total()) }}</div>
     </div>
     <div class="card">
       <h3>工资单</h3>
@@ -46,7 +47,7 @@ onMounted(load)
         <tbody>
           <tr v-for="s in settlements" :key="s.id">
             <td>#{{ s.id }}</td><td>{{ yuan(s.amountCents) }}</td>
-            <td><span class="tag" :class="s.status === 'VOIDED' ? 'bad' : 'ok'">{{ s.status }}</span></td>
+            <td><span class="tag" :class="statusTone(s.status)">{{ zhStatus(s.status) }}</span></td>
           </tr>
         </tbody>
       </table>
@@ -61,7 +62,7 @@ onMounted(load)
       <tbody>
         <tr v-for="p in payouts" :key="p.id">
           <td>#{{ p.id }}</td><td>#{{ p.settlementId }}</td><td>{{ yuan(p.amountCents) }}</td>
-          <td><span class="tag" :class="p.status === 'PAID' ? 'ok' : p.status === 'FAILED' ? 'bad' : 'warn'">{{ p.status }}</span></td>
+          <td><span class="tag" :class="statusTone(p.status)">{{ zhStatus(p.status) }}</span></td>
         </tr>
       </tbody>
     </table>

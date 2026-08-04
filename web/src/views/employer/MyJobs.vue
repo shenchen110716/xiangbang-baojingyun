@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api, yuan } from '../../api'
+import { zhStatus, statusTone } from '../../i18n'
 
 const orgs = ref<any[]>([])
 const jobs = ref<any[]>([])
@@ -13,11 +14,6 @@ const orgId = ref(''); const title = ref(''); const desc = ref(''); const wage =
 const expanded = ref<number | null>(null)
 const applicants = ref<Record<number, any[]>>({})
 const busy = ref('')
-
-const APP_STATUS: Record<string, { t: string; c: string }> = {
-  SUBMITTED: { t: '待处理', c: 'warn' }, ACCEPTED: { t: '已录用', c: 'ok' },
-  REJECTED: { t: '已拒绝', c: 'bad' }, COMPLETED: { t: '已完成', c: 'ok' },
-}
 
 async function load() {
   loading.value = true; err.value = ''
@@ -70,9 +66,9 @@ onMounted(load)
   <div v-if="msg" class="msg ok">{{ msg }}</div>
   <div v-if="err" class="msg bad">{{ err }}</div>
 
-  <div v-if="!loading && !orgs.length" class="card" style="background:#fdf3e0;border-color:#f2e2c4">
-    <h3 style="color:#94661a">还没有已通过审核的组织</h3>
-    <p class="hint" style="margin:0;color:#94661a">
+  <div v-if="!loading && !orgs.length" class="card note">
+    <h3>还没有已通过审核的组织</h3>
+    <p class="hint" style="margin:0">
       发岗要求组织已通过平台审核。去「我的组织」提交入驻，等平台通过后再回来。
     </p>
   </div>
@@ -98,7 +94,7 @@ onMounted(load)
             </td>
             <td>{{ yuan(j.wageCents) }}</td>
             <td>{{ j.filledCount }} / {{ j.headcount }}</td>
-            <td><span class="tag" :class="j.status === 'OPEN' ? 'ok' : ''">{{ j.status === 'OPEN' ? '开放' : '已关闭' }}</span></td>
+            <td><span class="tag" :class="statusTone(j.status)">{{ zhStatus(j.status) }}</span></td>
             <td><button class="ghost sm" @click="toggle(j)">{{ expanded === j.id ? '收起' : '应聘者' }}</button></td>
           </tr>
           <tr v-if="expanded === j.id">
@@ -111,7 +107,7 @@ onMounted(load)
                   <tr v-for="a in applicants[j.id]" :key="a.id">
                     <td>#{{ a.id }}</td>
                     <td>用户 #{{ a.applicantUserId }}</td>
-                    <td><span class="tag" :class="APP_STATUS[a.status]?.c">{{ APP_STATUS[a.status]?.t ?? a.status }}</span></td>
+                    <td><span class="tag" :class="statusTone(a.status)">{{ zhStatus(a.status) }}</span></td>
                     <td>
                       <div class="row" style="gap:6px">
                         <button v-if="a.status === 'SUBMITTED'" class="sm"

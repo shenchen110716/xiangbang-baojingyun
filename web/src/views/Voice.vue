@@ -20,9 +20,9 @@ const recall = useAction(() => api(`/api/voice/job/${sid.value}/recall`, { metho
   <h1>语音发单</h1>
   <p class="sub">语音采集 → 生成草稿 → 口头确认后建岗</p>
 
-  <div class="card" style="background:#fdf3e0;border-color:#f2e2c4">
-    <h3 style="color:#94661a">两个已知缺口</h3>
-    <p class="hint" style="margin:0;color:#94661a">
+  <div class="card note">
+    <h3>两个已知缺口</h3>
+    <p class="hint" style="margin:0">
       ① 这里填的<strong>名额会被丢弃</strong>，实际固定按 1 个建岗；
       ② <strong>撤回不会真的关闭岗位</strong>。都记在设计文档的「已知缺口」里，不是这个界面的问题。
     </p>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { api, yuan } from '../../api'
+import { zhStatus, statusTone } from '../../i18n'
 
 const id = ref(''); const reason = ref('')
 const s = ref<any>(null); const err = ref(''); const msg = ref(''); const busy = ref('')
@@ -36,7 +37,7 @@ async function voidIt() {
     <div v-if="s" class="row">
       <span class="tag">应发 {{ yuan(s.amountCents) }}</span>
       <span class="tag">工人 #{{ s.workerUserId }}</span>
-      <span class="tag" :class="s.status === 'VOIDED' ? 'bad' : 'ok'">{{ s.status }}</span>
+      <span class="tag" :class="statusTone(s.status)">{{ zhStatus(s.status) }}</span>
       <span v-if="s.voidReason" class="tag warn">{{ s.voidReason }}</span>
     </div>
   </div>

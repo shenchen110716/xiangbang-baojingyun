@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '../../api'
+import { zhOrgType } from '../../i18n'
 
 const list = ref<any[]>([])
 const loading = ref(true)
 const err = ref(''); const msg = ref(''); const busy = ref('')
-const TYPE: Record<string, string> = { ENTERPRISE: '企业', FACTORY: '工厂', SERVICE_STATION: '服务站' }
 
 async function load() {
   loading.value = true; err.value = ''
@@ -24,7 +24,7 @@ onMounted(load)
 
 <template>
   <h1>组织审核</h1>
-  <p class="sub">这是平台自己的活儿——没有「归属」可查，只能靠 PLATFORM_OPS 角色</p>
+  <p class="sub">这是平台自己的活儿——没有「归属」可查，只能靠「平台运维」角色</p>
 
   <div v-if="msg" class="msg ok">{{ msg }}</div>
   <div v-if="err" class="msg bad">{{ err }}<div style="margin-top:6px;font-size:12.5px">
@@ -44,7 +44,7 @@ onMounted(load)
         <tr v-for="o in list" :key="o.id">
           <td>#{{ o.id }}</td>
           <td>{{ o.name }}<div style="color:var(--muted);font-size:12.5px">{{ o.creditCode }}</div></td>
-          <td>{{ TYPE[o.type] ?? o.type }}</td>
+          <td>{{ zhOrgType(o.type) }}</td>
           <td>#{{ o.legalRepUserId }}</td>
           <td>
             <div class="row" style="gap:6px">

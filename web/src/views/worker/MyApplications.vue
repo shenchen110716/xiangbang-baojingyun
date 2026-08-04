@@ -1,19 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '../../api'
+import { zhStatus, statusTone } from '../../i18n'
 
 const list = ref<any[]>([])
 const loading = ref(true)
 const err = ref(''); const msg = ref('')
 const busy = ref(0)
 const factor = ref('SMS')
-
-const STATUS: Record<string, { text: string; cls: string }> = {
-  SUBMITTED: { text: '待处理', cls: 'warn' },
-  ACCEPTED:  { text: '已录用', cls: 'ok' },
-  REJECTED:  { text: '已拒绝', cls: 'bad' },
-  COMPLETED: { text: '已完成', cls: 'ok' },
-}
 
 async function load() {
   loading.value = true; err.value = ''
@@ -55,7 +49,7 @@ onMounted(load)
         <tr v-for="a in list" :key="a.id">
           <td>#{{ a.id }}</td>
           <td>#{{ a.jobId }}</td>
-          <td><span class="tag" :class="STATUS[a.status]?.cls">{{ STATUS[a.status]?.text ?? a.status }}</span></td>
+          <td><span class="tag" :class="statusTone(a.status)">{{ zhStatus(a.status) }}</span></td>
           <td>
             <button v-if="a.status === 'ACCEPTED'" class="sm" :disabled="busy === a.id" @click="sign(a)">
               {{ busy === a.id ? '…' : '签署协议' }}

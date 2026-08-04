@@ -46,7 +46,7 @@ onMounted(async () => {
     <div class="card">
       <h3>我的信用分</h3>
       <p class="hint">来自双向评价，未接单时还没有</p>
-      <div style="font-size:30px;font-weight:600;color:var(--primary-dark)">{{ credit?.score ?? '—' }}</div>
+      <div style="font-size:32px;font-weight:650;color:var(--primary);font-family:var(--mono);text-shadow:0 0 18px rgba(34,211,238,.35)">{{ credit?.score ?? '—' }}</div>
     </div>
   </div>
 

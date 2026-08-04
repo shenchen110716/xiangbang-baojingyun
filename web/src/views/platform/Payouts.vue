@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api, yuan } from '../../api'
+import { zhStatus, statusTone } from '../../i18n'
 
 const id = ref(''); const acct = ref('USER_FUNDS')
 const payout = ref<any>(null); const balance = ref<number | null>(null)
@@ -37,11 +38,11 @@ onMounted(bal)
 
 <template>
   <h1>资金与代发</h1>
-  <p class="sub">资金域是全系统唯一能动钱的地方。放款要 PLATFORM_OPS 角色</p>
+  <p class="sub">资金域是全系统唯一能动钱的地方。放款要「平台运维」角色</p>
 
-  <div class="card" style="background:#fdf3e0;border-color:#f2e2c4">
-    <h3 style="color:#94661a">代发是 mock 的</h3>
-    <p class="hint" style="margin:0;color:#94661a">
+  <div class="card note">
+    <h3>代发是 mock 的</h3>
+    <p class="hint" style="margin:0">
       点「发放」会扣监管账户、标 SUCCESS、写假的完税凭证号、通知工人「工资已发放」——<strong>而钱一分没出去</strong>。
     </p>
   </div>
@@ -54,9 +55,9 @@ onMounted(bal)
     <div class="row">
       <div class="field" style="flex:0 0 240px"><label>账户</label>
         <select v-model="acct" @change="bal">
-          <option value="USER_FUNDS">在途资金 USER_FUNDS</option>
-          <option value="PLATFORM_REVENUE">平台收入 PLATFORM_REVENUE</option>
-          <option value="GUARANTEE_POOL">担保资金池 GUARANTEE_POOL</option>
+          <option value="USER_FUNDS">在途资金</option>
+          <option value="PLATFORM_REVENUE">平台收入</option>
+          <option value="GUARANTEE_POOL">担保资金池</option>
         </select>
       </div>
       <div class="field" style="flex:none"><button class="ghost" :disabled="busy === 'bal'" @click="bal">查询</button></div>
@@ -85,7 +86,7 @@ onMounted(bal)
     <div v-if="payout" class="row" style="margin-bottom:8px">
       <span class="tag">金额 {{ yuan(payout.amountCents) }}</span>
       <span class="tag">收款人 #{{ payout.payeeUserId }}</span>
-      <span class="tag" :class="payout.status === 'PAID' ? 'ok' : payout.status === 'FAILED' ? 'bad' : 'warn'">{{ payout.status }}</span>
+      <span class="tag" :class="statusTone(payout.status)">{{ zhStatus(payout.status) }}</span>
     </div>
   </div>
 </template>

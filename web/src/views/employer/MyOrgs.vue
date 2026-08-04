@@ -1,16 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '../../api'
+import { zhStatus, zhOrgType, statusTone } from '../../i18n'
 
 const orgs = ref<any[]>([])
 const loading = ref(true)
 const err = ref(''); const msg = ref('')
 const type = ref('ENTERPRISE'); const name = ref(''); const code = ref('')
-
-const TYPE: Record<string, string> = { ENTERPRISE: '企业', FACTORY: '工厂', SERVICE_STATION: '服务站' }
-const STATUS: Record<string, { t: string; c: string }> = {
-  PENDING: { t: '待审核', c: 'warn' }, APPROVED: { t: '已通过', c: 'ok' }, REJECTED: { t: '已驳回', c: 'bad' },
-}
 
 async function load() {
   loading.value = true; err.value = ''
@@ -52,8 +48,8 @@ onMounted(load)
         <tr v-for="o in orgs" :key="o.id">
           <td>#{{ o.id }}</td>
           <td>{{ o.name }}<div style="color:var(--muted);font-size:12.5px">{{ o.creditCode }}</div></td>
-          <td>{{ TYPE[o.type] ?? o.type }}</td>
-          <td><span class="tag" :class="STATUS[o.status]?.c">{{ STATUS[o.status]?.t ?? o.status }}</span></td>
+          <td>{{ zhOrgType(o.type) }}</td>
+          <td><span class="tag" :class="statusTone(o.status)">{{ zhStatus(o.status) }}</span></td>
         </tr>
       </tbody>
     </table>

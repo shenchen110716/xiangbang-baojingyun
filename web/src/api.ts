@@ -36,6 +36,40 @@ export class ApiError extends Error {
 
 type Opts = { method?: string; body?: unknown; headers?: Record<string, string> }
 
+/** 状态码 → 人能看懂的话。查不到就报状态码,总比一坨原始响应强。 */
+const STATUS_TEXT: Record<number, string> = {
+  400: '请求有误，请检查填写的内容',
+  401: '登录已失效，请重新登录',
+  403: '没有权限做这个操作',
+  404: '找不到对应的数据',
+  409: '当前状态不允许这个操作',
+  429: '操作太频繁，稍后再试',
+  500: '服务器出错了',
+  502: '服务暂时不可用（可能正在启动）',
+  503: '服务暂时不可用（可能正在启动）',
+  504: '服务响应超时，请稍后重试',
+}
+
+/**
+ * 把错误响应变成一句人话。
+ *
+ * <p>关键是**不能把非 JSON 的响应体原样显示**:网关返回的 502/504 是 HTML 页面,
+ * 直接当消息显示会在界面上糊出一整坨 `<!DOCTYPE HTML …Error code: 404…`。
+ * 这个只有真去看渲染结果才会发现——接口调用本身没报错,页面也没崩。
+ */
+function humanError(status: number, parsed: unknown): string {
+  if (parsed && typeof parsed === 'object') {
+    const m = (parsed as any).error ?? (parsed as any).message
+    if (typeof m === 'string' && m.trim()) return m
+  }
+  if (typeof parsed === 'string') {
+    const t = parsed.trim()
+    const looksLikeHtml = /^</.test(t) || /<html|<!doctype/i.test(t)
+    if (t && !looksLikeHtml && t.length <= 120) return t
+  }
+  return STATUS_TEXT[status] ?? `请求失败（${status}）`
+}
+
 export async function api<T = any>(path: string, opts: Opts = {}): Promise<T> {
   const headers: Record<string, string> = { ...(opts.headers || {}) }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
@@ -55,10 +89,7 @@ export async function api<T = any>(path: string, opts: Opts = {}): Promise<T> {
     // 401 说明 token 没了或过期。就地清掉,否则每个页面都会拿着一个死 token 反复失败,
     // 而界面上看着像"服务器坏了"。
     if (res.status === 401 && auth.token) logout()
-    const msg = (parsed && typeof parsed === 'object' && (parsed.error || parsed.message))
-      || (typeof parsed === 'string' && parsed)
-      || `请求失败 (HTTP ${res.status})`
-    throw new ApiError(res.status, String(msg), parsed)
+    throw new ApiError(res.status, humanError(res.status, parsed), parsed)
   }
   return parsed as T
 }

@@ -37,7 +37,7 @@ onMounted(load)
   <div v-if="msg" class="msg ok">{{ msg }}</div>
   <div v-if="err" class="msg bad">{{ err }}</div>
 
-  <div v-if="recos.length" class="card" style="background:var(--primary-soft);border-color:#cfe9e0">
+  <div v-if="recos.length" class="card" style="background:var(--primary-soft);border-color:rgba(34,211,238,.28)">
     <h3>可能适合你</h3>
     <p class="hint">根据你的标签与期望推荐；改「画像与信用」会影响这里</p>
     <table>

@@ -10,12 +10,12 @@ const replay = useAction(() => api(`/api/ops/outbox/${domain.value}/${eventId.va
 </script>
 
 <template>
-  <h1>运维 · Outbox</h1>
+  <h1>事件投递监控</h1>
   <p class="sub">跨域事件的投递状态。卡住的事件意味着<strong>有人的工资单没生成、佣金没入账</strong>，不会自愈</p>
 
   <div class="card">
     <h3>卡死事件</h3>
-    <p class="hint">需要 PLATFORM_OPS 角色，普通账号会被拒绝</p>
+    <p class="hint">需要「平台运维」角色，普通账号会被拒绝</p>
     <button class="ghost" @click="stuck.run()">查询</button>
     <div style="height:12px"></div>
     <div v-if="Array.isArray(stuck.data.value) && !stuck.data.value.length" class="msg ok">没有卡死事件</div>

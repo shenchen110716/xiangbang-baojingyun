@@ -36,7 +36,7 @@ const pay = useAction(() => api(`/api/broker/commission/${cid.value}/pay`, { met
 
   <div class="card">
     <h3>佣金</h3>
-    <p class="hint">支付佣金需要平台角色</p>
+    <p class="hint">支付佣金需要「平台运维」角色</p>
     <div class="row">
       <div class="field"><label>佣金 ID</label><input v-model="cid" /></div>
       <div class="field" style="flex:none"><button class="ghost" :disabled="!cid" @click="load.run()">查询</button></div>
