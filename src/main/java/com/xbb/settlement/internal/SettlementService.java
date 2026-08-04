@@ -27,13 +27,16 @@ class SettlementService implements SettlementApi {
     private final PayPlanFactorRepository payPlanFactors;
     private final SettlementPostedJobRepository postedJobs;
     private final SettlementApprovedOrgRepository approvedOrgs;
+    private final com.xbb.attendance.api.AttendanceApi attendanceApi;
 
     SettlementService(SettlementRepository settlements,
                      SettlementOutboxRepository outbox, ObjectMapper json,
                        IdentityApi identityApi,
                       PayPlanRepository payPlans, PayPlanFactorRepository payPlanFactors,
                       SettlementPostedJobRepository postedJobs,
-                      SettlementApprovedOrgRepository approvedOrgs) {
+                      SettlementApprovedOrgRepository approvedOrgs,
+                      com.xbb.attendance.api.AttendanceApi attendanceApi) {
+        this.attendanceApi = attendanceApi;
         this.payPlans = payPlans;
         this.payPlanFactors = payPlanFactors;
         this.postedJobs = postedJobs;
@@ -81,8 +84,83 @@ class SettlementService implements SettlementApi {
 
     @Override
     @Transactional(transactionManager = "settlementTransactionManager", readOnly = true)
-    public Optional<SettlementView> findById(long settlementId) {
-        return settlements.findById(settlementId).map(this::toView);
+    public Optional<SettlementView> findById(long settlementId, long callerUserId) {
+        return settlements.findById(settlementId)
+                .filter(s -> maySee(s, callerUserId))
+                .map(this::toView);
+    }
+
+    /**
+     * 谁看得到这张工资单:工人本人,或岗位所属组织的法人代表。
+     *
+     * <p><b>看不到时返回空,而不是抛"无权访问"。</b>抛异常会顺带确认这张单存在 ——
+     * 拿编号从 1 数上去,虽然读不到金额,却能数出平台一共发了多少笔工资。
+     */
+    private boolean maySee(Settlement s, long callerUserId) {
+        if (s.getWorkerUserId() == callerUserId) {
+            return true;
+        }
+        return postedJobs.findById(s.getJobId())
+                .flatMap(job -> approvedOrgs.findById(job.getOrgId()))
+                .map(org -> org.getLegalRepUserId() == callerUserId)
+                .orElse(false);
+    }
+
+    @Override
+    @Transactional(transactionManager = "settlementTransactionManager", readOnly = true)
+    public Optional<PayslipView> payslip(long settlementId, long callerUserId) {
+        return settlements.findById(settlementId)
+                .filter(s -> maySee(s, callerUserId))
+                .map(this::toPayslip);
+    }
+
+    private PayslipView toPayslip(Settlement s) {
+        PayPlan plan = s.getPayPlanId() == null ? null
+                : payPlans.findById(s.getPayPlanId()).orElse(null);
+
+        List<PayslipLine> lines = parseLines(s);
+        if (lines.isEmpty()) {
+            // 方案启用前的老工资单没有明细。给一行兜底而不是留空 ——
+            // 空白让人以为"系统坏了",一行"岗位工价"至少说清了这笔是怎么来的
+            lines = List.of(new PayslipLine("岗位工价（未启用计薪方案）", s.getAmountCents()));
+        }
+
+        // 天数用明细算不出来,只有考勤知道。没有方案的老单子按 0 天呈现
+        int workDays = s.getPayPlanId() == null ? 0 : workDaysOf(s);
+
+        return new PayslipView(s.getId(), s.getApplicationId(), s.getJobId(), s.getWorkerUserId(),
+                s.getAmountCents(), s.getStatus().name(), s.getVoidReason(),
+                s.getPayPlanId(), plan == null ? null : plan.getName(),
+                plan == null ? null : plan.getPayType().name(),
+                s.getMinutes(), workDays, lines);
+    }
+
+    /**
+     * 明细存的是计薪那一刻的快照。**解析失败不抛异常** ——
+     * 工资条打不开比金额少一行明细严重得多,而这两件事里只有前者会让人打电话来。
+     */
+    private List<PayslipLine> parseLines(Settlement s) {
+        if (s.getBreakdown() == null || s.getBreakdown().isBlank()) {
+            return List.of();
+        }
+        try {
+            return json.readValue(s.getBreakdown(),
+                    new com.fasterxml.jackson.core.type.TypeReference<List<PayslipLine>>() { });
+        } catch (Exception e) {
+            log.error("工资单 {} 的明细解析失败,本次只显示总额。原文: {}",
+                    s.getId(), s.getBreakdown(), e);
+            return List.of();
+        }
+    }
+
+    private int workDaysOf(Settlement s) {
+        try {
+            return attendanceApi.confirmedSummary(s.getApplicationId()).workDays();
+        } catch (RuntimeException e) {
+            // 出勤天数只是展示信息,拿不到不该让整张工资条打不开
+            log.warn("工资单 {} 取出勤天数失败,按 0 展示", s.getId(), e);
+            return 0;
+        }
     }
 
     @Override

@@ -13,7 +13,32 @@ public interface SettlementApi {
 
     void voidSettlement(long settlementId, String reason, long callerUserId);
 
-    Optional<SettlementView> findById(long settlementId);
+    /**
+     * 按编号查工资单。**必须带 caller** —— 不带的话把编号从 1 数上去就是全站工资表。
+     *
+     * <p>看得到的只有两方:工人本人,和岗位所属组织的法人代表(要核对自己发出去的钱)。
+     * 其他人一律返回空 —— 返回"无权访问"会顺带确认这张单存在。
+     */
+    Optional<SettlementView> findById(long settlementId, long callerUserId);
+
+    /** 一行工资明细。 */
+    record PayslipLine(String name, long amountCents) { }
+
+    /**
+     * 工资条:金额是怎么算出来的。
+     *
+     * <p>只给总额是不够的 —— 工人对不上的时候没有任何自查手段,只能来问人。
+     *
+     * @param payPlanId  按哪版方案算的。为空表示这单走的是岗位一口价(方案启用前的老口径)
+     * @param lines      逐行明细,加起来等于应发。扣款是负数
+     */
+    record PayslipView(long id, long applicationId, long jobId, long workerUserId,
+                       long amountCents, String status, String voidReason,
+                       Long payPlanId, String payPlanName, String payType,
+                       int minutes, int workDays, List<PayslipLine> lines) { }
+
+    /** 工资条。可见范围同 {@link #findById}。 */
+    Optional<PayslipView> payslip(long settlementId, long callerUserId);
 
     Optional<SettlementView> findByApplicationId(long applicationId);
 

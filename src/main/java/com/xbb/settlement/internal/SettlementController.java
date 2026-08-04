@@ -33,9 +33,23 @@ class SettlementController {
         return ResponseEntity.ok(settlementApi.listMySettlements(caller.userId()));
     }
 
+    /**
+     * 按编号查工资单。**看不见的一律 404**,不是 403 ——
+     * 403 会顺带确认这张单存在,拿编号从 1 数上去就能数出平台发了多少笔。
+     */
     @GetMapping("/{id}")
-    ResponseEntity<SettlementApi.SettlementView> get(@PathVariable long id) {
-        return settlementApi.findById(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    ResponseEntity<SettlementApi.SettlementView> get(@PathVariable long id,
+                                                     @AuthenticationPrincipal AuthenticatedUser caller) {
+        return settlementApi.findById(id, caller.userId())
+                .map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /** 工资条:这笔钱是怎么算出来的。只给总额的话,工人对不上时没有任何自查手段。 */
+    @GetMapping("/{id}/payslip")
+    ResponseEntity<SettlementApi.PayslipView> payslip(@PathVariable long id,
+                                                      @AuthenticationPrincipal AuthenticatedUser caller) {
+        return settlementApi.payslip(id, caller.userId())
+                .map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PutMapping("/{id}/void")
