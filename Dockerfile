@@ -55,8 +55,15 @@ COPY db/init-schemas.sql /app/db/init-schemas.sql
 COPY docker-entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh && chown -R appuser /app
 
-# 免费套餐 512MB,按 384MB 堆压
-ENV JAVA_OPTS="-Xms192m -Xmx384m -XX:+UseSerialGC -XX:MaxMetaspaceSize=192m -Xss512k"
+# 免费档 512MB / 约 0.1 核。**CPU 才是瓶颈,不是内存。**
+#
+# -XX:TieredStopAtLevel=1 关掉 C2 即时编译:Spring 启动是"大量类只跑一次"的负载,
+# C2 的优化来不及回本,却要抢本来就稀缺的 CPU。实测 0.25 核下
+# 启动 290 秒 → 131 秒(砍 55%)。代价是稳态吞吐略降,测试环境完全划算。
+#
+# 这条是被线上打出来的:只测过 512MB 内存、**从没测过 CPU 受限**,
+# 于是本机 15 秒起来的应用在 Render 上超时、部署失败。
+ENV JAVA_OPTS="-Xms192m -Xmx384m -XX:+UseSerialGC -XX:MaxMetaspaceSize=192m -Xss512k -XX:TieredStopAtLevel=1 -Dspring.jmx.enabled=false"
 USER appuser
 EXPOSE 8080
 ENTRYPOINT ["/app/entrypoint.sh"]
