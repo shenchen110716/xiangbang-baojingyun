@@ -115,10 +115,21 @@ class FundEventListenerTest {
         disburse(settlementId);
 
         await().atMost(Duration.ofSeconds(15)).until(() -> commissions.findBySettlementId(settlementId).isPresent());
-        var commission = commissions.findBySettlementId(settlementId).orElseThrow();
+
+        // 六档分账(此前是单一 10%,现在照搬老系统的模型,比例来自参数中心)。
+        // 基数 5000:主动 60% = 3000;剩余 2000 里 平台 20% = 400、被动池 30% = 600、服务站 50% = 1000。
+        // 这个经纪人**没有上级也没挂靠服务站**,所以后两档不产生记录 ——
+        // 少分是安全的,把它们转给别人才是错的。
+        var all = commissions.findAllBySettlementId(settlementId);
+        assertThat(all).hasSize(1);
+        var commission = all.get(0);
+        assertThat(commission.getTier()).isEqualTo(Commission.Tier.ACTIVE);
         assertThat(commission.getBrokerUserId()).isEqualTo(broker);
-        assertThat(commission.getAmountCents()).isEqualTo(500); // 5000 * 10 / 100
+        assertThat(commission.getAmountCents()).isEqualTo(3_000);
         assertThat(commission.getStatus()).isEqualTo(Commission.Status.PENDING);
+        // 分出去的绝不能超过基数
+        assertThat(all.stream().mapToLong(Commission::getAmountCents).sum())
+                .isLessThanOrEqualTo(5_000);
     }
 
     @Test

@@ -24,6 +24,7 @@ const router = createRouter({
 
     // 平台端
     { path: '/settings', component: () => import('./views/platform/Settings.vue') },
+    { path: '/stations', component: () => import('./views/platform/Stations.vue') },
     { path: '/review-orgs', component: () => import('./views/platform/ReviewOrgs.vue') },
     { path: '/payouts', component: () => import('./views/platform/Payouts.vue') },
     { path: '/settlements', component: () => import('./views/platform/Settlements.vue') },
