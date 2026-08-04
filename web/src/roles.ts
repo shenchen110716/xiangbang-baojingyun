@@ -25,6 +25,7 @@ export const NAV: Record<RoleKey, { to: string; label: string; badge?: boolean }
   worker: [
     { to: '/jobs', label: '找活' },
     { to: '/my-applications', label: '我的报名' },
+    { to: '/my-attendance', label: '我的考勤' },
     { to: '/my-wages', label: '我的工资' },
     { to: '/my-profile', label: '画像与信用' },
     { to: '/review', label: '评价' },
@@ -33,6 +34,8 @@ export const NAV: Record<RoleKey, { to: string; label: string; badge?: boolean }
   employer: [
     { to: '/my-orgs', label: '我的组织' },
     { to: '/my-jobs', label: '我的岗位' },
+    { to: '/attendance', label: '考勤录入' },
+    { to: '/pay-plans', label: '计薪方案' },
     { to: '/voice', label: '语音发单' },
     { to: '/talent', label: '人才库' },
     { to: '/review', label: '评价' },

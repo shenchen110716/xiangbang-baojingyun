@@ -31,6 +31,32 @@ const STATUS: Record<string, string> = {
   SIGNED: '已签署',
   // 佣金
   PAYABLE: '待支付',
+  // 考勤
+  DRAFT: '草稿',
+  CONFIRMED: '已确认',
+  // 计薪方案
+  ACTIVE: '生效中',
+  EXPIRED: '已失效',
+}
+
+/** 考勤来源。「打卡」和「导入」出错的方式不一样,查账时得分得清。 */
+const SOURCE: Record<string, string> = {
+  PUNCH: '打卡',
+  IMPORT: '批量导入',
+  MANUAL: '手工录入',
+}
+
+const PAY_TYPE: Record<string, string> = {
+  HOURLY: '按小时',
+  DAILY: '按天',
+  MONTHLY: '按月',
+  PIECE: '按件',
+}
+
+const FACTOR_TYPE: Record<string, string> = {
+  BONUS: '奖励',
+  DEDUCTION: '扣款',
+  PENALTY: '罚款',
 }
 
 const ORG_TYPE: Record<string, string> = {
@@ -86,7 +112,19 @@ export const zhOrgType = (v: unknown) => pick(ORG_TYPE, v)
 export const zhAccount = (v: unknown) => pick(ACCOUNT, v)
 export const zhRole    = (v: unknown) => pick(ROLE, v)
 export const zhFactor  = (v: unknown) => pick(FACTOR, v)
+export const zhSource     = (v: unknown) => pick(SOURCE, v)
+export const zhPayType    = (v: unknown) => pick(PAY_TYPE, v)
+export const zhFactorType = (v: unknown) => pick(FACTOR_TYPE, v)
 export const zhField   = (k: string) => FIELD[k] ?? k
+
+/** 分钟 → 「8 小时 30 分」。**不要在这里换算成工资** —— 算钱是后端的事。 */
+export function hours(minutes: number | null | undefined): string {
+  if (minutes === null || minutes === undefined) return '—'
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h === 0) return `${m} 分钟`
+  return m === 0 ? `${h} 小时` : `${h} 小时 ${m} 分`
+}
 
 /** 状态 → 标签配色。绿=好、黄=进行中、红=坏,不认识的走中性。 */
 export function statusTone(v: unknown): '' | 'ok' | 'warn' | 'bad' {

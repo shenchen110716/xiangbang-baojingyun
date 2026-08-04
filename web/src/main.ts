@@ -16,11 +16,14 @@ const router = createRouter({
     { path: '/jobs', component: () => import('./views/worker/Jobs.vue') },
     { path: '/my-applications', component: () => import('./views/worker/MyApplications.vue') },
     { path: '/my-wages', component: () => import('./views/worker/MyWages.vue') },
+    { path: '/my-attendance', component: () => import('./views/worker/MyAttendance.vue') },
     { path: '/my-profile', component: () => import('./views/worker/MyProfile.vue') },
 
     // 企业端
     { path: '/my-orgs', component: () => import('./views/employer/MyOrgs.vue') },
     { path: '/my-jobs', component: () => import('./views/employer/MyJobs.vue') },
+    { path: '/attendance', component: () => import('./views/employer/Attendance.vue') },
+    { path: '/pay-plans', component: () => import('./views/employer/PayPlans.vue') },
 
     // 平台端
     { path: '/settings', component: () => import('./views/platform/Settings.vue') },
