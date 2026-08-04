@@ -26,5 +26,12 @@ public interface AgreementApi {
      */
     void sign(long applicationId, long signerUserId, String identityFactor);
 
-    Optional<AgreementView> findByApplicationId(long applicationId);
+    /**
+      * 协议详情(含正文)。只有协议约定的乙方本人或平台运维看得到。
+      *
+      * <p>用人单位暂时看不到:协议域没有组织副本,而为了一个还没有界面在用的入口
+      * 去建副本+订阅事件是本末倒置。等企业端真的要看合同时再补 —— 到时是加一条订阅,
+      * 不是拆掉这里的校验。
+      */
+    Optional<AgreementView> findByApplicationId(long applicationId, long callerUserId);
 }

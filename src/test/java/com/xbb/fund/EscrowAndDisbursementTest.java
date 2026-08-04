@@ -88,7 +88,7 @@ class EscrowAndDisbursementTest {
 
         fundApi.disburse(payoutId, ops.userId());
 
-        FundApi.DisbursementView view = fundApi.findDisbursement(payoutId).orElseThrow();
+        FundApi.DisbursementView view = fundApi.findDisbursement(payoutId, ops.userId()).orElseThrow();
         assertThat(view.status()).isEqualTo(DisbursementStatus.SUCCESS);
         // 税务合规是规模化的生死线,凭证号不是可选字段
         assertThat(view.taxCertificateNo()).isNotBlank();
@@ -129,13 +129,13 @@ class EscrowAndDisbursementTest {
 
         fundApi.disburse(payoutId, ops.userId());
 
-        FundApi.DisbursementView view = fundApi.findDisbursement(payoutId).orElseThrow();
+        FundApi.DisbursementView view = fundApi.findDisbursement(payoutId, ops.userId()).orElseThrow();
         assertThat(view.status()).isEqualTo(DisbursementStatus.FAILED);
         assertThat(view.failReason()).contains("收款账户异常");
         // 钱没发出去就不能扣:预扣要冲正回来
         assertThat(fundApi.balanceOf(AccountType.USER_FUNDS)).isEqualTo(before);
         // 发放本身仍是待发放,没有被误标成已发放
-        assertThat(fundApi.findById(payoutId).orElseThrow().status()).isEqualTo(Payout.Status.PENDING);
+        assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(Payout.Status.PENDING);
     }
 
     @Test
@@ -144,12 +144,12 @@ class EscrowAndDisbursementTest {
         long payoutId = pendingPayout(30_000);
         channel.failNext("payout-" + payoutId, "网络超时");
         fundApi.disburse(payoutId, ops.userId());
-        assertThat(fundApi.findDisbursement(payoutId).orElseThrow().status())
+        assertThat(fundApi.findDisbursement(payoutId, ops.userId()).orElseThrow().status())
                 .isEqualTo(DisbursementStatus.FAILED);
 
         fundApi.retryDisbursement(payoutId, ops.userId());
 
-        FundApi.DisbursementView view = fundApi.findDisbursement(payoutId).orElseThrow();
+        FundApi.DisbursementView view = fundApi.findDisbursement(payoutId, ops.userId()).orElseThrow();
         assertThat(view.status()).isEqualTo(DisbursementStatus.SUCCESS);
         assertThat(view.retryCount()).isEqualTo(1);
         assertThat(view.taxCertificateNo()).isNotBlank();

@@ -39,8 +39,9 @@ class EngagementController {
     }
 
     @GetMapping("/{id}")
-    ResponseEntity<EngagementApi.ApplicationView> get(@PathVariable long id) {
-        return engagementApi.findApplication(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    ResponseEntity<EngagementApi.ApplicationView> get(@PathVariable long id,
+                                                       @AuthenticationPrincipal AuthenticatedUser caller) {
+        return engagementApi.findApplication(id, caller.userId()).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PutMapping("/{id}/accept")

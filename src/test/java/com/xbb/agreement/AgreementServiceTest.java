@@ -72,7 +72,7 @@ class AgreementServiceTest {
         engagementApi.acceptApplication(applicationId, legalRep);
 
         await().atMost(Duration.ofSeconds(15)).until(() ->
-                agreementApi.findByApplicationId(applicationId).isPresent());
+                agreementApi.findByApplicationId(applicationId, ops.userId()).isPresent());
         return new long[]{applicationId, legalRep, worker};
     }
 
@@ -81,7 +81,7 @@ class AgreementServiceTest {
         long[] ids = acceptedApplication("15800000001", "110101199001024001",
                 "15800000002", "110101199001024002", "协议一厂", "91110000000000141X");
 
-        AgreementApi.AgreementView view = agreementApi.findByApplicationId(ids[0]).orElseThrow();
+        AgreementApi.AgreementView view = agreementApi.findByApplicationId(ids[0], ops.userId()).orElseThrow();
         assertThat(view.status()).isEqualTo(Agreement.Status.PENDING);
         assertThat(view.contentHash()).hasSize(64);
         assertThat(view.workerUserId()).isEqualTo(ids[2]);
@@ -97,7 +97,7 @@ class AgreementServiceTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 agreementApi.sign(ids[0], ids[2], "SMS"));
 
-        AgreementApi.AgreementView view = agreementApi.findByApplicationId(ids[0]).orElseThrow();
+        AgreementApi.AgreementView view = agreementApi.findByApplicationId(ids[0], ops.userId()).orElseThrow();
         assertThat(view.status()).isEqualTo(Agreement.Status.SIGNED);
         assertThat(view.providerRef()).startsWith("MOCK-");
     }
@@ -152,14 +152,14 @@ class AgreementServiceTest {
     void 签署不会改变存证哈希() {
         long[] ids = acceptedApplication("15800000013", "110101199001024013",
                 "15800000014", "110101199001024014", "协议七厂", "91110000000000147X");
-        String before = agreementApi.findByApplicationId(ids[0]).orElseThrow().contentHash();
+        String before = agreementApi.findByApplicationId(ids[0], ops.userId()).orElseThrow().contentHash();
 
         // 协议由录用事件异步触发生成,先等它到位
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 agreementApi.sign(ids[0], ids[2], "SMS"));
 
         // 存证的意义就在于签署前后正文可证明未被篡改
-        assertThat(agreementApi.findByApplicationId(ids[0]).orElseThrow().contentHash()).isEqualTo(before);
+        assertThat(agreementApi.findByApplicationId(ids[0], ops.userId()).orElseThrow().contentHash()).isEqualTo(before);
     }
 
     @Test
@@ -194,7 +194,7 @@ class AgreementServiceTest {
                 await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                         engagementApi.completeApplication(ids[0], ids[1])));
 
-        assertThat(engagementApi.findApplication(ids[0]).orElseThrow().status())
+        assertThat(engagementApi.findApplication(ids[0], ops.userId()).orElseThrow().status())
                 .isEqualTo(com.xbb.engagement.internal.Application.Status.COMPLETED);
     }
 
@@ -205,7 +205,7 @@ class AgreementServiceTest {
         long[] ids = acceptedApplication("15800000019", "110101199001024019",
                 "15800000020", "110101199001024020", "协议十厂", "91110000000000211X");
 
-        AgreementApi.AgreementView view = agreementApi.findByApplicationId(ids[0]).orElseThrow();
+        AgreementApi.AgreementView view = agreementApi.findByApplicationId(ids[0], ops.userId()).orElseThrow();
         int activeVersion = opsApi.activeTemplate(OpsApi.LABOR_AGREEMENT).orElseThrow().version();
 
         assertThat(view.templateKey()).isEqualTo(OpsApi.LABOR_AGREEMENT);
@@ -220,7 +220,7 @@ class AgreementServiceTest {
     void 模板发新版后老协议仍指向老版本且能按版本号回溯正文() {
         long[] ids = acceptedApplication("15800000021", "110101199001024021",
                 "15800000022", "110101199001024022", "协议十一厂", "91110000000000212X");
-        AgreementApi.AgreementView before = agreementApi.findByApplicationId(ids[0]).orElseThrow();
+        AgreementApi.AgreementView before = agreementApi.findByApplicationId(ids[0], ops.userId()).orElseThrow();
         int oldVersion = before.templateVersion();
         String oldBody = opsApi.activeTemplate(OpsApi.LABOR_AGREEMENT).orElseThrow().body();
 
@@ -229,7 +229,7 @@ class AgreementServiceTest {
         try {
             assertThat(newVersion).isEqualTo(oldVersion + 1);
 
-            AgreementApi.AgreementView after = agreementApi.findByApplicationId(ids[0]).orElseThrow();
+            AgreementApi.AgreementView after = agreementApi.findByApplicationId(ids[0], ops.userId()).orElseThrow();
             assertThat(after.templateVersion()).isEqualTo(oldVersion);
             assertThat(after.content()).isEqualTo(before.content());
             assertThat(after.contentHash()).isEqualTo(before.contentHash());
@@ -242,7 +242,7 @@ class AgreementServiceTest {
             // 新版发布后生成的协议用新版
             long[] later = acceptedApplication("15800000023", "110101199001024023",
                     "15800000024", "110101199001024024", "协议十二厂", "91110000000000213X");
-            AgreementApi.AgreementView latest = agreementApi.findByApplicationId(later[0]).orElseThrow();
+            AgreementApi.AgreementView latest = agreementApi.findByApplicationId(later[0], ops.userId()).orElseThrow();
             assertThat(latest.templateVersion()).isEqualTo(newVersion);
             assertThat(latest.content()).contains("新版补充条款");
         } finally {

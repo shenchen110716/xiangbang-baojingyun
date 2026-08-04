@@ -118,7 +118,7 @@ class ReviewServiceTest {
         reviewApi.submitReview(ids[0], ids[1], List.of("准时到岗"), "好");
 
         // 掐掉报复性差评:对方没提交、7 天没到,谁也看不到
-        assertThat(reviewApi.findVisibleReviews(ids[0])).isEmpty();
+        assertThat(reviewApi.findVisibleReviews(ids[0], ops.userId())).isEmpty();
     }
 
     @Test
@@ -129,7 +129,7 @@ class ReviewServiceTest {
         reviewApi.submitReview(ids[0], ids[1], List.of("准时到岗"), "好");
         reviewApi.submitReview(ids[0], ids[2], List.of("结算准时"), "老板不错");
 
-        assertThat(reviewApi.findVisibleReviews(ids[0])).hasSize(2);
+        assertThat(reviewApi.findVisibleReviews(ids[0], ops.userId())).hasSize(2);
     }
 
     // ---------- 标签方向校验 ----------
@@ -185,7 +185,7 @@ class ReviewServiceTest {
         reviewApi.submitReview(ids[0], ids[1], List.of("迟到早退"), "偶尔迟到");
         reviewApi.submitReview(ids[0], ids[2], List.of("结算准时"), "还行");
 
-        double before = reviewApi.findVisibleReviews(ids[0]).stream()
+        double before = reviewApi.findVisibleReviews(ids[0], ops.userId()).stream()
                 .filter(r -> r.raterUserId() == ids[1]).findFirst().orElseThrow().score();
         assertThat(before).isCloseTo(4.5, within(1e-9));
 
@@ -193,7 +193,7 @@ class ReviewServiceTest {
         try {
             opsApi.updateValue(light, "3.0");
 
-            double after = reviewApi.findVisibleReviews(ids[0]).stream()
+            double after = reviewApi.findVisibleReviews(ids[0], ops.userId()).stream()
                     .filter(r -> r.raterUserId() == ids[1]).findFirst().orElseThrow().score();
             assertThat(after).isCloseTo(before, within(1e-9));
         } finally {

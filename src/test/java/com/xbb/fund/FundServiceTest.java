@@ -52,7 +52,7 @@ class FundServiceTest {
 
         fundApi.disburse(payoutId, ops.userId());
 
-        var view = fundApi.findById(payoutId).orElseThrow();
+        var view = fundApi.findById(payoutId, ops.userId()).orElseThrow();
         assertThat(view.status()).isEqualTo(Payout.Status.PAID);
     }
 
@@ -68,7 +68,7 @@ class FundServiceTest {
         fundApi.disburse(payoutId, ops.userId());
 
         assertThat(fundApi.balanceOf(AccountType.USER_FUNDS)).isEqualTo(balanceAfterFirst);
-        assertThat(fundApi.findById(payoutId).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
+        assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
     }
 
     @Test
@@ -105,7 +105,7 @@ class FundServiceTest {
         // 幂等语义下"两个调用都不报错"是允许的(其中一个是空操作),
         // 所以断言的是资金侧的不变量:只扣一次款、只有一条成功的代发记录。
         assertThat(fundApi.balanceOf(AccountType.USER_FUNDS)).isEqualTo(balanceBefore - 1200);
-        assertThat(fundApi.findDisbursement(payoutId).orElseThrow().status())
+        assertThat(fundApi.findDisbursement(payoutId, ops.userId()).orElseThrow().status())
                 .isEqualTo(com.xbb.fund.api.DisbursementStatus.SUCCESS);
         assertThat(successCount.get() + failures.size()).isEqualTo(2);
     }

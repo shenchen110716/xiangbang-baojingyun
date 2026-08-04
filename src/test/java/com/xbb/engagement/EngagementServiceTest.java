@@ -115,7 +115,7 @@ class EngagementServiceTest {
 
         engagementApi.acceptApplication(applicationId, legalRep);
 
-        assertThat(engagementApi.findApplication(applicationId).orElseThrow().status())
+        assertThat(engagementApi.findApplication(applicationId, ops.userId()).orElseThrow().status())
                 .isEqualTo(Application.Status.ACCEPTED);
     }
 
@@ -188,7 +188,7 @@ class EngagementServiceTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 engagementApi.completeApplication(applicationId, legalRep.get()));
 
-        assertThat(engagementApi.findApplication(applicationId).orElseThrow().status())
+        assertThat(engagementApi.findApplication(applicationId, ops.userId()).orElseThrow().status())
                 .isEqualTo(Application.Status.COMPLETED);
     }
 

@@ -5,6 +5,7 @@ import com.xbb.identity.TestPlatformOps;
 import com.xbb.identity.TestCodeAccessor;
 import com.xbb.identity.api.IdentityApi;
 import com.xbb.job.api.JobApi;
+import com.xbb.job.internal.ApprovedOrgRepository;
 import com.xbb.org.api.OrgApi;
 import com.xbb.org.internal.Organization;
 import com.xbb.voice.api.VoiceApi;
@@ -63,6 +64,8 @@ class VoiceSessionServiceTest {
     @Autowired TestCodeAccessor codes;
     @Autowired OrgApi orgApi;
     @Autowired JobApi jobApi;
+    /** 用来确认 job 域的组织副本真的落地了,见 approvedOrgWithLegalRep 的注释。 */
+    @Autowired ApprovedOrgRepository jobApprovedOrgs;
     @Autowired VoiceApi voiceApi;
     @Autowired Clock clock;
 
@@ -76,9 +79,16 @@ class VoiceSessionServiceTest {
                 orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
-        // job 域的已审核组织副本是异步落地的,等它出现再发单
-        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                jobApi.checkWageAnomaly(orgId, 20_000));
+        // job 域的已审核组织副本是异步落地的,等它出现再发单。
+        //
+        // **直接查副本表,不要拿 checkWageAnomaly 当探针。**原来那句
+        // `untilAsserted(() -> jobApi.checkWageAnomaly(orgId, 20_000))` 是个空操作:
+        // checkWageAnomaly 只读 jobs 表、压根不碰 approvedOrgs,副本没到它也不会抛,
+        // 于是 await 立刻通过,后面发单才撞上"组织未通过审核"。
+        // 症状是这个类里**随机某一条**测试挂掉 —— 哪条先撞上竞态就是哪条,
+        // 看起来像偶发抖动,其实是等待条件从来没生效过。
+        await().atMost(Duration.ofSeconds(20))
+                .until(() -> jobApprovedOrgs.findById(orgId).isPresent());
         return orgId;
     }
 

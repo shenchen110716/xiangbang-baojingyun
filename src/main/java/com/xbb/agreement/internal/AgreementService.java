@@ -19,10 +19,13 @@ class AgreementService implements AgreementApi {
     private final OpsApi ops;
     private final AgreementOutboxRepository outbox;
     private final ObjectMapper json;
+    private final com.xbb.identity.api.IdentityApi identityApi;
 
     AgreementService(AgreementRepository agreements, SigningProvider signingProvider,
                       OpsApi ops,
-                     AgreementOutboxRepository outbox, ObjectMapper json) {
+                     AgreementOutboxRepository outbox, ObjectMapper json,
+                     com.xbb.identity.api.IdentityApi identityApi) {
+        this.identityApi = identityApi;
         this.agreements = agreements;
         this.signingProvider = signingProvider;
         this.ops = ops;
@@ -102,8 +105,12 @@ class AgreementService implements AgreementApi {
 
     @Override
     @Transactional(transactionManager = "agreementTransactionManager", readOnly = true)
-    public Optional<AgreementView> findByApplicationId(long applicationId) {
-        return agreements.findByApplicationId(applicationId).map(a -> new AgreementView(
+    public Optional<AgreementView> findByApplicationId(long applicationId, long callerUserId) {
+        return agreements.findByApplicationId(applicationId)
+                // 协议约定的乙方本人,或平台运维。正文里有岗位与工价,不是能随便读的
+                .filter(a -> a.getWorkerUserId() == callerUserId
+                        || identityApi.hasRole(callerUserId, com.xbb.identity.api.Role.PLATFORM_OPS))
+                .map(a -> new AgreementView(
                 a.getId(), a.getApplicationId(), a.getWorkerUserId(), a.getOrgId(),
                 a.getContent(), a.getContentHash(), a.getStatus(), a.getProviderRef(),
                 a.getTemplateKey(), a.getTemplateVersion()));

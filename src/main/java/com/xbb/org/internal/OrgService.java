@@ -93,8 +93,13 @@ class OrgService implements OrgApi {
 
     @Override
     @Transactional(transactionManager = "orgTransactionManager", readOnly = true)
-    public Optional<OrgView> findById(long orgId) {
-        return orgs.findById(orgId).map(OrgService::toView);
+    public Optional<OrgView> findById(long orgId, long callerUserId) {
+        return orgs.findById(orgId)
+                // 法人代表本人或平台运维。信用代码 + 法人是把人和企业对应起来的东西,
+                // 招聘信息公开不等于这些也公开
+                .filter(o -> o.getLegalRepUserId() == callerUserId
+                        || identityApi.hasRole(callerUserId, com.xbb.identity.api.Role.PLATFORM_OPS))
+                .map(OrgService::toView);
     }
 
     @Override

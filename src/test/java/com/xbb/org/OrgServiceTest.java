@@ -53,7 +53,7 @@ class OrgServiceTest {
 
         long orgId = orgApi.submit(com.xbb.org.api.OrgType.FACTORY, "六号工厂", "91110000000000001X", userId);
 
-        var view = orgApi.findById(orgId).orElseThrow();
+        var view = orgApi.findById(orgId, ops.userId()).orElseThrow();
         assertThat(view.status()).isEqualTo(Organization.Status.PENDING);
     }
 
@@ -71,7 +71,7 @@ class OrgServiceTest {
 
         orgApi.approve(orgId, ops.userId());
 
-        assertThat(orgApi.findById(orgId).orElseThrow().status()).isEqualTo(Organization.Status.APPROVED);
+        assertThat(orgApi.findById(orgId, ops.userId()).orElseThrow().status()).isEqualTo(Organization.Status.APPROVED);
     }
 
     @Test

@@ -20,7 +20,8 @@ public interface BrokerApi {
 
     Optional<BrokerView> findBroker(long userId);
 
-    Optional<CommissionView> findCommission(long commissionId);
+    /** 佣金明细。只有挣这笔佣金的经纪人本人或平台运维看得到。 */
+    Optional<CommissionView> findCommission(long commissionId, long callerUserId);
 
     // ─────────────── 服务站与业务员网络 ───────────────
 

@@ -26,11 +26,14 @@ class EngagementService implements EngagementApi {
     private final JobApi jobApi;
     private final EngagementOutboxRepository outbox;
     private final ObjectMapper json;
+    private final com.xbb.identity.api.IdentityApi identityApi;
 
     EngagementService(ApplicationRepository applications, PostedJobRepository postedJobs,
                        EngagementApprovedOrgRepository approvedOrgs, EngagementVerifiedUserRepository verifiedUsers,
                        SignedAgreementRepository signedAgreements, JobApi jobApi,
-                       EngagementOutboxRepository outbox, ObjectMapper json) {
+                       EngagementOutboxRepository outbox, ObjectMapper json,
+                       com.xbb.identity.api.IdentityApi identityApi) {
+        this.identityApi = identityApi;
         this.applications = applications;
         this.postedJobs = postedJobs;
         this.approvedOrgs = approvedOrgs;
@@ -160,9 +163,27 @@ class EngagementService implements EngagementApi {
 
     @Override
     @Transactional(transactionManager = "engagementTransactionManager", readOnly = true)
-    public Optional<ApplicationView> findApplication(long applicationId) {
-        return applications.findById(applicationId).map(a -> new ApplicationView(
-                a.getId(), a.getJobId(), a.getApplicantUserId(), a.getStatus()));
+    public Optional<ApplicationView> findApplication(long applicationId, long callerUserId) {
+        return applications.findById(applicationId)
+                .filter(a -> maySeeApplication(a, callerUserId))
+                .map(a -> new ApplicationView(
+                        a.getId(), a.getJobId(), a.getApplicantUserId(), a.getStatus()));
+    }
+
+    /**
+     * 谁看得到这张报名单:应聘者本人、用人单位法人代表,或平台运维。
+     *
+     * <p>光是"谁报了哪个岗位"就已经是不该外泄的 —— 它把人和求职意向对应起来。
+     */
+    private boolean maySeeApplication(Application a, long callerUserId) {
+        if (a.getApplicantUserId() == callerUserId) {
+            return true;
+        }
+        boolean isEmployer = postedJobs.findById(a.getJobId())
+                .flatMap(job -> approvedOrgs.findById(job.getOrgId()))
+                .map(org -> org.getLegalRepUserId() == callerUserId)
+                .orElse(false);
+        return isEmployer || identityApi.hasRole(callerUserId, com.xbb.identity.api.Role.PLATFORM_OPS);
     }
 
     @Override

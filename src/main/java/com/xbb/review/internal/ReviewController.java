@@ -30,8 +30,9 @@ class ReviewController {
     }
 
     @GetMapping("/{applicationId}")
-    ResponseEntity<List<ReviewApi.ReviewView>> visible(@PathVariable long applicationId) {
-        return ResponseEntity.ok(reviewApi.findVisibleReviews(applicationId));
+    ResponseEntity<List<ReviewApi.ReviewView>> visible(@PathVariable long applicationId,
+                                                        @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(reviewApi.findVisibleReviews(applicationId, caller.userId()));
     }
 
     @GetMapping("/credit")

@@ -46,8 +46,9 @@ class OrgController {
     }
 
     @GetMapping("/{id}")
-    ResponseEntity<OrgApi.OrgView> get(@PathVariable long id) {
-        return orgApi.findById(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    ResponseEntity<OrgApi.OrgView> get(@PathVariable long id,
+                                        @AuthenticationPrincipal AuthenticatedUser caller) {
+        return orgApi.findById(id, caller.userId()).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PutMapping("/{id}/approve")

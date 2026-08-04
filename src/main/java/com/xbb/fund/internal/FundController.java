@@ -26,8 +26,9 @@ class FundController {
     }
 
     @GetMapping("/payouts/{id}")
-    ResponseEntity<FundApi.PayoutView> get(@PathVariable long id) {
-        return fundApi.findById(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    ResponseEntity<FundApi.PayoutView> get(@PathVariable long id,
+                                            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return fundApi.findById(id, caller.userId()).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PutMapping("/payouts/{id}/disburse")
@@ -45,8 +46,9 @@ class FundController {
     }
 
     @GetMapping("/payouts/{id}/disbursement")
-    ResponseEntity<FundApi.DisbursementView> disbursement(@PathVariable long id) {
-        return fundApi.findDisbursement(id).map(ResponseEntity::ok)
+    ResponseEntity<FundApi.DisbursementView> disbursement(@PathVariable long id,
+                                                           @AuthenticationPrincipal AuthenticatedUser caller) {
+        return fundApi.findDisbursement(id, caller.userId()).map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -71,8 +73,9 @@ class FundController {
     }
 
     @GetMapping("/accounts/{accountType}")
-    ResponseEntity<Map<String, Long>> balance(@PathVariable com.xbb.fund.api.AccountType accountType) {
-        return ResponseEntity.ok(Map.of("balanceCents", fundApi.balanceOf(accountType)));
+    ResponseEntity<Map<String, Long>> balance(@PathVariable com.xbb.fund.api.AccountType accountType,
+                                               @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(Map.of("balanceCents", fundApi.balanceOf(accountType, caller.userId())));
     }
 
     // 400/409 等错误映射统一收在 com.xbb.web.GlobalExceptionHandler

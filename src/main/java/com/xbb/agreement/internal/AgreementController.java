@@ -29,8 +29,9 @@ class AgreementController {
     }
 
     @GetMapping("/{applicationId}")
-    ResponseEntity<AgreementApi.AgreementView> get(@PathVariable long applicationId) {
-        return agreementApi.findByApplicationId(applicationId).map(ResponseEntity::ok)
+    ResponseEntity<AgreementApi.AgreementView> get(@PathVariable long applicationId,
+                                                    @AuthenticationPrincipal AuthenticatedUser caller) {
+        return agreementApi.findByApplicationId(applicationId, caller.userId()).map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 

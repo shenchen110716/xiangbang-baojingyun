@@ -96,7 +96,7 @@ class SettlementVoidedTest {
         settlementApi.voidSettlement(settlementId, "岗位取消", ops.userId());
 
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                assertThat(fundApi.findById(payoutId).orElseThrow().status())
+                assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status())
                         .isEqualTo(com.xbb.fund.internal.Payout.Status.CANCELLED));
 
         // 备足资金,确保这里挡下发放的原因是"已作废"而不是"余额不足"

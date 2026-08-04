@@ -235,6 +235,13 @@ class FundService implements FundApi {
 
     @Override
     @Transactional(transactionManager = "fundTransactionManager", readOnly = true)
+    public long balanceOf(AccountType accountType, long callerUserId) {
+        requirePlatformOps(callerUserId);
+        return escrow.balanceOf(accountType);
+    }
+
+    @Override
+    @Transactional(transactionManager = "fundTransactionManager", readOnly = true)
     public long balanceOf(AccountType accountType) {
         return escrow.balanceOf(accountType);
     }
@@ -251,8 +258,10 @@ class FundService implements FundApi {
 
     @Override
     @Transactional(transactionManager = "fundTransactionManager", readOnly = true)
-    public Optional<DisbursementView> findDisbursement(long payoutId) {
-        return disbursements.findByPayoutId(payoutId).map(d -> new DisbursementView(
+    public Optional<DisbursementView> findDisbursement(long payoutId, long callerUserId) {
+        return disbursements.findByPayoutId(payoutId)
+                .filter(d -> maySee(d.getPayeeUserId(), callerUserId))
+                .map(d -> new DisbursementView(
                 d.getId(), d.getPayoutId(), d.getPayeeUserId(), d.getAmountCents(),
                 DisbursementStatus.valueOf(d.getStatus().name()), d.getExternalRef(),
                 d.getTaxCertificateNo(), d.getFailReason(), d.getRetryCount()));
@@ -260,8 +269,20 @@ class FundService implements FundApi {
 
     @Override
     @Transactional(transactionManager = "fundTransactionManager", readOnly = true)
-    public Optional<PayoutView> findById(long payoutId) {
-        return payouts.findById(payoutId).map(this::toView);
+    public Optional<PayoutView> findById(long payoutId, long callerUserId) {
+        return payouts.findById(payoutId)
+                .filter(p -> maySee(p.getPayeeUserId(), callerUserId))
+                .map(this::toView);
+    }
+
+    /**
+     * 谁看得到这笔钱:收款人本人,或平台运维。
+     *
+     * <p>**看不到时返回空而不是抛无权访问** —— 抛异常会顺带确认这条记录存在,
+     * 拿编号数一遍就能数出平台发了多少笔款。
+     */
+    private boolean maySee(long payeeUserId, long callerUserId) {
+        return payeeUserId == callerUserId || identityApi.hasRole(callerUserId, Role.PLATFORM_OPS);
     }
 
     @Override

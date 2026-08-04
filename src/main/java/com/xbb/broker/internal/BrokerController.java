@@ -37,8 +37,9 @@ class BrokerController {
     }
 
     @GetMapping("/commission/{id}")
-    ResponseEntity<BrokerApi.CommissionView> getCommission(@PathVariable long id) {
-        return brokerApi.findCommission(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    ResponseEntity<BrokerApi.CommissionView> getCommission(@PathVariable long id,
+                                                            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return brokerApi.findCommission(id, caller.userId()).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PutMapping("/commission/{id}/pay")

@@ -144,8 +144,13 @@ class BrokerService implements BrokerApi {
 
     @Override
     @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
-    public Optional<CommissionView> findCommission(long commissionId) {
-        return commissions.findById(commissionId).map(c -> new CommissionView(
+    public Optional<CommissionView> findCommission(long commissionId, long callerUserId) {
+        return commissions.findById(commissionId)
+                // 挣这笔佣金的人本人,或平台运维。看不到时返回空而不是"无权访问" ——
+                // 后者会顺带确认这条记录存在
+                .filter(c -> (c.getBrokerUserId() != null && c.getBrokerUserId() == callerUserId)
+                        || identityApi.hasRole(callerUserId, com.xbb.identity.api.Role.PLATFORM_OPS))
+                .map(c -> new CommissionView(
                 c.getId(), c.getBrokerUserId(), c.getWorkerUserId(), c.getSettlementId(),
                 c.getAmountCents(), c.getStatus()));
     }

@@ -15,7 +15,13 @@ public interface OrgApi {
 
     void reject(long orgId, long callerUserId);
 
-    Optional<OrgView> findById(long orgId);
+    /**
+      * 组织详情。含统一社会信用代码与法人代表,只有法人代表本人或平台运维看得到。
+      *
+      * <p>招聘信息本身是公开的(见 JobApi),但"这家组织的信用代码和法人是谁"不是 ——
+      * 那是把人和企业对应起来的东西。
+      */
+    Optional<OrgView> findById(long orgId, long callerUserId);
 
     /** 某人作为法人代表的组织列表。 */
     List<OrgView> listByLegalRep(long legalRepUserId);

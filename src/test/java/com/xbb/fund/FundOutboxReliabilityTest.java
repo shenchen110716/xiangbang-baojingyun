@@ -87,7 +87,7 @@ class FundOutboxReliabilityTest {
 
         fundApi.disburse(payoutId, ops.userId());
 
-        assertThat(fundApi.findById(payoutId).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
+        assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
         assertThat(outboxRowOf(payoutId).getStatus()).isEqualTo(AbstractOutboxEvent.Status.PENDING);
         assertThat(outboxRowOf(payoutId).getEventType()).isEqualTo(FundsDisbursed.class.getName());
     }
@@ -102,7 +102,7 @@ class FundOutboxReliabilityTest {
         relay.publishPending();
 
         // 钱已经出去了,这是既成事实;不能因为下游炸了就假装没发过
-        assertThat(fundApi.findById(payoutId).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
+        assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
         FundOutboxEvent row = outboxRowOf(payoutId);
         assertThat(row.getStatus()).isEqualTo(AbstractOutboxEvent.Status.FAILED);
         assertThat(row.getAttemptCount()).isEqualTo(1);

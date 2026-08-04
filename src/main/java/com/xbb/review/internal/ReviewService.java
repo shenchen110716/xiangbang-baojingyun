@@ -28,12 +28,15 @@ class ReviewService implements ReviewApi {
     private final ReviewOutboxRepository outbox;
     private final ObjectMapper json;
     private final ReviewApprovedOrgRepository approvedOrgs;
+    private final com.xbb.identity.api.IdentityApi identityApi;
 
     ReviewService(ReviewRepository reviews, CompletedEngagementRepository completedEngagements,
                    CreditScoreRepository creditScores, CreditCalculator calculator,
                    ReviewTagCatalog tagCatalog,
                      ReviewOutboxRepository outbox, ObjectMapper json,
-                   ReviewApprovedOrgRepository approvedOrgs) {
+                   ReviewApprovedOrgRepository approvedOrgs,
+                   com.xbb.identity.api.IdentityApi identityApi) {
+        this.identityApi = identityApi;
         this.reviews = reviews;
         this.completedEngagements = completedEngagements;
         this.creditScores = creditScores;
@@ -114,7 +117,25 @@ class ReviewService implements ReviewApi {
 
     @Override
     @Transactional(transactionManager = "reviewTransactionManager", readOnly = true)
-    public List<ReviewView> findVisibleReviews(long applicationId) {
+    public List<ReviewView> findVisibleReviews(long applicationId, long callerUserId) {
+        // "已公开"管的是什么时候能看,不管谁能看 —— 两件事早先混在一起,结果路人也能读
+        if (!maySeeReviews(applicationId, callerUserId)) {
+            return List.of();
+        }
+        return visibleReviewsOf(applicationId);
+    }
+
+    /** 这单的当事双方(工人 + 用人单位法人代表),或平台运维。 */
+    private boolean maySeeReviews(long applicationId, long callerUserId) {
+        return completedEngagements.findById(applicationId)
+                .map(e -> e.getWorkerUserId() == callerUserId
+                        || approvedOrgs.findById(e.getOrgId())
+                                .map(o -> o.getLegalRepUserId() == callerUserId).orElse(false))
+                .orElse(false)
+                || identityApi.hasRole(callerUserId, com.xbb.identity.api.Role.PLATFORM_OPS);
+    }
+
+    private List<ReviewView> visibleReviewsOf(long applicationId) {
         List<Review> all = reviews.findByApplicationId(applicationId);
         List<ReviewView> result = new ArrayList<>();
         for (Review review : all) {

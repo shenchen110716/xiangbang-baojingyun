@@ -163,7 +163,7 @@ class NotificationTest {
         // 给的是虚假的幂等信心。至少一次投递是 outbox 的既定语义,必须真的重放。
         // 必须用**同一个业务对象**重投:幂等键是 (收件人, 类型, agreementId),
         // 伪造一个新的 agreementId 等于换了业务对象,那不叫重复投递。
-        long agreementId = agreementApi.findByApplicationId(ids[0]).orElseThrow().id();
+        long agreementId = agreementApi.findByApplicationId(ids[0], ops.userId()).orElseThrow().id();
         events.publishEvent(new AgreementGenerated(
                 agreementId, ids[0], ids[2], ids[1], "hash-repeat", java.time.Instant.now()));
 
