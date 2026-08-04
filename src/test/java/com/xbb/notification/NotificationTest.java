@@ -66,7 +66,7 @@ class NotificationTest {
         long legalRep = verifiedUser(legalRepPhone, "法人" + legalRepPhone.substring(8), legalRepId);
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
         AtomicLong jobIdHolder = new AtomicLong();

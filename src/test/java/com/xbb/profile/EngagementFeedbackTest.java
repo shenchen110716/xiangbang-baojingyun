@@ -64,7 +64,7 @@ class EngagementFeedbackTest {
         long legalRep = verifiedUser(legalRepPhone, "法人" + legalRepPhone.substring(8), legalRepId);
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
 
@@ -139,7 +139,7 @@ class EngagementFeedbackTest {
         long legalRep = verifiedUser("15600000007", "法人反四", "110101199001023007");
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "反哺四厂", "91110000000000124X", legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, "反哺四厂", "91110000000000124X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
         AtomicLong jobIdHolder = new AtomicLong();

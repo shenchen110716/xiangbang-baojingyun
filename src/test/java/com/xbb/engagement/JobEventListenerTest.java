@@ -45,7 +45,7 @@ class JobEventListenerTest {
 
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "十二号工厂", "91110000000000082X", legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, "十二号工厂", "91110000000000082X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
 

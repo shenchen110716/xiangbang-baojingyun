@@ -58,7 +58,7 @@ class SettlementVoidedTest {
         long legalRep = verifiedUser("15000000003", "法人十一", "110101199001021001");
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "十一号工厂", "91110000000000081X", legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, "十一号工厂", "91110000000000081X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
 

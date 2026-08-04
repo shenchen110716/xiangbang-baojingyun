@@ -49,7 +49,7 @@ class OrgEventListenerTest {
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 orgIdHolder.set(orgApi.submit(
-                        Organization.Type.FACTORY, "四号工厂", "91110000000000041X", legalRepUserId)));
+                        com.xbb.org.api.OrgType.FACTORY, "四号工厂", "91110000000000041X", legalRepUserId)));
         long orgId = orgIdHolder.get();
 
         orgApi.approve(orgId, ops.userId());

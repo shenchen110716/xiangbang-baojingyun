@@ -74,7 +74,7 @@ class ListEndpointsTest {
     private long approvedOrg(long legalRep, String name, String creditCode) {
         AtomicLong holder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                holder.set(orgApi.submit(Organization.Type.FACTORY, name, creditCode, legalRep)));
+                holder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, name, creditCode, legalRep)));
         long orgId = holder.get();
         orgApi.approve(orgId, ops.userId());
         await().atMost(Duration.ofSeconds(15)).until(() -> engagementOrgs.findById(orgId).isPresent());

@@ -64,7 +64,7 @@ class JobLifecycleTest {
     private long approvedOrg(long legalRep, String orgName, String creditCode) {
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
         return orgId;

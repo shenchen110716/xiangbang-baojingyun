@@ -14,12 +14,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Service
 class BrokerService implements BrokerApi {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(BrokerService.class);
+
     private final BrokerRepository brokers;
+    private final StationRepository stations;
+    private final BrokerChangeLogRepository changeLogs;
+    private final com.xbb.ops.api.OpsApi opsApi;
     private final InvitationRepository invitations;
     private final CommissionRepository commissions;
     private final BrokerVerifiedUserRepository verifiedUsers;
@@ -31,7 +37,12 @@ class BrokerService implements BrokerApi {
     BrokerService(BrokerRepository brokers, InvitationRepository invitations, CommissionRepository commissions,
                   BrokerVerifiedUserRepository verifiedUsers,
                      BrokerOutboxRepository outbox, ObjectMapper json,
-                       IdentityApi identityApi, FundApi fundApi) {
+                       IdentityApi identityApi, FundApi fundApi,
+                  StationRepository stations, BrokerChangeLogRepository changeLogs,
+                  com.xbb.ops.api.OpsApi opsApi) {
+        this.stations = stations;
+        this.changeLogs = changeLogs;
+        this.opsApi = opsApi;
         this.brokers = brokers;
         this.invitations = invitations;
         this.commissions = commissions;
@@ -134,5 +145,135 @@ class BrokerService implements BrokerApi {
         return commissions.findById(commissionId).map(c -> new CommissionView(
                 c.getId(), c.getBrokerUserId(), c.getWorkerUserId(), c.getSettlementId(),
                 c.getAmountCents(), c.getStatus()));
+    }
+
+    // ─────────────── 服务站与业务员网络 ───────────────
+
+    @Override
+    @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
+    public List<StationView> listStations(long callerUserId) {
+        requirePlatformOps(callerUserId);
+        int platformDefault = (int) opsApi.settingInt(
+                com.xbb.ops.api.SettingKeys.COMMISSION_STATION_PERCENT, 50);
+        return stations.findAllByOrderByOrgIdAsc().stream()
+                .map(st -> new StationView(st.getOrgId(), st.getName(), st.getLegalRepUserId(),
+                        st.getStationPercent(),
+                        st.getStationPercent() == null ? platformDefault : st.getStationPercent(),
+                        st.getApprovedAt(),
+                        brokers.findByStationOrgIdOrderByUserIdAsc(st.getOrgId()).size()))
+                .toList();
+    }
+
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void setStationPercent(long stationOrgId, Integer percent, String reason, long callerUserId) {
+        requirePlatformOps(callerUserId);
+        requireReason(reason);
+        Station st = stations.findById(stationOrgId)
+                .orElseThrow(() -> new IllegalArgumentException("服务站不存在"));
+        st.setStationPercent(percent);
+        stations.save(st);
+        log.warn("服务站佣金比例变更: station={} → {} 操作人={} 理由={}",
+                stationOrgId, percent == null ? "跟随平台默认" : percent + "%", callerUserId, reason);
+    }
+
+    @Override
+    @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
+    public List<BrokerNodeView> listBrokers(Long stationOrgId, long callerUserId) {
+        requirePlatformOps(callerUserId);
+        List<Broker> rows = stationOrgId == null
+                ? brokers.findAll()
+                : brokers.findByStationOrgIdOrderByUserIdAsc(stationOrgId);
+        return rows.stream().map(b -> new BrokerNodeView(b.getUserId(), b.getStationOrgId(),
+                        b.getParentUserId(), b.getLastActiveAt(), b.getStatus().name(),
+                        brokers.findByParentUserId(b.getUserId()).size()))
+                .toList();
+    }
+
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void assignStation(long brokerUserId, Long stationOrgId, String reason, long callerUserId) {
+        requirePlatformOps(callerUserId);
+        requireReason(reason);
+        if (stationOrgId != null && stations.findById(stationOrgId).isEmpty()) {
+            throw new IllegalArgumentException("服务站不存在");
+        }
+        Broker b = requireBroker(brokerUserId);
+        Long old = b.getStationOrgId();
+        b.assignStation(stationOrgId);
+        brokers.save(b);
+        logChange(brokerUserId, BrokerChangeLog.ChangeType.STATION, old, stationOrgId, callerUserId, reason);
+    }
+
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void assignParent(long brokerUserId, Long parentUserId, String reason, long callerUserId) {
+        requirePlatformOps(callerUserId);
+        requireReason(reason);
+        Broker b = requireBroker(brokerUserId);
+        if (parentUserId != null) {
+            requireBroker(parentUserId);
+            requireNoCycle(brokerUserId, parentUserId);
+        }
+        Long old = b.getParentUserId();
+        b.assignParent(parentUserId);
+        brokers.save(b);
+        logChange(brokerUserId, BrokerChangeLog.ChangeType.PARENT, old, parentUserId, callerUserId, reason);
+    }
+
+    /**
+     * 从候选上级往根走,路上撞见自己就是成环。
+     *
+     * <p>加深度上限是因为**数据里已经有环的话这个循环本身会卡死** ——
+     * 用来防环的代码不能假设数据无环。
+     */
+    private void requireNoCycle(long brokerUserId, long candidateParentId) {
+        Long cursor = candidateParentId;
+        for (int depth = 0; cursor != null && depth < 100; depth++) {
+            if (cursor == brokerUserId) {
+                throw new IllegalArgumentException("不能把业务员挂到自己的下级名下,会形成闭环");
+            }
+            cursor = brokers.findById(cursor).map(Broker::getParentUserId).orElse(null);
+        }
+        if (cursor != null) {
+            throw new IllegalStateException("上级链条超过 100 层,疑似已存在闭环,请先人工核查");
+        }
+    }
+
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void touchBroker(long brokerUserId) {
+        brokers.findById(brokerUserId).ifPresent(b -> { b.touch(); brokers.save(b); });
+    }
+
+    @Override
+    @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
+    public List<BrokerChangeView> brokerChanges(Long brokerUserId, long callerUserId) {
+        requirePlatformOps(callerUserId);
+        List<BrokerChangeLog> rows = brokerUserId == null
+                ? changeLogs.findTop100ByOrderByChangedAtDesc()
+                : changeLogs.findByBrokerUserIdOrderByChangedAtDesc(brokerUserId);
+        return rows.stream().map(c -> new BrokerChangeView(c.getId(), c.getBrokerUserId(),
+                c.getChangeType().name(), c.getOldValue(), c.getNewValue(),
+                c.getChangedBy(), c.getChangedAt(), c.getReason())).toList();
+    }
+
+    private Broker requireBroker(long userId) {
+        return brokers.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("业务员不存在: " + userId));
+    }
+
+    private static void requireReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("必须填写变更理由");
+        }
+    }
+
+    void logChange(long brokerUserId, BrokerChangeLog.ChangeType type,
+                   Object oldValue, Object newValue, Long operator, String reason) {
+        changeLogs.save(new BrokerChangeLog(brokerUserId, type,
+                oldValue == null ? null : String.valueOf(oldValue),
+                newValue == null ? null : String.valueOf(newValue),
+                operator, reason));
     }
 }

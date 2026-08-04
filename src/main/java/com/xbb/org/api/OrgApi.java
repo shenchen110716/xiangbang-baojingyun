@@ -6,10 +6,10 @@ import java.util.Optional;
 
 public interface OrgApi {
 
-    record OrgView(long id, Organization.Type type, String name, String creditCode,
+    record OrgView(long id, com.xbb.org.api.OrgType type, String name, String creditCode,
                     long legalRepUserId, Organization.Status status) { }
 
-    long submit(Organization.Type type, String name, String creditCode, long legalRepUserId);
+    long submit(com.xbb.org.api.OrgType type, String name, String creditCode, long legalRepUserId);
 
     void approve(long orgId, long callerUserId);
 

@@ -73,7 +73,7 @@ class VoiceSessionServiceTest {
         legalRepOut.set(legalRep);
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, orgName, creditCode, legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, orgName, creditCode, legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
         // job 域的已审核组织副本是异步落地的,等它出现再发单

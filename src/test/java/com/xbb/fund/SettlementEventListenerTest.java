@@ -55,7 +55,7 @@ class SettlementEventListenerTest {
         long legalRep = verifiedUser("15000000001", "法人十", "110101199001020001");
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "十号工厂", "91110000000000071X", legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, "十号工厂", "91110000000000071X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
 

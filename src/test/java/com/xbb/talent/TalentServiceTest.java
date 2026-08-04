@@ -111,7 +111,7 @@ class TalentServiceTest {
         long legalRep = verifiedUser("16000000005", "法人才库", "110101199001026005");
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "人才库厂", "91110000000000181X", legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, "人才库厂", "91110000000000181X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
         AtomicLong jobIdHolder = new AtomicLong();
@@ -159,7 +159,7 @@ class TalentServiceTest {
         long legalRep = verifiedUser("16000000009", "法人仓管", "110101199001026009");
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "仓管厂", "91110000000000182X", legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, "仓管厂", "91110000000000182X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
         AtomicLong jobIdHolder = new AtomicLong();

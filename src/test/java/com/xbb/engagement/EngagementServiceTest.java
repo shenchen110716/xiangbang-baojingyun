@@ -57,7 +57,7 @@ class EngagementServiceTest {
     private long approvedOrg(long legalRepUserId, String name, String creditCode) {
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, name, creditCode, legalRepUserId)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, name, creditCode, legalRepUserId)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
         await().atMost(Duration.ofSeconds(15)).until(() -> approvedOrgs.findById(orgId).isPresent());

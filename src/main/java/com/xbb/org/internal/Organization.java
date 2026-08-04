@@ -7,7 +7,7 @@ import java.time.Instant;
 @Table(name = "organization", schema = "org")
 public class Organization {
 
-    public enum Type { ENTERPRISE, FACTORY, SERVICE_STATION }
+    /** 类型定义已提到 {@link com.xbb.org.api.OrgType} —— 它出现在对外事件里,不能留在 internal。 */
     public enum Status { PENDING, APPROVED, REJECTED }
 
     @Id
@@ -16,7 +16,7 @@ public class Organization {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private Type type;
+    private com.xbb.org.api.OrgType type;
 
     @Column(nullable = false)
     private String name;
@@ -41,7 +41,7 @@ public class Organization {
 
     protected Organization() { }
 
-    public Organization(Type type, String name, String creditCode, long legalRepUserId) {
+    public Organization(com.xbb.org.api.OrgType type, String name, String creditCode, long legalRepUserId) {
         this.type = type;
         this.name = name;
         this.creditCode = creditCode;
@@ -59,7 +59,7 @@ public class Organization {
     }
 
     public Long getId() { return id; }
-    public Type getType() { return type; }
+    public com.xbb.org.api.OrgType getType() { return type; }
     public String getName() { return name; }
     public String getCreditCode() { return creditCode; }
     public long getLegalRepUserId() { return legalRepUserId; }

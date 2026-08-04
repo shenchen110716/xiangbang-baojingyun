@@ -89,7 +89,7 @@ class ProjectionTest {
         identityApi.verifyRealName(legalRep, "法人信用", "110101199001022001");
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "信用测试厂", "91110000000000131X", legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, "信用测试厂", "91110000000000131X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
         AtomicLong jobIdHolder = new AtomicLong();
@@ -127,7 +127,7 @@ class ProjectionTest {
 
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "匹配测试工厂", "91110000000000091X", legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, "匹配测试工厂", "91110000000000091X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
 

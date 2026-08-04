@@ -64,7 +64,7 @@ class FundEventListenerTest {
         long legalRep = verifiedUser(legalRepPhone, "法人" + suffix, "1101011990010" + suffix + "005");
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, suffix + "号工厂佣金", "9111000000" + suffix + "005X", legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, suffix + "号工厂佣金", "9111000000" + suffix + "005X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
 

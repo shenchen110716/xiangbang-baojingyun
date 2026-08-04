@@ -47,7 +47,7 @@ class JobServiceTest {
     private long approvedOrg(long legalRepUserId, String name, String creditCode) {
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, name, creditCode, legalRepUserId)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, name, creditCode, legalRepUserId)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
         await().atMost(Duration.ofSeconds(15)).until(() -> approvedOrgs.findById(orgId).isPresent());
@@ -82,7 +82,7 @@ class JobServiceTest {
         long legalRep = verifiedUser("13300000004", "法人三", "110101199001013004");
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.SERVICE_STATION, "三号服务站", "91110000000000053X", legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.SERVICE_STATION, "三号服务站", "91110000000000053X", legalRep)));
         long orgId = orgIdHolder.get();
         // 故意不 approve
 

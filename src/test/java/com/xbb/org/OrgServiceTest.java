@@ -51,7 +51,7 @@ class OrgServiceTest {
     void 已验证用户可以提交组织入驻() {
         long userId = verifiedUser("13500000001", "赵六", "110101199001019001");
 
-        long orgId = orgApi.submit(Organization.Type.FACTORY, "六号工厂", "91110000000000001X", userId);
+        long orgId = orgApi.submit(com.xbb.org.api.OrgType.FACTORY, "六号工厂", "91110000000000001X", userId);
 
         var view = orgApi.findById(orgId).orElseThrow();
         assertThat(view.status()).isEqualTo(Organization.Status.PENDING);
@@ -59,7 +59,7 @@ class OrgServiceTest {
 
     @Test
     void 未验证用户不能提交组织入驻() {
-        assertThatThrownBy(() -> orgApi.submit(Organization.Type.ENTERPRISE, "黑户企业", "91110000000000002X", 999_999L))
+        assertThatThrownBy(() -> orgApi.submit(com.xbb.org.api.OrgType.ENTERPRISE, "黑户企业", "91110000000000002X", 999_999L))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("未实名");
     }
@@ -67,7 +67,7 @@ class OrgServiceTest {
     @Test
     void 审核通过后状态变更() {
         long userId = verifiedUser("13500000002", "孙七", "110101199001019002");
-        long orgId = orgApi.submit(Organization.Type.SERVICE_STATION, "七号服务站", "91110000000000003X", userId);
+        long orgId = orgApi.submit(com.xbb.org.api.OrgType.SERVICE_STATION, "七号服务站", "91110000000000003X", userId);
 
         orgApi.approve(orgId, ops.userId());
 
@@ -77,7 +77,7 @@ class OrgServiceTest {
     @Test
     void 已审核的组织不能重复审核() {
         long userId = verifiedUser("13500000003", "周八", "110101199001019003");
-        long orgId = orgApi.submit(Organization.Type.ENTERPRISE, "八号企业", "91110000000000004X", userId);
+        long orgId = orgApi.submit(com.xbb.org.api.OrgType.ENTERPRISE, "八号企业", "91110000000000004X", userId);
         orgApi.approve(orgId, ops.userId());
 
         assertThatThrownBy(() -> orgApi.reject(orgId, ops.userId()))
@@ -88,7 +88,7 @@ class OrgServiceTest {
     @Test
     void 并发审核只有一个能成功() throws InterruptedException {
         long userId = verifiedUser("13500000010", "赵九", "110101199001019010");
-        long orgId = orgApi.submit(Organization.Type.ENTERPRISE, "九号企业", "91110000000000010X", userId);
+        long orgId = orgApi.submit(com.xbb.org.api.OrgType.ENTERPRISE, "九号企业", "91110000000000010X", userId);
 
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch go = new CountDownLatch(1);

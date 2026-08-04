@@ -55,7 +55,7 @@ class EngagementEventListenerTest {
         long legalRep = verifiedUser("13200000001", "法人九", "110101199001012001");
         AtomicLong orgIdHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                orgIdHolder.set(orgApi.submit(Organization.Type.FACTORY, "九号工厂", "91110000000000061X", legalRep)));
+                orgIdHolder.set(orgApi.submit(com.xbb.org.api.OrgType.FACTORY, "九号工厂", "91110000000000061X", legalRep)));
         long orgId = orgIdHolder.get();
         orgApi.approve(orgId, ops.userId());
 

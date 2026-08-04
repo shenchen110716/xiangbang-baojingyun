@@ -22,7 +22,7 @@ class OrgController {
         this.orgApi = orgApi;
     }
 
-    record SubmitRequest(@NotNull Organization.Type type, @NotBlank String name,
+    record SubmitRequest(@NotNull com.xbb.org.api.OrgType type, @NotBlank String name,
                           @NotBlank String creditCode) { }
 
     @PostMapping

@@ -55,7 +55,7 @@ class OrgService implements OrgApi {
 
     @Override
     @Transactional("orgTransactionManager")
-    public long submit(Organization.Type type, String name, String creditCode, long legalRepUserId) {
+    public long submit(com.xbb.org.api.OrgType type, String name, String creditCode, long legalRepUserId) {
         if (verifiedUsers.findById(legalRepUserId).isEmpty()) {
             throw new IllegalStateException("法人代表未实名认证");
         }
@@ -74,7 +74,7 @@ class OrgService implements OrgApi {
         Organization org = orgs.findById(orgId).orElseThrow(() -> new IllegalArgumentException("组织不存在"));
         org.approve();
         orgs.save(org);
-        OrganizationApproved approved = new OrganizationApproved(orgId, org.getLegalRepUserId(), Instant.now());
+        OrganizationApproved approved = new OrganizationApproved(orgId, org.getLegalRepUserId(), org.getType(), Instant.now());
         outbox.save(new OrgOutboxEvent(java.util.UUID.randomUUID().toString(),
                 OrganizationApproved.class.getName(), serialize(approved)));
     }
