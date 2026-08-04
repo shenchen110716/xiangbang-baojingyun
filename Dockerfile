@@ -5,12 +5,26 @@
 # 而 Render 是从源码构建的,仓库里没有 jar —— 那一版在云上必然失败。
 # 这一版自己编。
 
+# 前端。产物是 Spring 的静态资源,所以必须排在 maven 之前。
+# 打进同一个 jar、由同一个进程伺服:免费档只有一个 Web 服务,
+# 拆两个容器既多花一份内存,又得处理跨域和两套部署。
+FROM node:22-alpine AS web
+WORKDIR /app
+COPY web/package.json web/package-lock.json ./web/
+RUN cd web && npm ci --no-audit --no-fund
+COPY web/ ./web/
+# vite 的 outDir 是 ../src/main/resources/static,从 /app/web 出发正好落到 /app/src/...
+RUN cd web && npm run build
+
 FROM maven:3.9-eclipse-temurin-21 AS builder
 WORKDIR /build
 # 先只拷 pom,让"下载依赖"单独成层。改代码不改依赖时这一层直接命中缓存。
 COPY pom.xml .
 RUN mvn -B -q dependency:go-offline
 COPY src ./src
+# 覆盖在 COPY src 之后:静态资源是**构建产物**,不进版本库,
+# 以本地残留为准会让"我这儿好好的"和线上不一致。
+COPY --from=web /app/src/main/resources/static ./src/main/resources/static
 # 跳过测试:390 个测试里有相当一部分要 Testcontainers(需要 Docker daemon),
 # 构建环境里没有。测试在本地与 CI 跑,不在镜像构建时跑 —— 这是取舍,不是省事:
 # 构建阶段跑不了的测试,硬塞进来只会变成"构建时被跳过但看不出来"。

@@ -25,6 +25,13 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // 拿 token 之前必须能免登录访问:请求验证码、拿验证码换 token
                 .requestMatchers("/api/identity/code", "/api/identity/login").permitAll()
+                // 取验证码的开发端点。这里放行只是让请求能到达控制器——
+                // **真正的门在 DevCodeController 里**(要 X-Dev-Token,且只在 mock 模式装配)。
+                // 放在这一层是因为它必须在登录之前可达,鉴权自然不能靠 JWT。
+                .requestMatchers("/api/identity/dev/code").permitAll()
+                // 前端静态资源。前端本身不含任何机密,所有数据都要带 token 现取;
+                // 不放行的话打开首页就是 401,等于没有前端。
+                .requestMatchers("/", "/index.html", "/favicon.svg", "/assets/**").permitAll()
                 // 健康检查要给编排/负载均衡探活用,必须免鉴权。
                 // 只放行 health,**不放行 metrics** —— 那里会暴露内部结构。
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()

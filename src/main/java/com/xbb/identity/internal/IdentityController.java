@@ -31,8 +31,13 @@ class IdentityController {
      * 回显等于任何人报一个手机号就能登录那个账号(包括平台管理员),
      * 整套鉴权与 RBAC 直接失效。
      *
-     * <p>真实短信通道尚未接入时,验证码只能从服务端日志/测试钩子取,
-     * 不能走 HTTP 响应。这一条由 AuthenticationBoundaryTest 守着。
+     * <p>真实短信通道尚未接入时,取码要走 {@code /api/identity/dev/code} ——
+     * 那道门要口令,且只在 mock 模式装配。
+     *
+     * <p>守卫:{@code IdentityControllerTest#申请验证码时绝不把验证码回给调用方}
+     * 与 {@code DevCodeControllerTest#公开端点仍然不回显验证码}。
+     * (此处原先写的是"由 AuthenticationBoundaryTest 守着",而**那个类从来不存在**——
+     * 注释点名一个守卫、读的人就当它在起作用,这正是铁律里最反复的那种失败。)
      */
     @PostMapping("/code")
     ResponseEntity<Map<String, String>> requestCode(@RequestBody @Valid PhoneRequest req) {

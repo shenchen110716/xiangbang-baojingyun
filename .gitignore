@@ -2,3 +2,8 @@ target/
 *.iml
 .idea/
 .DS_Store
+
+# 前端构建产物:由 web/ 生成,不进版本库(镜像里由 node 阶段产出)
+src/main/resources/static/
+web/node_modules/
+web/dist/
