@@ -66,11 +66,11 @@ public class TestcontainersConfig {
      * 因此这里只提供可复用的注册逻辑,每个测试类需自带一个 {@code @DynamicPropertySource}
      * 方法调用本方法(见 SchemaIsolationTests 等)。
      */
-    /** 二十个域全在同一个容器里,靠 schema + 独立受限用户隔离。 */
+    /** 二十一个域全在同一个容器里,靠 schema + 独立受限用户隔离。 */
     private static final List<String> DOMAINS = List.of(
             "identity", "org", "job", "engagement", "settlement", "fund", "broker", "profile",
             "matching", "review", "agreement", "voice", "talent", "notification", "content",
-            "collab", "reimbursement", "mall", "ops", "reporting");
+            "collab", "reimbursement", "mall", "ops", "reporting", "attendance");
 
     /**
      * 供测试类的 {@code @DynamicPropertySource} 调用。

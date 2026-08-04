@@ -19,3 +19,4 @@ CREATE USER reimbursement_user WITH PASSWORD 'reimbursement_pw';
 CREATE USER mall_user WITH PASSWORD 'mall_pw';
 CREATE USER ops_user WITH PASSWORD 'ops_pw';
 CREATE USER reporting_user WITH PASSWORD 'reporting_pw';
+CREATE USER attendance_user WITH PASSWORD 'attendance_pw';

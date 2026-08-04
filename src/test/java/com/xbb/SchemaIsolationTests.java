@@ -41,7 +41,7 @@ class SchemaIsolationTests {
     private static final List<String> DOMAINS = List.of(
             "identity", "org", "job", "engagement", "settlement", "fund", "broker", "profile",
             "matching", "review", "agreement", "voice", "talent", "notification", "content",
-            "collab", "reimbursement", "mall", "ops", "reporting");
+            "collab", "reimbursement", "mall", "ops", "reporting", "attendance");
 
     @Autowired ApplicationContext context;
 

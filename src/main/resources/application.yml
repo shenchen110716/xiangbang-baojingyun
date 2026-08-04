@@ -85,6 +85,17 @@ xbb:
         password: ${DB_ADMIN_PASSWORD}
         schemas: engagement
         locations: classpath:db/migration/engagement
+    attendance:
+      datasource:
+        url: ${DB_URL}
+        username: ${DB_ATTENDANCE_USER}
+        password: ${DB_ATTENDANCE_PASSWORD}
+      flyway:
+        url: ${DB_URL}
+        user: ${DB_ADMIN_USER}
+        password: ${DB_ADMIN_PASSWORD}
+        schemas: attendance
+        locations: classpath:db/migration/attendance
     settlement:
       datasource:
         url: ${DB_URL}
