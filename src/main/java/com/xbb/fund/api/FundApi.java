@@ -1,6 +1,7 @@
 package com.xbb.fund.api;
 
 import com.xbb.fund.internal.Payout;
+import java.util.List;
 import java.util.Optional;
 
 public interface FundApi {
@@ -24,12 +25,22 @@ public interface FundApi {
 
     Optional<PayoutView> findById(long payoutId);
 
+    /** 我的发放记录列表。 */
+    List<PayoutView> listMyPayouts(long payeeUserId);
+
     Optional<PayoutView> findBySettlementId(long settlementId);
 
     Optional<DisbursementView> findDisbursement(long payoutId);
 
     /** 用工企业入金到监管账户。 */
     void topUp(AccountType accountType, long amountCents, String reason);
+
+    /**
+     * 带幂等键的入账,并要求 {@link com.xbb.identity.api.Role#PLATFORM_OPS}。
+     * 开成 HTTP 端点的那一版必须走这个 —— 无键入账重试一次就多一笔钱。
+     */
+    void topUp(AccountType accountType, long amountCents, String reason,
+               String idempotencyKey, long callerUserId);
 
     long balanceOf(AccountType accountType);
 

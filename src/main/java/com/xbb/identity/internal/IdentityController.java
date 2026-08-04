@@ -9,6 +9,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.Set;
+import com.xbb.identity.api.Role;
 
 @RestController
 @RequestMapping("/api/identity")
@@ -58,4 +60,38 @@ class IdentityController {
     }
 
     // 400/409 等错误映射统一收在 com.xbb.web.GlobalExceptionHandler,不再各 Controller 各写一份
+
+    record RoleRequest(@jakarta.validation.constraints.NotNull Long targetUserId,
+                       @jakarta.validation.constraints.NotNull Role role) { }
+
+    /**
+     * 我有哪些平台角色。界面据此决定要不要显示平台功能 ——
+     * **只是显示,不是权限**:权限每次都由后端现查(铁律 5),前端知道与否都不影响能做什么。
+     */
+    @GetMapping("/roles")
+    ResponseEntity<Set<Role>> myRoles(@AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(identityApi.rolesOf(caller.userId()));
+    }
+
+    /**
+     * 授予角色。要 PLATFORM_ADMIN(在服务层校验)。
+     *
+     * <p>此前**没有任何 HTTP 端点能改角色**,于是引导管理员拿到 PLATFORM_ADMIN 之后
+     * 也没办法给自己或别人授 PLATFORM_OPS —— 而审核、放款、作废、付佣金全要 OPS。
+     * 结果是平台侧功能整个够不着。管理员与运维分开是刻意的(见铁律 5),
+     * 但"分开"不等于"其中一半无法抵达"。
+     */
+    @PostMapping("/roles")
+    ResponseEntity<Void> grant(@AuthenticationPrincipal AuthenticatedUser caller,
+                               @RequestBody @Valid RoleRequest req) {
+        identityApi.grantRole(req.targetUserId(), req.role(), caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/roles")
+    ResponseEntity<Void> revoke(@AuthenticationPrincipal AuthenticatedUser caller,
+                                @RequestBody @Valid RoleRequest req) {
+        identityApi.revokeRole(req.targetUserId(), req.role(), caller.userId());
+        return ResponseEntity.noContent().build();
+    }
 }

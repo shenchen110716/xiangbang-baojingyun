@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -30,6 +31,18 @@ class OrgController {
         // 法人代表 = 调用者本人(来自 JWT),不信任请求体——否则任何人都能代别人提交入驻
         long id = orgApi.submit(req.type(), req.name(), req.creditCode(), caller.userId());
         return ResponseEntity.ok(Map.of("id", id));
+    }
+
+    /** 我作为法人代表的组织。注意要排在 /{id} 之前,否则 "mine" 会被当成路径变量。 */
+    @GetMapping("/mine")
+    ResponseEntity<List<OrgApi.OrgView>> mine(@AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(orgApi.listByLegalRep(caller.userId()));
+    }
+
+    /** 待审核队列。角色校验在服务层,控制器不重复判断——两处判断迟早会分叉。 */
+    @GetMapping("/pending")
+    ResponseEntity<List<OrgApi.OrgView>> pending(@AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(orgApi.listPending(caller.userId()));
     }
 
     @GetMapping("/{id}")

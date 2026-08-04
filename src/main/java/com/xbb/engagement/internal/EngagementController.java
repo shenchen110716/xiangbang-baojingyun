@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -22,6 +23,19 @@ class EngagementController {
     ResponseEntity<Map<String, Long>> apply(@AuthenticationPrincipal AuthenticatedUser caller, @PathVariable long jobId) {
         long applicationId = engagementApi.apply(jobId, caller.userId());
         return ResponseEntity.ok(Map.of("id", applicationId));
+    }
+
+    /** 我的报名。排在 /{id} 之前。 */
+    @GetMapping("/mine")
+    ResponseEntity<List<EngagementApi.ApplicationView>> mine(@AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(engagementApi.listMyApplications(caller.userId()));
+    }
+
+    /** 某岗位的应聘者。归属校验在服务层(只有法人代表能看)。 */
+    @GetMapping("/job/{jobId}/applicants")
+    ResponseEntity<List<EngagementApi.ApplicationView>> applicants(
+            @PathVariable long jobId, @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(engagementApi.listJobApplicants(jobId, caller.userId()));
     }
 
     @GetMapping("/{id}")

@@ -1,6 +1,7 @@
 package com.xbb.job.api;
 
 import com.xbb.job.internal.Job;
+import java.util.List;
 import java.util.Optional;
 
 public interface JobApi {
@@ -34,6 +35,12 @@ public interface JobApi {
     void fillSlot(long jobId);
 
     Optional<JobView> findJob(long jobId);
+
+    /** 我名下组织发布的岗位。企业端首页要它。 */
+    List<JobView> listMyJobs(long callerUserId);
+
+    /** 开放中的岗位。求职端浏览用——此前只有算法推荐,没设画像就什么都看不到。 */
+    List<JobView> listOpenJobs(int limit);
 
     /**
      * 薪资合理性质疑(§5.1 防线②)。**只质疑不拦截**——设计是"反问",不是"拒绝",

@@ -17,11 +17,28 @@ class EscrowService {
 
     @Transactional("fundTransactionManager")
     public long credit(AccountType type, long amountCents, String reason) {
+        return credit(type, amountCents, reason, null);
+    }
+
+    /**
+     * 带幂等键的入账:同一个键只会真正加一次。
+     *
+     * <p>此前只有 debit 有幂等键,credit 没有 —— 这个不对称很危险:
+     * 重复出账被键挡住,重复入账却**凭空造钱**,而且账面上看不出异常
+     * (余额多了一笔,流水里两条长得一样的入账)。
+     * 内部调用方本来都有业务键可用;真正逼出这一条的是把入账开成 HTTP 端点:
+     * 网络超时重试、用户双击,都会变成又造一笔。
+     */
+    @Transactional("fundTransactionManager")
+    public long credit(AccountType type, long amountCents, String reason, String idempotencyKey) {
         EscrowAccount account = load(type);
+        if (idempotencyKey != null && ledger.existsByIdempotencyKey(idempotencyKey)) {
+            return account.getBalanceCents();   // 这笔加过了
+        }
         long before = account.getBalanceCents();
         long after = account.credit(amountCents);
         accounts.save(account);
-        ledger.save(new EscrowLedgerEntry(type, before, amountCents, after, reason, null));
+        ledger.save(new EscrowLedgerEntry(type, before, amountCents, after, reason, idempotencyKey));
         return after;
     }
 

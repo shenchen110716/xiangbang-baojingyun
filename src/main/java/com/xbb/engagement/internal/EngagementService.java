@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -162,5 +163,32 @@ class EngagementService implements EngagementApi {
     public Optional<ApplicationView> findApplication(long applicationId) {
         return applications.findById(applicationId).map(a -> new ApplicationView(
                 a.getId(), a.getJobId(), a.getApplicantUserId(), a.getStatus()));
+    }
+
+    @Override
+    @Transactional(transactionManager = "engagementTransactionManager", readOnly = true)
+    public List<ApplicationView> listMyApplications(long applicantUserId) {
+        return applications.findByApplicantUserIdOrderByIdDesc(applicantUserId)
+                .stream().map(EngagementService::toView).toList();
+    }
+
+    @Override
+    @Transactional(transactionManager = "engagementTransactionManager", readOnly = true)
+    public List<ApplicationView> listJobApplicants(long jobId, long callerUserId) {
+        // 归属校验和 acceptApplication 走同一条路:岗位 → 组织 → 法人代表。
+        // 少了这段,任何登录用户报一个 jobId 就能看到谁在应聘。
+        PostedJob job = postedJobs.findById(jobId)
+                .orElseThrow(() -> new IllegalArgumentException("岗位不存在"));
+        ApprovedOrg org = approvedOrgs.findById(job.getOrgId())
+                .orElseThrow(() -> new IllegalStateException("组织未通过审核"));
+        if (org.getLegalRepUserId() != callerUserId) {
+            throw new IllegalStateException("只有组织法人代表可以查看应聘者");
+        }
+        return applications.findByJobIdOrderByIdAsc(jobId)
+                .stream().map(EngagementService::toView).toList();
+    }
+
+    private static ApplicationView toView(Application a) {
+        return new ApplicationView(a.getId(), a.getJobId(), a.getApplicantUserId(), a.getStatus());
     }
 }

@@ -1,6 +1,7 @@
 package com.xbb.engagement.api;
 
 import com.xbb.engagement.internal.Application;
+import java.util.List;
 import java.util.Optional;
 
 public interface EngagementApi {
@@ -17,4 +18,13 @@ public interface EngagementApi {
     void completeApplication(long applicationId, long callerUserId);
 
     Optional<ApplicationView> findApplication(long applicationId);
+
+    /** 我的报名列表。 */
+    List<ApplicationView> listMyApplications(long applicantUserId);
+
+    /**
+     * 某岗位的应聘者列表。**只有该岗位所属组织的法人代表能看** ——
+     * 报名记录里有手机号对应的用户 id,随便谁都能拉等于泄露求职意向。
+     */
+    List<ApplicationView> listJobApplicants(long jobId, long callerUserId);
 }

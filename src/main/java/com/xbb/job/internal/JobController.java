@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -29,6 +30,18 @@ class JobController {
                                                @RequestBody @Valid PostJobRequest req) {
         long id = jobApi.postJob(req.orgId(), req.title(), req.description(), req.wageCents(), caller.userId());
         return ResponseEntity.ok(Map.of("id", id));
+    }
+
+    /** 我名下组织发布的岗位。**必须排在 /{id} 前面**,否则 "mine" 会被当成岗位 id。 */
+    @GetMapping("/mine")
+    ResponseEntity<List<JobApi.JobView>> mine(@AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(jobApi.listMyJobs(caller.userId()));
+    }
+
+    /** 开放中的岗位,求职端浏览用。 */
+    @GetMapping("/open")
+    ResponseEntity<List<JobApi.JobView>> open(@RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(jobApi.listOpenJobs(limit));
     }
 
     @GetMapping("/{id}")

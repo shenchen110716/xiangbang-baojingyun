@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -80,5 +81,14 @@ class SettlementService implements SettlementApi {
         return new SettlementView(
                 s.getId(), s.getApplicationId(), s.getJobId(), s.getWorkerUserId(),
                 s.getAmountCents(), s.getStatus(), s.getVoidReason());
+    }
+
+    @Override
+    @Transactional(transactionManager = "settlementTransactionManager", readOnly = true)
+    public List<SettlementView> listMySettlements(long workerUserId) {
+        return settlements.findByWorkerUserIdOrderByIdDesc(workerUserId).stream()
+                .map(s -> new SettlementView(s.getId(), s.getApplicationId(), s.getJobId(),
+                        s.getWorkerUserId(), s.getAmountCents(), s.getStatus(), s.getVoidReason()))
+                .toList();
     }
 }

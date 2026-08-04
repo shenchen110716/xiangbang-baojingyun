@@ -103,8 +103,31 @@ class JobService implements JobApi {
     @Override
     @Transactional(transactionManager = "jobTransactionManager", readOnly = true)
     public Optional<JobView> findJob(long jobId) {
-        return jobs.findById(jobId).map(j -> new JobView(
-                j.getId(), j.getOrgId(), j.getTitle(), j.getDescription(), j.getWageCents(),
-                j.getStatus(), j.getHeadcount(), j.getFilledCount()));
+        return jobs.findById(jobId).map(JobService::toView);
+    }
+
+    @Override
+    @Transactional(transactionManager = "jobTransactionManager", readOnly = true)
+    public List<JobView> listMyJobs(long callerUserId) {
+        List<Long> orgIds = approvedOrgs.findByLegalRepUserId(callerUserId)
+                .stream().map(ApprovedOrg::getOrgId).toList();
+        // 一个组织都没有时直接短路。交给 `in ()` 各数据库方言表现不一致,
+        // 而"空集合"是这里最常见的正常情况(绝大多数用户不是任何组织的法人代表)。
+        if (orgIds.isEmpty()) {
+            return List.of();
+        }
+        return jobs.findByOrgIdInOrderByIdDesc(orgIds).stream().map(JobService::toView).toList();
+    }
+
+    @Override
+    @Transactional(transactionManager = "jobTransactionManager", readOnly = true)
+    public List<JobView> listOpenJobs(int limit) {
+        return jobs.findByStatusOrderByIdDesc(Job.Status.OPEN)
+                .stream().limit(Math.max(1, Math.min(limit, 100))).map(JobService::toView).toList();
+    }
+
+    private static JobView toView(Job j) {
+        return new JobView(j.getId(), j.getOrgId(), j.getTitle(), j.getDescription(),
+                j.getWageCents(), j.getStatus(), j.getHeadcount(), j.getFilledCount());
     }
 }

@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -209,6 +210,22 @@ class FundService implements FundApi {
 
     @Override
     @Transactional("fundTransactionManager")
+    public void topUp(AccountType accountType, long amountCents, String reason,
+                      String idempotencyKey, long callerUserId) {
+        requirePlatformOps(callerUserId);
+        if (amountCents <= 0) {
+            throw new IllegalArgumentException("入账金额必须为正");
+        }
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new IllegalArgumentException("入账必须带幂等键");
+        }
+        log.info("监管账户入账:账户={} 金额={}分 事由={} 幂等键={} 操作人={}",
+                accountType, amountCents, reason, idempotencyKey, callerUserId);
+        escrow.credit(accountType, amountCents, reason, idempotencyKey);
+    }
+
+    @Override
+    @Transactional("fundTransactionManager")
     public void spendFromAccount(AccountType accountType, long amountCents, String reason,
                                   String idempotencyKey) {
         log.info("监管账户出账:账户={} 金额={}分 事由={} 幂等键={}",
@@ -251,6 +268,12 @@ class FundService implements FundApi {
     @Transactional(transactionManager = "fundTransactionManager", readOnly = true)
     public Optional<PayoutView> findBySettlementId(long settlementId) {
         return payouts.findBySettlementId(settlementId).map(this::toView);
+    }
+
+    @Override
+    @Transactional(transactionManager = "fundTransactionManager", readOnly = true)
+    public List<PayoutView> listMyPayouts(long payeeUserId) {
+        return payouts.findByPayeeUserIdOrderByIdDesc(payeeUserId).stream().map(this::toView).toList();
     }
 
     private PayoutView toView(Payout p) {

@@ -8,6 +8,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/settlement")
 class SettlementController {
@@ -19,6 +21,12 @@ class SettlementController {
     }
 
     record VoidRequest(@NotBlank String reason) { }
+
+    /** 我的工资单。排在 /{id} 之前。 */
+    @GetMapping("/mine")
+    ResponseEntity<List<SettlementApi.SettlementView>> mine(@AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(settlementApi.listMySettlements(caller.userId()));
+    }
 
     @GetMapping("/{id}")
     ResponseEntity<SettlementApi.SettlementView> get(@PathVariable long id) {

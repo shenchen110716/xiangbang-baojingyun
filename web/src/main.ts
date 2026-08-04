@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import App from './App.vue'
 import { auth } from './api'
+import { role, NAV } from './roles'
 import './styles.css'
 
 // hash 路由:后端没有为前端路由做 fallback,用 history 模式刷新子路径会 404。
@@ -10,22 +11,32 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/login', component: () => import('./views/Login.vue'), meta: { anon: true } },
-    { path: '/', component: () => import('./views/Home.vue') },
-    { path: '/identity', component: () => import('./views/Identity.vue') },
-    { path: '/org', component: () => import('./views/Org.vue') },
-    { path: '/job', component: () => import('./views/Job.vue') },
-    { path: '/voice', component: () => import('./views/Voice.vue') },
-    { path: '/engagement', component: () => import('./views/Engagement.vue') },
-    { path: '/agreement', component: () => import('./views/Agreement.vue') },
-    { path: '/settlement', component: () => import('./views/Settlement.vue') },
-    { path: '/fund', component: () => import('./views/Fund.vue') },
+
+    // 求职端
+    { path: '/jobs', component: () => import('./views/worker/Jobs.vue') },
+    { path: '/my-applications', component: () => import('./views/worker/MyApplications.vue') },
+    { path: '/my-wages', component: () => import('./views/worker/MyWages.vue') },
+    { path: '/my-profile', component: () => import('./views/worker/MyProfile.vue') },
+
+    // 企业端
+    { path: '/my-orgs', component: () => import('./views/employer/MyOrgs.vue') },
+    { path: '/my-jobs', component: () => import('./views/employer/MyJobs.vue') },
+
+    // 平台端
+    { path: '/review-orgs', component: () => import('./views/platform/ReviewOrgs.vue') },
+    { path: '/payouts', component: () => import('./views/platform/Payouts.vue') },
+    { path: '/settlements', component: () => import('./views/platform/Settlements.vue') },
+    { path: '/ops', component: () => import('./views/Ops.vue') },
+    { path: '/roles', component: () => import('./views/platform/Roles.vue') },
+
+    // 跨身份共用
+    { path: '/notifications', component: () => import('./views/Notification.vue') },
     { path: '/broker', component: () => import('./views/Broker.vue') },
-    { path: '/profile', component: () => import('./views/Profile.vue') },
-    { path: '/matching', component: () => import('./views/Matching.vue') },
     { path: '/talent', component: () => import('./views/Talent.vue') },
     { path: '/review', component: () => import('./views/Review.vue') },
-    { path: '/notification', component: () => import('./views/Notification.vue') },
-    { path: '/ops', component: () => import('./views/Ops.vue') },
+    { path: '/voice', component: () => import('./views/Voice.vue') },
+
+    { path: '/', redirect: () => NAV[role.value][0].to },
     { path: '/:rest(.*)', redirect: '/' },
   ],
 })

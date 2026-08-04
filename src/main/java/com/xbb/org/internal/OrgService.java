@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -93,7 +94,26 @@ class OrgService implements OrgApi {
     @Override
     @Transactional(transactionManager = "orgTransactionManager", readOnly = true)
     public Optional<OrgView> findById(long orgId) {
-        return orgs.findById(orgId).map(o -> new OrgView(
-                o.getId(), o.getType(), o.getName(), o.getCreditCode(), o.getLegalRepUserId(), o.getStatus()));
+        return orgs.findById(orgId).map(OrgService::toView);
+    }
+
+    @Override
+    @Transactional(transactionManager = "orgTransactionManager", readOnly = true)
+    public List<OrgView> listByLegalRep(long legalRepUserId) {
+        // 归属天然由查询条件保证:只查"法人代表是我"的行,不存在越权看到别人组织的可能。
+        // 这比"查出来再过滤"稳 —— 过滤那一步漏写不会有任何症状。
+        return orgs.findByLegalRepUserIdOrderByIdDesc(legalRepUserId).stream().map(OrgService::toView).toList();
+    }
+
+    @Override
+    @Transactional(transactionManager = "orgTransactionManager", readOnly = true)
+    public List<OrgView> listPending(long callerUserId) {
+        requirePlatformOps(callerUserId);
+        return orgs.findByStatusOrderByIdAsc(Organization.Status.PENDING).stream().map(OrgService::toView).toList();
+    }
+
+    private static OrgView toView(Organization o) {
+        return new OrgView(o.getId(), o.getType(), o.getName(), o.getCreditCode(),
+                o.getLegalRepUserId(), o.getStatus());
     }
 }
