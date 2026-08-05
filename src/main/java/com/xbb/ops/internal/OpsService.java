@@ -27,7 +27,16 @@ class OpsService implements OpsApi {
      * 但缓存意味着**改动不是立刻全局生效**:多实例部署时,别的实例最多晚这么久看到新值。
      * 60 秒是取舍——运营改完等一分钟可以接受,而热路径省掉的查询是每次请求都有的。
      */
-    private static final Duration SETTING_TTL = Duration.ofSeconds(60);
+    /**
+     * 参数缓存有效期。**每个应用实例(以及测试里每个 Spring 上下文)各有一份缓存**,
+     * updateSetting 只失效**本实例**的那份 —— 所以改一个参数,别的实例最多要等这么久才生效。
+     *
+     * <p>做成可配是因为测试里那个延迟会变成假失败:测试用一个上下文改参数,
+     * 事件却由另一个上下文处理,后者读到的还是旧值。测试里设 0(见 application.properties)。
+     *
+     * <p>生产上保留 60 秒:参数读取在分账主路径上,每次都查库不值当。
+     */
+    private final Duration settingTtl;
 
     private final DictionaryItemRepository items;
     private final AgreementTemplateRepository templates;
@@ -41,13 +50,16 @@ class OpsService implements OpsApi {
 
     OpsService(DictionaryItemRepository items, AgreementTemplateRepository templates,
                PlatformSettingRepository settings, PlatformSettingChangeRepository settingChanges,
-               IdentityApi identityApi, ObjectMapper json) {
+               IdentityApi identityApi, ObjectMapper json,
+               @org.springframework.beans.factory.annotation.Value(
+                       "${xbb.ops.setting-cache-ttl-ms:60000}") long ttlMs) {
         this.items = items;
         this.templates = templates;
         this.settings = settings;
         this.settingChanges = settingChanges;
         this.identityApi = identityApi;
         this.json = json;
+        this.settingTtl = Duration.ofMillis(ttlMs);
     }
 
     @Override
@@ -212,7 +224,7 @@ class OpsService implements OpsApi {
 
     private String rawSetting(String key) {
         java.util.Map<String, String> cache = settingCache;
-        if (Instant.now().isAfter(cacheLoadedAt.plus(SETTING_TTL))) {
+        if (Instant.now().isAfter(cacheLoadedAt.plus(settingTtl))) {
             cache = settings.findAll().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
                     PlatformSetting::getKey, PlatformSetting::getValue));
             settingCache = cache;
