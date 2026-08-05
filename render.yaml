@@ -30,6 +30,13 @@ services:
         sync: false
       - key: XBB_MALL_VOUCHER_SECRET
         sync: false
+      # 微信授权登录。**app-secret 是密钥,只在仪表盘里设,不进这个文件。**
+      # app-id 不是密钥(它会出现在前端代码里),但也走环境变量 ——
+      # 写进源码的话换一个主体就要发一次版
+      - key: XBB_WECHAT_APP_ID
+        sync: false
+      - key: XBB_WECHAT_APP_SECRET
+        sync: false
 
       # 代发/电子签/推送三个外部通道走 mock。
       # 铁律 6:mock 会**静默成功** —— 扣监管账户、标 SUCCESS、写假的完税凭证号、
