@@ -18,9 +18,11 @@ class SettlementEventListener {
             org.slf4j.LoggerFactory.getLogger(SettlementEventListener.class);
 
     private final PayoutRepository payouts;
+    private final AdvanceService advances;
 
-    SettlementEventListener(PayoutRepository payouts) {
+    SettlementEventListener(PayoutRepository payouts, AdvanceService advances) {
         this.payouts = payouts;
+        this.advances = advances;
     }
 
     /**
@@ -47,7 +49,15 @@ class SettlementEventListener {
             return;
         }
         try {
-            payouts.save(new Payout(event.settlementId(), event.workerUserId(), event.amountCents()));
+            // **借支抵扣在这里,和建单同一个事务。**分成两步的话,中间崩掉就会出现
+            // "扣了但没建单"(钱扣了工资单没了)或"建了单没扣"(白发一笔),
+            // 而这两种都要人工对账才看得出来。
+            //
+            // 结算域算的是应发,它不知道这人欠平台多少 —— 那是资金域的事,
+            // 也是这个抵扣只能放在这里的原因(结算域反向依赖资金域会成环)。
+            long gross = event.amountCents();
+            long deducted = advances.deductFromSalary(event.workerUserId(), event.settlementId(), gross);
+            payouts.save(new Payout(event.settlementId(), event.workerUserId(), gross - deducted));
         } catch (DataIntegrityViolationException e) {
             // **只在确认记录真的已存在时才吞。**
             //

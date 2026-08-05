@@ -49,6 +49,10 @@ public final class SettingKeys {
     // ── 语音发单 ──
     public static final String VOICE_MIN_CONFIDENCE = "voice.min.confidence";
 
+    // ── 借支(老系统 M8「借押保」) ──
+    /** 单人未还借支上限。**连同已欠的一起算**,否则借十次小额就绕过了上限。 */
+    public static final String ADVANCE_MAX_OUTSTANDING_CENTS = "advance.max.outstanding.cents";
+
     /** 全部键。守卫测试拿它和数据库里的种子逐一对照。 */
     public static final List<String> ALL = List.of(
             BROKER_DEMOTION_DAYS,
@@ -58,6 +62,7 @@ public final class SettingKeys {
             CREDIT_WEIGHT_FULFILLMENT, CREDIT_WEIGHT_REVIEW, CREDIT_WEIGHT_PENALTY, CREDIT_RECENT_DAYS,
             WAGE_MIN_CENTS, WAGE_MAX_CENTS, WAGE_DEVIATION_MULTIPLE,
             DEPOSIT_FULL_RATE,
+            ADVANCE_MAX_OUTSTANDING_CENTS,
             MATCHING_DISTANCE_DECAY_KM, MATCHING_EPSILON,
             VOICE_MIN_CONFIDENCE);
 }
