@@ -14,6 +14,8 @@ import com.xbb.fund.internal.PayoutRepository;
 import com.xbb.identity.TestCodeAccessor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -24,6 +26,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * 资金域 outbox(§6.4)。`FundsDisbursed` 丢了的后果**不会自愈**:
@@ -105,13 +108,23 @@ class FundOutboxReliabilityTest {
         assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
         FundOutboxEvent row = outboxRowOf(payoutId);
         assertThat(row.getStatus()).isEqualTo(AbstractOutboxEvent.Status.FAILED);
-        assertThat(row.getAttemptCount()).isEqualTo(1);
+        // **至少一次,不是恰好一次。**broken 是 static,跨 Spring 上下文共享;
+        // 别的测试类的上下文里 fund 中继每 200ms 跑一次、打在同一个库上,
+        // 也会取到这条并失败一次。"恰好 1 次"钉的是实现细节,而契约是"失败后仍可重试"
+        assertThat(row.getAttemptCount()).isGreaterThanOrEqualTo(1);
         assertThat(row.getLastError()).contains("下游暂时不可用");
 
         BreakableConsumerConfig.broken = false;
-        relay.publishPending();
 
-        assertThat(outboxRowOf(payoutId).getStatus()).isEqualTo(AbstractOutboxEvent.Status.PUBLISHED);
+        // **轮询里重新驱动中继。**取件用的是 FOR UPDATE SKIP LOCKED:
+        // 别的上下文的中继正持有这行锁时,这里的 publishPending() 会**跳过它**,
+        // 只驱动一次就断言会随机挂 —— 这条测试此前两次在全量跑里失败都是这个原因,
+        // 我一度以为是"负载敏感的既有抖动",其实是跨上下文抢锁
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
+            relay.publishPending();
+            assertThat(outboxRowOf(payoutId).getStatus())
+                    .isEqualTo(AbstractOutboxEvent.Status.PUBLISHED);
+        });
     }
 
     /**

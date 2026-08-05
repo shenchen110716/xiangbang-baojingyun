@@ -210,9 +210,14 @@ class SettlementOutboxReliabilityTest {
         assertThat(outboxRowOf(applicationId).getStatus()).isEqualTo(AbstractOutboxEvent.Status.FAILED);
 
         BreakableConsumerConfig.broken = false;
-        relay.publishPending();
 
-        assertThat(outboxRowOf(applicationId).getStatus()).isEqualTo(AbstractOutboxEvent.Status.PUBLISHED);
+        // **轮询里重新驱动。**取件用 FOR UPDATE SKIP LOCKED,别的 Spring 上下文的
+        // 中继正持有这行锁时,这里会跳过它 —— 只驱动一次就断言会随机挂
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
+            relay.publishPending();
+            assertThat(outboxRowOf(applicationId).getStatus())
+                    .isEqualTo(AbstractOutboxEvent.Status.PUBLISHED);
+        });
         // 至少一次投递下最怕的事:重投变成第二笔钱
         assertThat(payouts.findAll().stream()
                 .filter(p -> p.getSettlementId() == settlementId).count()).isEqualTo(1);
@@ -230,9 +235,11 @@ class SettlementOutboxReliabilityTest {
         row.markAttemptFailed("模拟重投", java.time.Instant.now());
         outbox.save(row);
 
-        relay.publishPending();
-
-        assertThat(outboxRowOf(applicationId).getStatus()).isEqualTo(AbstractOutboxEvent.Status.PUBLISHED);
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
+            relay.publishPending();
+            assertThat(outboxRowOf(applicationId).getStatus())
+                    .isEqualTo(AbstractOutboxEvent.Status.PUBLISHED);
+        });
         assertThat(payouts.findAll().stream()
                 .filter(p -> p.getSettlementId() == settlementId).count()).isEqualTo(1);
     }
