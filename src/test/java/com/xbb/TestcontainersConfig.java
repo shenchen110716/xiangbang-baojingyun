@@ -127,20 +127,30 @@ public class TestcontainersConfig {
         return url.substring(0, dbStart) + database + (dbEnd < 0 ? "" : url.substring(dbEnd));
     }
 
-    /**
-     * {@code destroyMethod = ""} 不能省。
+    /*
+     * **这里曾经有一个 @Bean 把容器暴露给 Spring。已经删掉。**
      *
-     * <p>容器是整个测试套件共享的静态单例(上面的 static 块启动一次)。但把它暴露成
-     * {@code @Bean} 之后,Spring 会按约定推断出销毁方法 {@code close()} 并接管它的生命周期。
-     * Spring 测试上下文缓存**默认上限 32 个**,测试类超过 32 个就会 LRU 淘汰最旧的上下文,
-     * 淘汰时调用 {@code close()} —— 把全局共享的数据库容器关掉,之后所有测试全崩,
-     * 报错还是 "Failed to bind xbb.domains.*.flyway.url"(因为 getJdbcUrl() 返回 null),
-     * 看着完全像配置问题,跟真正的原因隔了十万八千里。
+     * 容器是整个测试套件共享的静态单例(上面的 static 块启动一次),而属性注册
+     * (registerProperties)直接读静态字段 PG,**从来不需要这个 bean** ——
+     * 它存在的唯一后果,就是把容器交给 Spring 管生命周期。
      *
-     * <p>实测:测试类涨到 44 个时必现,且**单独跑必过、全量跑必挂**。
+     * 原来写了 @Bean(destroyMethod = "") 想挡住销毁,注释里也解释了为什么。
+     * **但那个注解挡不住 spring-boot-testcontainers** —— 它对所有 Startable 类型的 bean
+     * 有独立的生命周期接管,和 destroyMethod 无关。
+     * 于是 Spring 测试上下文缓存一旦 LRU 淘汰,就会连带把全局共享的容器**停掉并删除**。
+     *
+     * 症状是 "FATAL: terminating connection due to unexpected postmaster exit",
+     * 看着像数据库崩了。2026-08-05 为此走了四个错误方向
+     * (调 max_connections、调每域池大小、调缓存上限、改成每类独立 JVM),
+     * 全都只是在改"淘汰什么时候发生",没有一个碰到真正的原因。
+     *
+     * 定案靠的是**边跑边监视容器**:时间线是 运行中=1 → 运行中=0 且 已退出=0,
+     * 即容器不是崩溃退出,是**被删除**了 —— 这才把矛头指向生命周期而不是资源。
+     *
+     * 证据链(四条全部吻合):
+     *   缓存 64 → 98 个测试类,第 79 个崩   (淘汰从第 65 个开始)
+     *   缓存 6  → 几乎立刻崩,383 个错      (淘汰立刻开始)
+     *   每类独立 JVM → 崩溃 0 次           (每个 JVM 上下文少,不触发淘汰)
+     *   手工开 800 条连接 → 内存 58MB,毫无压力(连接数从来不是原因)
      */
-    @Bean(destroyMethod = "")
-    PostgreSQLContainer<?> postgresContainer() {
-        return PG;
-    }
 }
