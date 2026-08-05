@@ -25,6 +25,8 @@ class BrokerService implements BrokerApi {
     private final BrokerRepository brokers;
     private final StationRepository stations;
     private final StationJointRepository joints;
+    private final StationRateRepository stationRates;
+    private final StationRateChangeRepository rateChanges;
     private final BrokerChangeLogRepository changeLogs;
     private final com.xbb.ops.api.OpsApi opsApi;
     private final org.springframework.beans.factory.ObjectProvider<BrokerDemotionTask> demotionTask;
@@ -41,12 +43,15 @@ class BrokerService implements BrokerApi {
                      BrokerOutboxRepository outbox, ObjectMapper json,
                        IdentityApi identityApi, FundApi fundApi,
                   StationRepository stations, StationJointRepository joints,
+                  StationRateRepository stationRates, StationRateChangeRepository rateChanges,
                   BrokerChangeLogRepository changeLogs,
                   com.xbb.ops.api.OpsApi opsApi,
                   org.springframework.beans.factory.ObjectProvider<BrokerDemotionTask> demotionTask) {
         this.demotionTask = demotionTask;
         this.stations = stations;
         this.joints = joints;
+        this.stationRates = stationRates;
+        this.rateChanges = rateChanges;
         this.changeLogs = changeLogs;
         this.opsApi = opsApi;
         this.brokers = brokers;
@@ -156,6 +161,69 @@ class BrokerService implements BrokerApi {
                 .map(c -> new CommissionView(
                 c.getId(), c.getBrokerUserId(), c.getWorkerUserId(), c.getSettlementId(),
                 c.getAmountCents(), c.getStatus()));
+    }
+
+    // ─────────────── 按业务类目的分成比例 ───────────────
+
+    /**
+     * 设分成比例。{@code stationOrgId} 为 null 表示设平台默认。
+     *
+     * <p>**要平台运维。**这是在改钱怎么分,不该由服务站自己说了算 ——
+     * 站长能改自己的比例的话,这个数字就没有约束力了。
+     */
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void setStationRate(Long stationOrgId, String category, int percent,
+                               String reason, long callerUserId) {
+        if (!identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            throw new org.springframework.security.access.AccessDeniedException("需要平台运维权限");
+        }
+        if (percent < 0 || percent > 100) {
+            throw new IllegalArgumentException("分成比例必须在 0 到 100 之间");
+        }
+        if (category == null || category.isBlank()) {
+            throw new IllegalArgumentException("请选择业务类目");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("请填写调整原因");
+        }
+        if (stationOrgId != null && stations.findById(stationOrgId).isEmpty()) {
+            throw new IllegalArgumentException("服务站不存在或副本尚未落地");
+        }
+        String cat = category.trim().toUpperCase();
+
+        StationRate existing = (stationOrgId == null
+                ? stationRates.findByStationOrgIdIsNullAndCategory(cat)
+                : stationRates.findByStationOrgIdAndCategory(stationOrgId, cat)).orElse(null);
+
+        Integer old = existing == null ? null : existing.getPercent();
+        rateChanges.save(new StationRateChange(stationOrgId, cat, old, percent, callerUserId, reason.trim()));
+
+        if (existing == null) {
+            stationRates.save(new StationRate(stationOrgId, cat, percent, callerUserId));
+        } else {
+            existing.change(percent, callerUserId);
+            stationRates.save(existing);
+        }
+        log.info("分成比例变更:站={} 类目={} {} → {}% 操作人={}",
+                stationOrgId == null ? "平台默认" : stationOrgId, cat, old, percent, callerUserId);
+    }
+
+    @Override
+    @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
+    public List<StationRateView> listStationRates(Long stationOrgId, long callerUserId) {
+        boolean isMaster = stationOrgId != null && isStationLegalRep(stationOrgId, callerUserId);
+        if (!isMaster && !identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            // 分成比例是这个站挣多少钱的依据,不该给无关的人看(铁律 5.1)
+            return List.of();
+        }
+        List<StationRate> rows = stationOrgId == null
+                ? stationRates.findByStationOrgIdIsNull()
+                : stationRates.findByStationOrgId(stationOrgId);
+        return rows.stream()
+                .map(r -> new StationRateView(r.getStationOrgId(), r.getCategory(),
+                        r.getPercent(), r.getUpdatedAt()))
+                .toList();
     }
 
     // ─────────────── 服务站间联合(老系统 M10 §3.4) ───────────────

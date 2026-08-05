@@ -32,9 +32,18 @@ class OrgEventListener {
             return;
         }
         // 幂等:至少一次投递,同一个组织可能被通知多次。
-        // 已存在时只更新法人与时间,**不动 stationPercent** —— 那是平台设的,不能被重放覆盖。
+        //
+        // **站长要跟着更新,名称与比例不动。**这两者的来源不同:
+        // 站长的权威值在组织域(平台可以换人),而名称与分成比例是平台在本域维护的,
+        // 被重放覆盖就白设了。
+        //
+        // 早先这里是空实现(那时站长等于提交人、永不改变)。平台能换站长之后,
+        // 不同步就成了洞:**换了人之后新站长签不了联合协议,老站长反而还能签**。
         stations.findById(event.orgId()).ifPresentOrElse(
-                existing -> { /* 名称与比例由平台维护,重放不覆盖 */ },
+                existing -> {
+                    existing.changeLegalRep(event.legalRepUserId());
+                    stations.save(existing);
+                },
                 () -> stations.save(new Station(event.orgId(), "服务站 #" + event.orgId(),
                         event.legalRepUserId(), event.occurredAt())));
     }

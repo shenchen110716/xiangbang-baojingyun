@@ -56,4 +56,13 @@ public class Station {
     }
 
     void rename(String name) { this.name = name; }
+
+    /**
+     * 换站长。
+     *
+     * <p>改动前服务站的负责人是提交人、此后不变,所以副本建好就不用再动。
+     * 现在平台可以换站长了 —— **而联合协议的授权依据正是这个副本上的站长**,
+     * 不同步的话:换了人之后新站长签不了协议,老站长反而还能签。
+     */
+    void changeLegalRep(long legalRepUserId) { this.legalRepUserId = legalRepUserId; }
 }

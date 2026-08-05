@@ -23,6 +23,22 @@ public interface BrokerApi {
     /** 佣金明细。只有挣这笔佣金的经纪人本人或平台运维看得到。 */
     Optional<CommissionView> findCommission(long commissionId, long callerUserId);
 
+    // ─────────────── 按业务类目的分成比例 ───────────────
+
+    record StationRateView(Long stationOrgId, String category, int percent,
+                           java.time.Instant updatedAt) { }
+
+    /**
+     * 设某个服务站在某个类目上的分成比例。
+     *
+     * <p>{@code stationOrgId} 传 null 表示设**平台默认**(对所有没单独设过的站生效)。
+     * 三级取数:站点覆盖 → 平台默认 → 全局兜底参数。
+     */
+    void setStationRate(Long stationOrgId, String category, int percent, String reason, long callerUserId);
+
+    /** 某站已设的比例(含它继承的平台默认)。 */
+    List<StationRateView> listStationRates(Long stationOrgId, long callerUserId);
+
     // ─────────────── 服务站间联合(老系统 M10 §3.4) ───────────────
 
     record StationJointView(long id, long fromOrgId, long toOrgId, int ratePercent,

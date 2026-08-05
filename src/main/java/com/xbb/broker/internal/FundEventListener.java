@@ -32,6 +32,7 @@ class FundEventListener {
     private final BrokerRepository brokers;
     private final StationRepository stations;
     private final StationJointRepository joints;
+    private final StationRateRepository stationRates;
     private final CommissionBaseRepository bases;
     private final BrokerOutboxRepository outbox;
     private final OpsApi opsApi;
@@ -40,7 +41,7 @@ class FundEventListener {
 
     FundEventListener(InvitationRepository invitations, CommissionRepository commissions,
                       BrokerRepository brokers, StationRepository stations,
-                      StationJointRepository joints,
+                      StationJointRepository joints, StationRateRepository stationRates,
                       CommissionBaseRepository bases,
                       BrokerOutboxRepository outbox, OpsApi opsApi, FundApi fundApi, ObjectMapper json) {
         this.invitations = invitations;
@@ -48,6 +49,7 @@ class FundEventListener {
         this.brokers = brokers;
         this.stations = stations;
         this.joints = joints;
+        this.stationRates = stationRates;
         this.bases = bases;
         this.outbox = outbox;
         this.opsApi = opsApi;
@@ -97,7 +99,10 @@ class FundEventListener {
                     return event.amountCents();
                 });
 
-        CommissionSplitter.Rates rates = ratesFor(stationOrgId);
+        // **目前只有岗位结算会走到这里** —— 代发单全部来自岗位结算,
+        // 商城和培训还不产生代发。等它们真的开始发钱时,类目要从事件里带过来,
+        // 而不是在这里猜
+        CommissionSplitter.Rates rates = ratesFor(stationOrgId, com.xbb.broker.api.RateCategory.JOB);
         CommissionSplitter.Split split = CommissionSplitter.split(
                 base, directBrokerId, stationOrgId, ancestorsOf(direct), rates, jointsOf(stationOrgId));
 
@@ -150,12 +155,30 @@ class FundEventListener {
                 .toList();
     }
 
-    /** 服务站单独设过比例就用它,否则跟随平台默认。 */
-    private CommissionSplitter.Rates ratesFor(Long stationOrgId) {
+    /**
+     * 取服务站这一档的分成比例。**三级取数,一条路径**:
+     * 该站在这个类目上的覆盖 → 平台在这个类目上的默认 → 全局兜底参数。
+     *
+     * <p>比例按业务类目分开设(岗位/商品/培训…):三者的毛利结构完全不同,
+     * 用同一个比例要么让服务站在商品上亏,要么让平台在岗位上亏,
+     * 而这件事只有等对账才看得出来。
+     *
+     * <p>旧的 {@code station.station_percent} 已迁进费率表记为 JOB 类目;
+     * 它仍然读得到,是为了万一迁移那条 INSERT 漏了谁,不至于静默回退到平台默认。
+     */
+    private CommissionSplitter.Rates ratesFor(Long stationOrgId, String category) {
         int stationPct = (int) opsApi.settingInt(SettingKeys.COMMISSION_STATION_PERCENT, 50);
+
+        Integer platformDefault = stationRates.findByStationOrgIdIsNullAndCategory(category)
+                .map(StationRate::getPercent).orElse(null);
+        if (platformDefault != null) {
+            stationPct = platformDefault;
+        }
         if (stationOrgId != null) {
-            Integer override = stations.findById(stationOrgId)
-                    .map(Station::getStationPercent).orElse(null);
+            Integer override = stationRates.findByStationOrgIdAndCategory(stationOrgId, category)
+                    .map(StationRate::getPercent)
+                    .orElseGet(() -> stations.findById(stationOrgId)
+                            .map(Station::getStationPercent).orElse(null));
             if (override != null) {
                 stationPct = override;
             }

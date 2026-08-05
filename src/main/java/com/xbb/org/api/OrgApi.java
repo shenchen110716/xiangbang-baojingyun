@@ -6,10 +6,37 @@ import java.util.Optional;
 
 public interface OrgApi {
 
+    /** @param legalRepUserId 可能为 null —— 平台刚设立、还没指派站长的服务站 */
     record OrgView(long id, com.xbb.org.api.OrgType type, String name, String creditCode,
-                    long legalRepUserId, Organization.Status status) { }
+                    Long legalRepUserId, Organization.Status status) { }
 
     long submit(com.xbb.org.api.OrgType type, String name, String creditCode, long legalRepUserId);
+
+    /**
+     * 平台直接设立服务站。**建出来就是已审核、且还没有站长。**
+     *
+     * <p>服务站是平台自己的经营网点,不是入驻商户:平台先规划好点位,再决定派谁去管。
+     * 按"用户提交 → 平台审核"那条路的话,得先找到一个人、让他去提交申请,点位才存在 ——
+     * 顺序反了,而且换站长时没有任何办法。
+     *
+     * <p>工厂与企业不走这条,仍然是用户提交、平台审核。
+     */
+    long createStation(String name, String creditCode, long callerUserId);
+
+    /**
+     * 指派或更换站长。**可以改**,每次变更留痕。
+     *
+     * <p>换站长会改变谁能设分成比例、谁能签联合协议,所以要求填原因,
+     * 事后查得到是谁在什么时候换的(老系统 M10 §4.3"先留痕后变更")。
+     *
+     * @param newMasterUserId 新站长;传 null 表示撤下当前站长,该站暂时无人管理
+     */
+    void assignStationMaster(long orgId, Long newMasterUserId, String reason, long callerUserId);
+
+    record MasterChangeView(long id, long orgId, Long oldUserId, Long newUserId,
+                            long changedBy, String reason, java.time.Instant changedAt) { }
+
+    List<MasterChangeView> stationMasterChanges(long orgId, long callerUserId);
 
     void approve(long orgId, long callerUserId);
 
