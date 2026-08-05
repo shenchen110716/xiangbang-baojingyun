@@ -102,9 +102,23 @@ async function runDemotion() {
 
 const CHANGE_TYPE: Record<string, string> = { STATION: '服务站', PARENT: '上级', STATUS: '状态' }
 const inStation = (orgId: number) => brokers.value.filter(b => b.stationOrgId === orgId)
-onMounted(() => { load(); loadDefaults() })
+onMounted(() => { load(); loadDefaults(); loadDefaultStation() })
 
 /** 联合关系(老系统 M10 §3.4)。展开某个站时才拉,免得一进页面就打一串请求。 */
+/**
+ * 平台默认服务站。**从列表里点选,不让人手填编号** ——
+ * 填错的后果是自动升级的业务员归不到这个站,而那不会报错,只会静默少发一笔分成。
+ */
+const defaultStationId = ref<number>(0)
+
+async function loadDefaultStation() {
+  try {
+    const all = await api<any[]>('/api/ops/settings')
+    const row = all.find(x => x.key === 'broker.default.station.org.id')
+    defaultStationId.value = Number(row?.value ?? 0)
+  } catch { defaultStationId.value = 0 }
+}
+
 const manageOpen = ref<number | null>(null)
 async function toggleManage(orgId: number) {
   if (manageOpen.value === orgId) { manageOpen.value = null; return }
@@ -425,7 +439,10 @@ const zhCategory = (v: string) => CATEGORIES.find(c => c.v === v)?.label ?? v
       <tbody>
         <template v-for="s in stations" :key="s.orgId">
           <tr>
-            <td>{{ s.name }}</td>
+            <td>
+              {{ s.name }}
+              <span v-if="defaultStationId === s.orgId" class="tag ok" style="margin-left:6px">平台默认</span>
+            </td>
             <td>#{{ s.orgId }}</td>
             <td>
               <div class="row" style="gap:6px">
@@ -565,6 +582,17 @@ const zhCategory = (v: string) => CATEGORIES.find(c => c.v === v)?.label ?? v
               :disabled="!newName.trim() || !newCode.trim() || busy === 'create'"
               @click="createStation">设立</button>
     </div>
+  </div>
+
+  <div class="card note">
+    <h3>平台默认服务站</h3>
+    <p class="hint" style="margin-bottom:0">
+      员工分享带来成交后自动升级为业务员，并<b>自动挂到把他带进来的那个业务员下面</b>，
+      服务站随之继承——这样被动佣金才能往上分。
+      <span v-if="defaultStationId > 0">树上继承不到时归<b>服务站 #{{ defaultStationId }}</b>（参数设置里可改）。</span>
+      <span v-else>树上继承不到时<b>自动分配给当前业务员最少的站</b>。</span>
+      不归站的业务员在分账时那一档不会分成，钱留在池子里，要等对账才发现。
+    </p>
   </div>
 
   <div class="card">

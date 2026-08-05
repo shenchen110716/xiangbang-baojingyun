@@ -161,7 +161,7 @@ public class ShareUpgradeService {
             return;
         }
         Broker broker = new Broker(userId);
-        broker.assignStation(resolveStation(userId));
+        attachToTree(broker);
         brokers.save(broker);
         origins.save(new BrokerOrigin(userId, BrokerOrigin.Origin.AUTO_UPGRADE, null, null));
         log.info("实名后回补升级:user={} 已成交={}单 归属服务站={}",
@@ -188,7 +188,7 @@ public class ShareUpgradeService {
         }
 
         Broker broker = new Broker(sharerUserId);
-        broker.assignStation(resolveStation(sharerUserId));
+        attachToTree(broker);
         brokers.save(broker);
         origins.save(new BrokerOrigin(sharerUserId, BrokerOrigin.Origin.AUTO_UPGRADE,
                 trigger.getId(), null));
@@ -210,26 +210,108 @@ public class ShareUpgradeService {
     }
 
     /**
-     * 新业务员归哪个站:**继承分享人自己所属的服务站**;
-     * 继承不到就归平台默认服务站(参数中心配)。
+     * **自动上树。**新业务员挂到把他带进来的那个业务员下面,并继承对方的服务站。
      *
-     * <p>默认站配成 0 表示暂不归站,由平台事后指派 —— 那种情况服务站那一档不分成,
-     * 钱留在池子里,不会凭空发给某个站。
+     * <p><b>父节点不能不设。</b>没有父节点就是根业务员,
+     * **被动佣金那几档永远不会往上分** —— 而多级裂变的价值恰恰就在这里。
+     * 我第一版只设了服务站没设父节点,等于把裂变做成了一层。
+     *
+     * <p>服务站按优先级往下落:
+     * <ol>
+     *   <li>随父节点继承(上树的自然结果)</li>
+     *   <li>平台默认服务站(参数中心配置)</li>
+     *   <li>没配时自动分配 —— 挑当前业务员最少的站</li>
+     * </ol>
+     *
+     * <p>最后那级存在的理由:不归站的业务员在分账时**服务站那一档不会分成**,
+     * 那笔钱留在池子里 —— 看着没出错,实际是有人该拿的钱没拿到,要等对账才发现。
      */
-    private Long resolveStation(long sharerUserId) {
-        Long inherited = invitations.findByWorkerUserId(sharerUserId)
+    private void attachToTree(Broker broker) {
+        long userId = broker.getUserId();
+        // 把这个人带进来的业务员 = 他在树上的父节点
+        Broker parent = invitations.findByWorkerUserId(userId)
                 .flatMap(inv -> brokers.findById(inv.getBrokerUserId()))
-                .map(Broker::getStationOrgId)
                 .orElse(null);
-        if (inherited != null) {
-            return inherited;
+        if (parent != null) {
+            broker.assignParent(parent.getUserId());
+            if (parent.getStationOrgId() != null) {
+                broker.assignStation(parent.getStationOrgId());
+                return;
+            }
         }
-        long fallback = opsApi.settingInt(SettingKeys.BROKER_DEFAULT_STATION_ORG_ID, 0);
-        if (fallback <= 0) {
-            return null;
+        // 树上没有位置:**直接划给默认站长**。
+        // 只给服务站不给父节点的话,这个人在树上仍是孤儿,被动佣金依旧分不上去
+        Long station = fallbackStation();
+        broker.assignStation(station);
+        if (parent == null && station != null) {
+            Long master = masterOf(station);
+            if (master != null && master != broker.getUserId() && brokers.existsById(master)) {
+                broker.assignParent(master);
+            }
         }
-        // 默认站可能被改成一个不存在的编号。归到不存在的站上,
-        // 分账时那一档会静默失败 —— 宁可不归站
-        return stations.existsById(fallback) ? fallback : null;
+    }
+
+    /** 某个服务站的站长。副本里站长为 0 表示"暂时无人管理"。 */
+    private Long masterOf(long stationOrgId) {
+        return stations.findById(stationOrgId)
+                .map(Station::getLegalRepUserId)
+                .filter(id -> id > 0)
+                .orElse(null);
+    }
+
+    /**
+     * 没有归因的业务也要有主:**归默认站长**。
+     *
+     * <p>员工不经分享、自己直接报名或下单时,这一单原本没有任何归属 ——
+     * 佣金那几档全都不分,钱留在池子里。让它归默认站长,平台的经营网点才对得上账。
+     *
+     * <p>只在**完全没有归属**时才建:已经有邀请关系的不动,
+     * 否则会把别人带来的人抢过来(归属唯一,见 attribute 的注释)。
+     */
+    @Transactional("brokerTransactionManager")
+    public void ensureAttributed(long workerUserId) {
+        if (invitations.findByWorkerUserId(workerUserId).isPresent()) {
+            return;
+        }
+        if (conversions.findByConvertedUserId(workerUserId).isPresent()) {
+            return;   // 分享来的,等成交时按分享那条路归因
+        }
+        Long station = fallbackStation();
+        if (station == null) {
+            return;   // 一个服务站都没有,没得可归
+        }
+        Long master = masterOf(station);
+        if (master == null || master == workerUserId || !brokers.existsById(master)) {
+            // 默认站还没指派站长,或站长本人就是这个工人,或站长还不是业务员。
+            // 硬建一条指向不存在业务员的归属,分账时会静默失败
+            return;
+        }
+        invitations.save(new Invitation(master, workerUserId));
+        log.info("无归因业务归默认站长:worker={} 站长={} 服务站={}", workerUserId, master, station);
+    }
+
+    /** 没能从树上继承到服务站时:先看平台默认,再自动分配。 */
+    private Long fallbackStation() {
+        long configured = opsApi.settingInt(SettingKeys.BROKER_DEFAULT_STATION_ORG_ID, 0);
+        if (configured > 0) {
+            if (stations.existsById(configured)) {
+                return configured;
+            }
+            // 配成了一个不存在的编号。归到不存在的站上,分账时那一档会静默失败,
+            // 所以退回自动分配,并**吼一声** —— 这是配置错了,得有人去改
+            log.error("平台默认服务站 {} 不存在,本次改为自动分配。请到参数设置里改正", configured);
+        }
+        return leastLoadedStation();
+    }
+
+    /** 当前业务员最少的服务站;一个站都没有时返回 null。 */
+    private Long leastLoadedStation() {
+        return stations.findAllByOrderByOrgIdAsc().stream()
+                .min(java.util.Comparator
+                        .comparingLong((Station st) ->
+                                brokers.findByStationOrgIdOrderByUserIdAsc(st.getOrgId()).size())
+                        .thenComparingLong(Station::getOrgId))
+                .map(Station::getOrgId)
+                .orElse(null);
     }
 }

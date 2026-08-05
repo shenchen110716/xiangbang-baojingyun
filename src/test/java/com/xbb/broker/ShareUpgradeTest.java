@@ -57,6 +57,7 @@ class ShareUpgradeTest {
     @Autowired BrokerApi brokerApi;
     @Autowired OpsApi opsApi;
     @Autowired com.xbb.broker.internal.ShareConversionRepository conversions;
+    @Autowired com.xbb.broker.internal.InvitationRepository invitations;
     /**
      * 直接驱动履约域的中继,不等调度器。
      *
@@ -65,6 +66,7 @@ class ShareUpgradeTest {
      * 这个代码库里 SettlementOutboxReliabilityTest 早就是这么做的。
      */
     @Autowired com.xbb.engagement.internal.EngagementOutboxRelay engagementRelay;
+    @Autowired com.xbb.identity.internal.IdentityOutboxRelay identityRelay;
 
     /** 报名并把事件推出去。 */
     private long applyAndDeliver(long jobId, long worker) {
@@ -199,18 +201,148 @@ class ShareUpgradeTest {
         // 不等的话,报名事件可能在实名之后才投递 —— 那时走的是正常路径,
         // 回补有没有都一样,这条守卫就测不到它要守的东西
         // (第一版就是这样:把回补停掉,它照样绿)
-        await().atMost(Duration.ofSeconds(25)).untilAsserted(() ->
-                assertThat(conversions.findByConvertedUserId(s.newcomer))
-                        .get().extracting(c -> c.getStatus().name())
-                        .isEqualTo("COUNTED"));
+        // **轮询时重新驱动中继。**只在报名后驱动一次是不够的:
+        // 后台调度器可能已经抢走这条事件正在处理,那时 publishPending 空转,
+        // 而它那次处理若碰上退避就要等下一轮 —— 合跑几百个测试时就会超时
+        await().atMost(Duration.ofSeconds(40)).untilAsserted(() -> {
+            engagementRelay.publishPending();
+            assertThat(conversions.findByConvertedUserId(s.newcomer))
+                    .get().extracting(c -> c.getStatus().name())
+                    .isEqualTo("COUNTED");
+        });
         assertThat(brokerApi.brokerOrigin(sharer, ops.userId()))
                 .as("归因已消耗但人还没实名 —— 此刻升不上去").isEmpty();
 
         // 现在实名 —— 回补升级
         identityApi.verifyRealName(sharer, "迟到实名", "110101199001070056");
+        await().atMost(Duration.ofSeconds(40)).untilAsserted(() -> {
+            identityRelay.publishPending();
+            assertThat(brokerApi.brokerOrigin(sharer, ops.userId()))
+                    .as("实名之后要把此前错过的升级补上").isPresent();
+        });
+    }
+
+    @Test
+    void 没配默认站时自动分配给业务员最少的站() {
+        threshold(0);
+        // 不归站的业务员在分账时**服务站那一档不会分成**,钱留在池子里 ——
+        // 看着没出错,实际是有人该拿的钱没拿到,而且要等对账才发现。
+        // 所以没配默认站时自动挑一个,而不是留空
+        opsApi.updateSetting(SettingKeys.BROKER_DEFAULT_STATION_ORG_ID, "0", "测试:不配默认站", ops.userId());
+
+        long stationA = orgApi.createStation("自动分配甲站", "9111000000000k10X", ops.userId());
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                assertThat(brokerApi.listStations(ops.userId())).anyMatch(x -> x.orgId() == stationA));
+
+        long sharer = verified("18400000211", "分享人", "110101199001070106");
+        Scene sc = scene("41", "110101199001070107", "42", "110101199001070108",
+                "18400000212", "110101199001070109", "9111000000000k11X");
+        brokerApi.attributeShare(brokerApi.share(sharer, RateCategory.JOB, sc.jobId), sc.newcomer);
+        applyAndDeliver(sc.jobId, sc.newcomer);
+
         await().atMost(Duration.ofSeconds(25)).untilAsserted(() ->
-                assertThat(brokerApi.brokerOrigin(sharer, ops.userId()))
-                        .as("实名之后要把此前错过的升级补上").isPresent());
+                assertThat(brokerApi.brokerOrigin(sharer, ops.userId())).isPresent());
+        assertThat(brokerApi.listBrokers(null, ops.userId()))
+                .filteredOn(n -> n.userId() == sharer)
+                .singleElement()
+                .satisfies(n -> assertThat(n.stationOrgId())
+                        .as("没配默认站时要自动分配,不能留空").isNotNull());
+    }
+
+    @Test
+    void 配了默认站就优先用它() {
+        threshold(0);
+        long preferred = orgApi.createStation("默认优先站", "9111000000000k12X", ops.userId());
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                assertThat(brokerApi.listStations(ops.userId())).anyMatch(x -> x.orgId() == preferred));
+        opsApi.updateSetting(SettingKeys.BROKER_DEFAULT_STATION_ORG_ID,
+                String.valueOf(preferred), "测试:指定默认站", ops.userId());
+
+        long sharer = verified("18400000213", "分享人", "110101199001070110");
+        Scene sc = scene("43", "110101199001070111", "44", "110101199001070112",
+                "18400000214", "110101199001070113", "9111000000000k13X");
+        brokerApi.attributeShare(brokerApi.share(sharer, RateCategory.JOB, sc.jobId), sc.newcomer);
+        applyAndDeliver(sc.jobId, sc.newcomer);
+
+        await().atMost(Duration.ofSeconds(25)).untilAsserted(() ->
+                assertThat(brokerApi.brokerOrigin(sharer, ops.userId())).isPresent());
+        assertThat(brokerApi.listBrokers(preferred, ops.userId()))
+                .as("配了默认站就该归到它,而不是自动分配")
+                .anyMatch(n -> n.userId() == sharer);
+
+        // 收尾:这是全局参数,不还原会影响后面的测试
+        opsApi.updateSetting(SettingKeys.BROKER_DEFAULT_STATION_ORG_ID, "0", "测试收尾", ops.userId());
+    }
+
+    @Test
+    void 自动升级要上树_父节点是把他带进来的业务员() {
+        threshold(0);
+        // **没有父节点就是根业务员,被动佣金那几档永远不会往上分** ——
+        // 而多级裂变的价值恰恰就在这里。第一版只设了服务站没设父节点,
+        // 等于把裂变做成了一层
+        long station = orgApi.createStation("上树站", "9111000000000k14X", ops.userId());
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                assertThat(brokerApi.listStations(ops.userId())).anyMatch(x -> x.orgId() == station));
+
+        // 上级业务员:已在树上,且有服务站
+        long upline = verified("18400000221", "上级", "110101199001070163");
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                brokerApi.grantBroker(station, upline, ops.userId()));
+
+        // 中间人:被上级带进来,此时还不是业务员
+        long middle = verified("18400000222", "中间人", "110101199001070164");
+        // 经纪人域的已实名副本是异步来的,不等的话报"工人需要完成实名认证"
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> brokerApi.bindWorker(upline, middle));
+
+        // 中间人分享出去,对方报名 → 中间人升级
+        Scene sc = scene("51", "110101199001070165", "52", "110101199001070166",
+                "18400000223", "110101199001070167", "9111000000000k15X");
+        brokerApi.attributeShare(brokerApi.share(middle, RateCategory.JOB, sc.jobId), sc.newcomer);
+        applyAndDeliver(sc.jobId, sc.newcomer);
+
+        await().atMost(Duration.ofSeconds(25)).untilAsserted(() ->
+                assertThat(brokerApi.brokerOrigin(middle, ops.userId())).isPresent());
+
+        assertThat(brokerApi.listBrokers(station, ops.userId()))
+                .filteredOn(n -> n.userId() == middle)
+                .singleElement()
+                .satisfies(n -> {
+                    assertThat(n.parentUserId())
+                            .as("要挂到把他带进来的业务员下面,否则被动佣金分不上去")
+                            .isEqualTo(upline);
+                    assertThat(n.stationOrgId())
+                            .as("服务站随父节点继承").isEqualTo(station);
+                });
+    }
+
+    @Test
+    void 不经分享直接报名的业务也归默认站长() {
+        // **没有归属的业务,佣金那几档全都不分,钱留在池子里** ——
+        // 看着没出错,但平台的经营网点对不上账。让它归默认站长
+        long station = orgApi.createStation("兜底站", "9111000000000k16X", ops.userId());
+        long master = verified("18400000231", "默认站长", "110101199001070217");
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                orgApi.assignStationMaster(station, master, "指派", ops.userId()));
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                assertThat(brokerApi.listStations(ops.userId())).anyMatch(x -> x.orgId() == station));
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                brokerApi.grantBroker(station, master, ops.userId()));
+        opsApi.updateSetting(SettingKeys.BROKER_DEFAULT_STATION_ORG_ID,
+                String.valueOf(station), "测试:指定默认站", ops.userId());
+
+        // 一个员工自己直接报名,没有经过任何人的分享
+        Scene sc = scene("61", "110101199001070218", "62", "110101199001070219",
+                "18400000232", "110101199001070220", "9111000000000k17X");
+        applyAndDeliver(sc.jobId, sc.newcomer);
+
+        await().atMost(Duration.ofSeconds(40)).untilAsserted(() -> {
+            engagementRelay.publishPending();
+            assertThat(invitations.findByWorkerUserId(sc.newcomer))
+                    .as("不经分享的单子也要有主,否则佣金那几档全不分")
+                    .get().extracting(i -> i.getBrokerUserId()).isEqualTo(master);
+        });
+
+        opsApi.updateSetting(SettingKeys.BROKER_DEFAULT_STATION_ORG_ID, "0", "测试收尾", ops.userId());
     }
 
     // ─────────────── 站长授权 ───────────────

@@ -32,6 +32,9 @@ class EngagementEventListener {
     @EventListener
     @Transactional(transactionManager = "brokerTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(ApplicationSubmitted event) {
+        // **不经分享自己直接报名的,这一单也要有主** —— 归默认站长。
+        // 否则佣金那几档全不分,钱留在池子里,而平台的经营网点对不上账
+        upgrades.ensureAttributed(event.applicantUserId());
         upgrades.onDeal(event.applicantUserId(), event.applicationId(), true);
     }
 }
