@@ -192,6 +192,21 @@ class PlatformStationTest {
                 .hasMessageContaining("只有服务站");
     }
 
+    @Test
+    void 指派站长后他自动成为本站业务员() {
+        long orgId = orgApi.createStation("自动业务员站", "9111000000000j20X", ops.userId());
+        long master = verified("18300000031", "站长", "110101199001070270");
+        assignWhenReady(orgId, master, "指派");
+
+        // 站长在佣金树顶端。不是业务员的话,「无归属业务归默认站长」那条规则
+        // 会**静默跳过** —— 规则写了却不起作用,比没写更糟
+        await().atMost(Duration.ofSeconds(25)).untilAsserted(() ->
+                assertThat(brokerApi.brokerOrigin(master, ops.userId()))
+                        .as("站长要自动登记为本站业务员").isPresent());
+        assertThat(brokerApi.listBrokers(orgId, ops.userId()))
+                .anyMatch(n -> n.userId() == master);
+    }
+
     // ─────────────── 按类目的分成比例 ───────────────
 
     @Test

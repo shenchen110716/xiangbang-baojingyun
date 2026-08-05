@@ -155,6 +155,13 @@ public class ShareUpgradeService {
         if (brokers.existsById(userId)) {
             return;
         }
+        // 站长的实名副本可能晚于指派到达。补上,否则"归默认站长"那条规则一直不生效
+        for (Station st : stations.findAllByOrderByOrgIdAsc()) {
+            if (st.getLegalRepUserId() == userId) {
+                ensureStationMasterIsBroker(st.getOrgId(), userId);
+                return;
+            }
+        }
         long threshold = Math.max(opsApi.settingInt(SettingKeys.BROKER_UPGRADE_DEAL_THRESHOLD, 1), 1);
         long counted = countedOf(userId);
         if (counted < threshold) {
@@ -302,6 +309,38 @@ public class ShareUpgradeService {
             log.error("平台默认服务站 {} 不存在,本次改为自动分配。请到参数设置里改正", configured);
         }
         return leastLoadedStation();
+    }
+
+    /**
+     * 站长自动成为本站业务员。
+     *
+     * <p>站长本来就在佣金树的顶端:「无归属业务归默认站长」那条规则要求他是业务员,
+     * 不是的话规则会**静默跳过** —— 规则写了却不起作用,比没写更糟。
+     *
+     * <p>已经是业务员的只改归属站(可能是从别的站调过来的),不重复建。
+     * 没实名的先跳过,等实名副本落地时由 {@link #onVerified} 补上。
+     */
+    @Transactional("brokerTransactionManager")
+    public void ensureStationMasterIsBroker(long stationOrgId, long masterUserId) {
+        Broker existing = brokers.findById(masterUserId).orElse(null);
+        if (existing != null) {
+            if (!java.util.Objects.equals(existing.getStationOrgId(), stationOrgId)) {
+                existing.assignStation(stationOrgId);
+                brokers.save(existing);
+                log.info("站长 {} 已是业务员,归属站改为 {}", masterUserId, stationOrgId);
+            }
+            return;
+        }
+        if (verifiedUsers.findById(masterUserId).isEmpty()) {
+            log.info("站长 {} 的实名副本尚未到达,暂不登记为业务员,实名后自动补", masterUserId);
+            return;
+        }
+        Broker broker = new Broker(masterUserId);
+        broker.assignStation(stationOrgId);
+        brokers.save(broker);
+        origins.save(new BrokerOrigin(masterUserId, BrokerOrigin.Origin.STATION_GRANT,
+                stationOrgId, null));
+        log.info("站长自动登记为业务员:user={} 服务站={}", masterUserId, stationOrgId);
     }
 
     /** 当前业务员最少的服务站;一个站都没有时返回 null。 */

@@ -12,8 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 class OrgEventListener {
 
     private final StationRepository stations;
+    private final ShareUpgradeService upgrades;
 
-    OrgEventListener(StationRepository stations) {
+    OrgEventListener(StationRepository stations, ShareUpgradeService upgrades) {
+        this.upgrades = upgrades;
         this.stations = stations;
     }
 
@@ -46,5 +48,11 @@ class OrgEventListener {
                 },
                 () -> stations.save(new Station(event.orgId(), "服务站 #" + event.orgId(),
                         event.legalRepUserId(), event.occurredAt())));
+
+        // **站长自动成为本站业务员。**他本来就在佣金树顶端:
+        // 不是业务员的话,「无归属业务归默认站长」那条规则会静默跳过
+        if (event.legalRepUserId() > 0) {
+            upgrades.ensureStationMasterIsBroker(event.orgId(), event.legalRepUserId());
+        }
     }
 }
