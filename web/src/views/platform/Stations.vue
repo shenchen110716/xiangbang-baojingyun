@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { zhStatus, statusTone } from '../../i18n'
-import { api, when } from '../../api'
+import { api, when, yuan } from '../../api'
 
 type Station = {
   orgId: number; name: string; legalRepUserId: number
@@ -102,7 +102,7 @@ async function runDemotion() {
 
 const CHANGE_TYPE: Record<string, string> = { STATION: '服务站', PARENT: '上级', STATUS: '状态' }
 const inStation = (orgId: number) => brokers.value.filter(b => b.stationOrgId === orgId)
-onMounted(() => { load(); loadDefaults(); loadDefaultStation() })
+onMounted(() => { load(); loadDefaults(); loadDefaultStation(); loadDefaultSchemes() })
 
 /** 联合关系(老系统 M10 §3.4)。展开某个站时才拉,免得一进页面就打一串请求。 */
 /**
@@ -124,6 +124,8 @@ async function toggleManage(orgId: number) {
   if (manageOpen.value === orgId) { manageOpen.value = null; return }
   manageOpen.value = orgId
   await loadRates(orgId)
+  await loadSchemes(orgId)
+  await loadCoops(orgId)
 }
 
 const jointsOf = ref<Record<number, any[]>>({})
@@ -244,6 +246,113 @@ async function grantBroker(orgId: number) {
 }
 
 const zhCategory = (v: string) => CATEGORIES.find(c => c.v === v)?.label ?? v
+
+
+/**
+ * 按类目的**整套**分配方案(主动/平台/被动/服务站/逐级/下限)。
+ *
+ * <p>此前界面上只有"服务站比例"一个数,而分账其实有六档 ——
+ * 运营在界面上看到的和实际生效的不是一回事。
+ */
+const schemesOf = ref<Record<number, any[]>>({})
+const defaultSchemes = ref<any[]>([])
+const schemeForm = ref({
+  category: 'JOB', activePct: '60', platformPct: '20', passivePct: '30',
+  stationPct: '50', passiveStepPct: '30', minPayoutYuan: '1', reason: '',
+})
+
+/** 平台 + 被动 + 服务站在同一块「剩余」里分,界面上先算给人看。 */
+const remainderSum = computed(() =>
+  Number(schemeForm.value.platformPct || 0) +
+  Number(schemeForm.value.passivePct || 0) +
+  Number(schemeForm.value.stationPct || 0))
+
+async function loadDefaultSchemes() {
+  try { defaultSchemes.value = await api('/api/broker/schemes/defaults') }
+  catch { defaultSchemes.value = [] }
+}
+
+async function loadSchemes(orgId: number) {
+  try { schemesOf.value[orgId] = await api(`/api/broker/schemes/${orgId}`) }
+  catch (e: any) { err.value = e.message; schemesOf.value[orgId] = [] }
+}
+
+async function saveScheme(orgId: number | null) {
+  msg.value = ''; err.value = ''; busy.value = `scheme-${orgId ?? 'default'}`
+  try {
+    const f = schemeForm.value
+    await api('/api/broker/schemes', { method: 'PUT', body: {
+      stationOrgId: orgId, category: f.category,
+      activePct: Number(f.activePct), platformPct: Number(f.platformPct),
+      passivePct: Number(f.passivePct), stationPct: Number(f.stationPct),
+      passiveStepPct: Number(f.passiveStepPct),
+      minPayoutCents: Math.round(Number(f.minPayoutYuan) * 100),
+      reason: f.reason.trim() } })
+    msg.value = orgId ? `服务站 #${orgId} 的${zhCategory(f.category)}方案已更新` : `平台默认${zhCategory(f.category)}方案已更新`
+    f.reason = ''
+    if (orgId) await loadSchemes(orgId); else await loadDefaultSchemes()
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
+
+/** 合作关系与操作员。 */
+const coopsOf = ref<Record<number, any[]>>({})
+const operatorsOf = ref<Record<number, any[]>>({})
+const coopPartner = ref(''); const coopOperator = ref<Record<number, string>>({})
+
+async function loadCoops(orgId: number) {
+  try { coopsOf.value[orgId] = await api(`/api/broker/cooperations/org/${orgId}`) }
+  catch (e: any) { err.value = e.message; coopsOf.value[orgId] = [] }
+}
+
+async function applyCoop(stationOrgId: number) {
+  msg.value = ''; err.value = ''; busy.value = `coop-${stationOrgId}`
+  try {
+    await api('/api/broker/cooperations', { body: {
+      stationOrgId, partnerOrgId: Number(coopPartner.value), initiatedByStation: true } })
+    msg.value = `已向用工单位 #${coopPartner.value} 发起合作申请，等对方确认`
+    coopPartner.value = ''
+    await loadCoops(stationOrgId)
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
+
+async function coopAct(orgId: number, id: number, what: 'confirm' | 'cancel' | 'end', label: string) {
+  msg.value = ''; err.value = ''; busy.value = `c-${id}`
+  try {
+    await api(`/api/broker/cooperations/${id}/${what}`, { method: 'PUT' })
+    msg.value = `合作 #${id} ${label}`
+    await loadCoops(orgId)
+    delete operatorsOf.value[id]
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
+
+async function loadOperators(coopId: number) {
+  try { operatorsOf.value[coopId] = await api(`/api/broker/cooperations/${coopId}/operators`) }
+  catch (e: any) { err.value = e.message; operatorsOf.value[coopId] = [] }
+}
+
+async function assignOperator(coopId: number) {
+  msg.value = ''; err.value = ''; busy.value = `op-${coopId}`
+  try {
+    await api(`/api/broker/cooperations/${coopId}/operators`, {
+      body: { userId: Number(coopOperator.value[coopId]) } })
+    msg.value = `用户 #${coopOperator.value[coopId]} 已成为该合作的操作员`
+    coopOperator.value[coopId] = ''
+    await loadOperators(coopId)
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
+
+async function revokeOperator(coopId: number, userId: number) {
+  msg.value = ''; err.value = ''
+  try {
+    await api(`/api/broker/cooperations/${coopId}/operators/${userId}`, { method: 'DELETE' })
+    msg.value = `已解绑操作员 #${userId}`
+    await loadOperators(coopId)
+  } catch (e: any) { err.value = e.message }
+}
 
 </script>
 
@@ -428,6 +537,57 @@ const zhCategory = (v: string) => CATEGORIES.find(c => c.v === v)?.label ?? v
   </div>
 
   <div class="card">
+    <h3>平台默认分配方案</h3>
+    <p class="hint">
+      对所有没单独设过的服务站生效。<b>六档一整套，按业务类目分别设</b>——
+      岗位、商品、培训的分账结构本来就不同：商品可能没有被动佣金，培训可能主动佣金极高。
+      用同一套比例去分，任何一个类目都是错的。
+    </p>
+    <div v-if="!defaultSchemes.length" class="empty" style="padding:8px 0">还没有设过</div>
+    <table v-else style="margin-bottom:12px">
+      <thead><tr><th style="width:90px">类目</th><th style="width:80px">主动</th>
+                 <th style="width:80px">平台</th><th style="width:80px">被动</th>
+                 <th style="width:90px">服务站</th><th style="width:80px">逐级</th>
+                 <th style="width:90px">下限</th></tr></thead>
+      <tbody>
+        <tr v-for="x in defaultSchemes" :key="x.category">
+          <td>{{ zhCategory(x.category) }}</td>
+          <td>{{ x.activePct }}%</td><td>{{ x.platformPct }}%</td>
+          <td>{{ x.passivePct }}%</td><td>{{ x.stationPct }}%</td>
+          <td>{{ x.passiveStepPct }}%</td><td>{{ yuan(x.minPayoutCents) }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="row">
+      <div class="field" style="flex:0 0 120px"><label>类目</label>
+        <select v-model="schemeForm.category">
+          <option v-for="c in CATEGORIES" :key="c.v" :value="c.v">{{ c.label }}</option>
+        </select>
+      </div>
+      <div class="field"><label>主动佣金 %</label><input v-model="schemeForm.activePct" /></div>
+      <div class="field"><label>平台 %</label><input v-model="schemeForm.platformPct" /></div>
+      <div class="field"><label>被动 %</label><input v-model="schemeForm.passivePct" /></div>
+      <div class="field"><label>服务站 %</label><input v-model="schemeForm.stationPct" /></div>
+    </div>
+    <div class="row">
+      <div class="field" style="flex:0 0 140px"><label>被动逐级 %</label>
+        <input v-model="schemeForm.passiveStepPct" /></div>
+      <div class="field" style="flex:0 0 150px"><label>分账下限（元）</label>
+        <input v-model="schemeForm.minPayoutYuan" /></div>
+      <div class="field"><label>调整原因<span style="color:var(--bad)">*</span></label>
+        <input v-model="schemeForm.reason" placeholder="必填，事后查得到是谁改的" /></div>
+    </div>
+    <p class="hint" :style="{ color: remainderSum > 100 ? 'var(--bad,#f87171)' : undefined }">
+      平台 + 被动 + 服务站 = <b>{{ remainderSum }}%</b>。
+      它们在同一块「剩余」（基数 − 主动）里分，<b>相加不能超过 100</b>——
+      超了就是凭空多分钱，而那要等对账才发现。
+    </p>
+    <button :disabled="!schemeForm.reason.trim() || remainderSum > 100"
+            @click="saveScheme(null)">保存为平台默认</button>
+  </div>
+
+  <div class="card">
     <h3>服务站联合</h3>
     <p class="hint">
       两个服务站互相引流。<b>发起方从自己的服务站佣金里切一部分给对方</b>，
@@ -499,6 +659,97 @@ const zhCategory = (v: string) => CATEGORIES.find(c => c.v === v)?.label ?? v
                 <div class="field"><label>调整原因<span style="color:var(--bad)">*</span></label>
                   <input v-model="rateReason" /></div>
                 <button :disabled="!ratePct || !rateReason.trim()" @click="setRate(s.orgId)">设置</button>
+              </div>
+
+              <h4 style="margin:16px 0 6px">本站分配方案（按类目）</h4>
+              <div v-if="!schemesOf[s.orgId]?.length" class="hint" style="margin:0">
+                没有单独设过，跟随平台默认
+              </div>
+              <table v-else>
+                <thead><tr><th style="width:90px">类目</th><th style="width:70px">主动</th>
+                           <th style="width:70px">平台</th><th style="width:70px">被动</th>
+                           <th style="width:80px">服务站</th><th style="width:70px">逐级</th>
+                           <th>下限</th></tr></thead>
+                <tbody>
+                  <tr v-for="x in schemesOf[s.orgId]" :key="x.category">
+                    <td>{{ zhCategory(x.category) }}</td>
+                    <td>{{ x.activePct }}%</td><td>{{ x.platformPct }}%</td>
+                    <td>{{ x.passivePct }}%</td><td>{{ x.stationPct }}%</td>
+                    <td>{{ x.passiveStepPct }}%</td><td>{{ yuan(x.minPayoutCents) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <button class="ghost sm" style="margin-top:6px"
+                      :disabled="!schemeForm.reason.trim() || remainderSum > 100"
+                      @click="saveScheme(s.orgId)">
+                用上面「平台默认」那一组数字，设为本站方案
+              </button>
+
+              <h4 style="margin:16px 0 6px">与用工单位的合作</h4>
+              <p class="hint" style="margin-top:0">
+                <b>对方确认后才生效</b>；生效后才能指派操作员。
+                服务站之间请走「联合」，不是「合作」。
+              </p>
+              <div v-if="!coopsOf[s.orgId]?.length" class="empty" style="padding:6px 0">
+                还没有合作关系
+              </div>
+              <table v-else>
+                <thead><tr><th style="width:70px">编号</th><th style="width:100px">用工单位</th>
+                           <th style="width:90px">发起方</th><th style="width:90px">状态</th>
+                           <th style="width:230px"></th></tr></thead>
+                <tbody>
+                  <template v-for="c in coopsOf[s.orgId]" :key="c.id">
+                    <tr>
+                      <td>#{{ c.id }}</td>
+                      <td>#{{ c.partnerOrgId }}</td>
+                      <td>{{ c.initiatedByStation ? '我方' : '对方' }}</td>
+                      <td><span class="tag" :class="statusTone(c.status)">{{ zhStatus(c.status) }}</span></td>
+                      <td>
+                        <div class="row" style="gap:6px">
+                          <button v-if="c.status === 'PENDING' && !c.initiatedByStation" class="sm"
+                                  :disabled="busy === `c-${c.id}`"
+                                  @click="coopAct(s.orgId, c.id, 'confirm', '已确认')">确认</button>
+                          <button v-if="c.status === 'PENDING' && c.initiatedByStation" class="ghost sm"
+                                  :disabled="busy === `c-${c.id}`"
+                                  @click="coopAct(s.orgId, c.id, 'cancel', '已撤回')">撤回</button>
+                          <button v-if="c.status === 'ACTIVE'" class="ghost sm"
+                                  :disabled="busy === `c-${c.id}`"
+                                  @click="coopAct(s.orgId, c.id, 'end', '已解除')">解除</button>
+                          <button v-if="c.status === 'ACTIVE'" class="ghost sm"
+                                  @click="loadOperators(c.id)">操作员</button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr v-if="operatorsOf[c.id]">
+                      <td colspan="5" style="background:var(--surface);padding:10px">
+                        <div v-if="!operatorsOf[c.id].length" class="hint" style="margin:0">
+                          这份合作还没有操作员
+                        </div>
+                        <div v-for="o in operatorsOf[c.id]" :key="o.id"
+                             class="row" style="gap:8px;padding:2px 0">
+                          <span>用户 #{{ o.userId }}</span>
+                          <button class="ghost sm" @click="revokeOperator(c.id, o.userId)">解绑</button>
+                        </div>
+                        <div class="row" style="align-items:flex-end;gap:8px;margin-top:8px">
+                          <div class="field" style="flex:0 0 170px"><label>用户编号</label>
+                            <input v-model="coopOperator[c.id]" placeholder="要实名认证过" /></div>
+                          <button :disabled="!coopOperator[c.id] || busy === `op-${c.id}`"
+                                  @click="assignOperator(c.id)">指派操作员</button>
+                        </div>
+                        <p class="hint" style="margin-bottom:0">
+                          操作员挂在<b>这份合作</b>上，不是挂在服务站上——
+                          和不同企业合作可以派不同的人。<b>解除合作会连带解绑</b>。
+                        </p>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+              <div class="row" style="align-items:flex-end;gap:8px;margin-top:10px">
+                <div class="field" style="flex:0 0 190px"><label>用工单位编号</label>
+                  <input v-model="coopPartner" placeholder="企业或工厂的组织编号" /></div>
+                <button :disabled="!coopPartner || busy === `coop-${s.orgId}`"
+                        @click="applyCoop(s.orgId)">发起合作</button>
               </div>
 
               <h4 style="margin:16px 0 6px">授权业务员</h4>
