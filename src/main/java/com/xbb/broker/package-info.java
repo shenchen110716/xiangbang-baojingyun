@@ -1,7 +1,8 @@
 @org.springframework.modulith.ApplicationModule(
         // 白名单:这里没列的域一旦被引用,ModularityTests 就失败。
         // 之前所有域都没声明它,那个测试因此对生产代码恒绿。
-        allowedDependencies = {"fund :: api", "settlement :: api", "identity :: api", "org :: api", "ops :: api", "security"},
+        // engagement:报名即升级那条路径要订阅 ApplicationSubmitted
+        allowedDependencies = {"engagement :: api", "fund :: api", "settlement :: api", "identity :: api", "org :: api", "ops :: api", "security"},
         displayName = "经纪人域"
 )
 package com.xbb.broker;

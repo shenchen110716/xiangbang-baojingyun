@@ -11,8 +11,10 @@ import org.springframework.transaction.annotation.Transactional;
 class SettlementEventListener {
 
     private final CommissionBaseRepository bases;
+    private final ShareUpgradeService upgrades;
 
-    SettlementEventListener(CommissionBaseRepository bases) {
+    SettlementEventListener(CommissionBaseRepository bases, ShareUpgradeService upgrades) {
+        this.upgrades = upgrades;
         this.bases = bases;
     }
 
@@ -31,5 +33,10 @@ class SettlementEventListener {
         long base = event.commissionBaseCents() > 0 ? event.commissionBaseCents() : event.amountCents();
         // 主键相同时 save 走 merge,对至少一次投递是幂等的
         bases.save(new CommissionBase(event.settlementId(), base));
+
+        // 成交了:如果这个工人是分享来的,看要不要让分享人升级为业务员。
+        // 幂等由 share_conversion 的状态保证(已计数的不再计) ——
+        // 中继会重复投递,不挡的话一单能顶好几单
+        upgrades.onDeal(event.workerUserId(), event.settlementId(), false);
     }
 }

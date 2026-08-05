@@ -49,6 +49,12 @@ public final class SettingKeys {
     // ── 语音发单 ──
     public static final String VOICE_MIN_CONFIDENCE = "voice.min.confidence";
 
+    // ── 业务员自动升级 ──
+    /** 凑满几单成交自动升级。**0 表示对方报名即升级**,不等成交。岗位与商品合并计数。 */
+    public static final String BROKER_UPGRADE_DEAL_THRESHOLD = "broker.upgrade.deal.threshold";
+    /** 继承不到服务站时归入的默认站。0 表示暂不归站。 */
+    public static final String BROKER_DEFAULT_STATION_ORG_ID = "broker.default.station.org.id";
+
     // ── 借支(老系统 M8「借押保」) ──
     /** 单人未还借支上限。**连同已欠的一起算**,否则借十次小额就绕过了上限。 */
     public static final String ADVANCE_MAX_OUTSTANDING_CENTS = "advance.max.outstanding.cents";
@@ -63,6 +69,7 @@ public final class SettingKeys {
             WAGE_MIN_CENTS, WAGE_MAX_CENTS, WAGE_DEVIATION_MULTIPLE,
             DEPOSIT_FULL_RATE,
             ADVANCE_MAX_OUTSTANDING_CENTS,
+            BROKER_UPGRADE_DEAL_THRESHOLD, BROKER_DEFAULT_STATION_ORG_ID,
             MATCHING_DISTANCE_DECAY_KM, MATCHING_EPSILON,
             VOICE_MIN_CONFIDENCE);
 }

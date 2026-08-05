@@ -23,6 +23,37 @@ public interface BrokerApi {
     /** 佣金明细。只有挣这笔佣金的经纪人本人或平台运维看得到。 */
     Optional<CommissionView> findCommission(long commissionId, long callerUserId);
 
+    // ─────────────── 分享与业务员产生 ───────────────
+
+    /**
+     * 分享岗位/商品,拿到分享码。**同一个人重复分享同一个东西返回同一个码** ——
+     * 每次新建的话,同一个人会有一堆等价的分享码,谁也说不清他带来了几单。
+     */
+    String share(long sharerUserId, String targetType, long targetId);
+
+    /**
+     * 记一条归因:某人通过分享码进来了。
+     *
+     * <p><b>归属唯一</b>:一个人只能归因给一个分享人,已归属的不会被改 ——
+     * 允许改的话,两个人分享给同一个人时两边都算业绩,佣金会被重复计算。
+     *
+     * @return 是否新建了归因
+     */
+    boolean attributeShare(String code, long convertedUserId);
+
+    /**
+     * 站长授权某人成为业务员,直接挂在本站下。
+     *
+     * <p>**只有站长本人能授权。**这是在往自己站里加一个能分佣金的人。
+     */
+    void grantBroker(long stationOrgId, long userId, long callerUserId);
+
+    record BrokerOriginView(long userId, String origin, Long sourceRef, Long grantedBy,
+                            java.time.Instant createdAt) { }
+
+    /** 这个人凭什么是业务员:自助注册、分享自动升级、还是站长授权。 */
+    java.util.Optional<BrokerOriginView> brokerOrigin(long userId, long callerUserId);
+
     // ─────────────── 按业务类目的分成比例 ───────────────
 
     record StationRateView(Long stationOrgId, String category, int percent,

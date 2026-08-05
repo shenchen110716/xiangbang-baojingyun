@@ -27,6 +27,8 @@ class BrokerService implements BrokerApi {
     private final StationJointRepository joints;
     private final StationRateRepository stationRates;
     private final StationRateChangeRepository rateChanges;
+    private final ShareUpgradeService shareUpgrades;
+    private final BrokerOriginRepository origins;
     private final BrokerChangeLogRepository changeLogs;
     private final com.xbb.ops.api.OpsApi opsApi;
     private final org.springframework.beans.factory.ObjectProvider<BrokerDemotionTask> demotionTask;
@@ -44,6 +46,7 @@ class BrokerService implements BrokerApi {
                        IdentityApi identityApi, FundApi fundApi,
                   StationRepository stations, StationJointRepository joints,
                   StationRateRepository stationRates, StationRateChangeRepository rateChanges,
+                  ShareUpgradeService shareUpgrades, BrokerOriginRepository origins,
                   BrokerChangeLogRepository changeLogs,
                   com.xbb.ops.api.OpsApi opsApi,
                   org.springframework.beans.factory.ObjectProvider<BrokerDemotionTask> demotionTask) {
@@ -52,6 +55,8 @@ class BrokerService implements BrokerApi {
         this.joints = joints;
         this.stationRates = stationRates;
         this.rateChanges = rateChanges;
+        this.shareUpgrades = shareUpgrades;
+        this.origins = origins;
         this.changeLogs = changeLogs;
         this.opsApi = opsApi;
         this.brokers = brokers;
@@ -96,6 +101,7 @@ class BrokerService implements BrokerApi {
             throw new IllegalStateException("已经是经纪人,不可重复注册");
         }
         brokers.save(new Broker(userId));
+        origins.save(new BrokerOrigin(userId, BrokerOrigin.Origin.SELF, null, null));
         BrokerRegistered registered = new BrokerRegistered(userId, Instant.now());
         outbox.save(new BrokerOutboxEvent(java.util.UUID.randomUUID().toString(),
                 BrokerRegistered.class.getName(), serialize(registered)));
@@ -161,6 +167,67 @@ class BrokerService implements BrokerApi {
                 .map(c -> new CommissionView(
                 c.getId(), c.getBrokerUserId(), c.getWorkerUserId(), c.getSettlementId(),
                 c.getAmountCents(), c.getStatus()));
+    }
+
+    // ─────────────── 分享与业务员产生 ───────────────
+
+    @Override
+    public String share(long sharerUserId, String targetType, long targetId) {
+        return shareUpgrades.share(sharerUserId, targetType, targetId);
+    }
+
+    @Override
+    public boolean attributeShare(String code, long convertedUserId) {
+        return shareUpgrades.attribute(code, convertedUserId);
+    }
+
+    /**
+     * 站长授权某人成为业务员,直接挂在本站下。
+     *
+     * <p>**只有站长本人能授权** —— 这是在往自己站里加一个能分佣金的人。
+     * 平台运维也放行:出问题时要有人能兜底。
+     */
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void grantBroker(long stationOrgId, long userId, long callerUserId) {
+        if (!isStationLegalRep(stationOrgId, callerUserId)
+                && !identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            throw new IllegalStateException("只有服务站站长可以授权业务员");
+        }
+        if (verifiedUsers.findById(userId).isEmpty()) {
+            // 业务员要被记进佣金归属、要能收钱,没实名的话这些都无从追溯
+            throw new IllegalStateException("需要完成实名认证才能成为业务员");
+        }
+        Broker existing = brokers.findById(userId).orElse(null);
+        if (existing != null) {
+            // 已经是业务员:不重复建,但**可以把他划到这个站下** ——
+            // 抛异常的话,站长面对一个"已是别站业务员"的人完全没有办法
+            existing.assignStation(stationOrgId);
+            brokers.save(existing);
+            log.info("业务员 {} 已存在,改划到服务站 {}", userId, stationOrgId);
+            return;
+        }
+        Broker broker = new Broker(userId);
+        broker.assignStation(stationOrgId);
+        brokers.save(broker);
+        origins.save(new BrokerOrigin(userId, BrokerOrigin.Origin.STATION_GRANT,
+                stationOrgId, callerUserId));
+        BrokerRegistered registered = new BrokerRegistered(userId, Instant.now());
+        outbox.save(new BrokerOutboxEvent(java.util.UUID.randomUUID().toString(),
+                BrokerRegistered.class.getName(), serialize(registered)));
+        log.info("站长授权业务员:user={} 服务站={} 授权人={}", userId, stationOrgId, callerUserId);
+    }
+
+    @Override
+    @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
+    public java.util.Optional<BrokerOriginView> brokerOrigin(long userId, long callerUserId) {
+        // 本人或平台运维。别人凭什么是业务员,不该给无关的人看(铁律 5.1)
+        if (userId != callerUserId && !identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            return java.util.Optional.empty();
+        }
+        return origins.findById(userId)
+                .map(o -> new BrokerOriginView(o.getUserId(), o.getOrigin().name(),
+                        o.getSourceRef(), o.getGrantedBy(), o.getCreatedAt()));
     }
 
     // ─────────────── 按业务类目的分成比例 ───────────────
