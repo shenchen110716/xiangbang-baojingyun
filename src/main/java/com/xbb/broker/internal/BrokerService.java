@@ -144,10 +144,26 @@ class BrokerService implements BrokerApi {
 
         commission.pay();
         commissions.save(commission);
-        CommissionPaid paid = new CommissionPaid(
-                commissionId, commission.getBrokerUserId(), commission.getAmountCents(), Instant.now());
-        outbox.save(new BrokerOutboxEvent(java.util.UUID.randomUUID().toString(),
-                CommissionPaid.class.getName(), serialize(paid)));
+
+        // **事件只对"发给人的"那几档发。**
+        // 服务站档与联合档是发给组织的,brokerUserId 天然是 null,
+        // 而 CommissionPaid 的该字段是 long —— 直接传进去会拆箱 NPE,
+        // 结果是**服务站挣的佣金一付就炸,永远付不出去**。
+        //
+        // 这条路以前没暴露过:主动佣金(给人的)一直是好的,
+        // 而服务站那一档是后来才有的,没人真的去付过。
+        // 发生 NPE 的是发事件这一步,钱其实已经从平台账户出去了 ——
+        // 事务会回滚,但这类"半步失败"最难查:界面只报一个 500。
+        Long payee = commission.getBrokerUserId();
+        if (payee != null) {
+            CommissionPaid paid = new CommissionPaid(
+                    commissionId, payee, commission.getAmountCents(), Instant.now());
+            outbox.save(new BrokerOutboxEvent(java.util.UUID.randomUUID().toString(),
+                    CommissionPaid.class.getName(), serialize(paid)));
+        } else {
+            log.info("服务站/联合档佣金已支付,不发 CommissionPaid(它按人聚合):commission={} 站={}",
+                    commissionId, commission.getStationOrgId());
+        }
     }
 
     @Override
@@ -407,26 +423,53 @@ class BrokerService implements BrokerApi {
         requirePlatformOps(callerUserId);
         int platformDefault = (int) opsApi.settingInt(
                 com.xbb.ops.api.SettingKeys.COMMISSION_STATION_PERCENT, 50);
+        // **比例从费率表读,不读 station.station_percent 那个老字段。**
+        // 视图和分账必须看同一个数:视图读老字段、分账读费率表的话,
+        // 界面会显示"没单独设过"而实际设过了 —— 而那种不一致要等对账才发现。
+        //
+        // 这里显示的是**岗位**类目;商品与培训在各站的"管理"里单独看
+        String jobCat = com.xbb.broker.api.RateCategory.JOB;
+        Integer platformJob = stationRates.findByStationOrgIdIsNullAndCategory(jobCat)
+                .map(StationRate::getPercent).orElse(null);
+        int fallback = platformJob == null ? platformDefault : platformJob;
+
         return stations.findAllByOrderByOrgIdAsc().stream()
-                .map(st -> new StationView(st.getOrgId(), st.getName(), st.getLegalRepUserId(),
-                        st.getStationPercent(),
-                        st.getStationPercent() == null ? platformDefault : st.getStationPercent(),
-                        st.getApprovedAt(),
-                        brokers.findByStationOrgIdOrderByUserIdAsc(st.getOrgId()).size()))
+                .map(st -> {
+                    Integer own = stationRates
+                            .findByStationOrgIdAndCategory(st.getOrgId(), jobCat)
+                            .map(StationRate::getPercent).orElse(null);
+                    return new StationView(st.getOrgId(), st.getName(), st.getLegalRepUserId(),
+                            own, own == null ? fallback : own, st.getApprovedAt(),
+                            brokers.findByStationOrgIdOrderByUserIdAsc(st.getOrgId()).size());
+                })
                 .toList();
     }
 
     @Override
     @Transactional("brokerTransactionManager")
     public void setStationPercent(long stationOrgId, Integer percent, String reason, long callerUserId) {
-        requirePlatformOps(callerUserId);
-        requireReason(reason);
-        Station st = stations.findById(stationOrgId)
-                .orElseThrow(() -> new IllegalArgumentException("服务站不存在"));
-        st.setStationPercent(percent);
-        stations.save(st);
-        log.warn("服务站佣金比例变更: station={} → {} 操作人={} 理由={}",
-                stationOrgId, percent == null ? "跟随平台默认" : percent + "%", callerUserId, reason);
+        // **老入口,保留是为了不破坏既有调用方;但它现在写的是新的费率表。**
+        //
+        // 分成比例改成按类目分设之后,这里一度成了第二个写入口:
+        // 老入口写 station.station_percent,新入口写 station_rate,
+        // 而取数**优先读 station_rate** —— 于是运营在老入口改了比例、界面提示成功,
+        // 实际却不生效。这类"改了没反应"最难查,因为哪一步都没报错。
+        //
+        // percent 传 null 的语义是"跟随平台默认",对应到新模型就是删掉该站的覆盖。
+        if (percent == null) {
+            if (!identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+                throw new org.springframework.security.access.AccessDeniedException("需要平台运维权限");
+            }
+            stationRates.findByStationOrgIdAndCategory(stationOrgId, com.xbb.broker.api.RateCategory.JOB)
+                    .ifPresent(r -> {
+                        rateChanges.save(new StationRateChange(stationOrgId,
+                                com.xbb.broker.api.RateCategory.JOB, r.getPercent(), -1,
+                                callerUserId, reason == null || reason.isBlank() ? "改为跟随平台默认" : reason));
+                        stationRates.delete(r);
+                    });
+            return;
+        }
+        setStationRate(stationOrgId, com.xbb.broker.api.RateCategory.JOB, percent, reason, callerUserId);
     }
 
     @Override

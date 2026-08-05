@@ -175,10 +175,11 @@ class FundEventListener {
             stationPct = platformDefault;
         }
         if (stationOrgId != null) {
+            // **只读费率表。**曾经这里会回落到 station.station_percent,
+            // 那让同一件事有两个真相来源:老入口写一个、新入口写另一个,
+            // 而运营看不出哪个在生效。老入口现在也写费率表了,回落没有存在意义
             Integer override = stationRates.findByStationOrgIdAndCategory(stationOrgId, category)
-                    .map(StationRate::getPercent)
-                    .orElseGet(() -> stations.findById(stationOrgId)
-                            .map(Station::getStationPercent).orElse(null));
+                    .map(StationRate::getPercent).orElse(null);
             if (override != null) {
                 stationPct = override;
             }
