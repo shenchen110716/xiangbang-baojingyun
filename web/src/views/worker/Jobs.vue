@@ -18,6 +18,26 @@ async function load() {
   try { recos.value = await api('/api/matching/jobs?limit=10') } catch { recos.value = [] }
 }
 
+/**
+ * 分享岗位。**这是自动升级为业务员的入口** ——
+ * 没有它,后端那整条"分享 → 归因 → 成交 → 升级"永远不会被触发。
+ *
+ * <p>同一个人重复分享同一个岗位拿到同一个码,所以可以放心多点几次。
+ */
+const shareLink = ref('')
+async function share(job: any) {
+  msg.value = ''; err.value = ''; busy.value = job.id
+  try {
+    const r = await api<{ code: string }>('/api/broker/shares', {
+      body: { targetType: 'JOB', targetId: job.id } })
+    shareLink.value = `${location.origin}/#/jobs?ref=${r.code}`
+    let copied = false
+    try { await navigator.clipboard.writeText(shareLink.value); copied = true } catch { /* 剪贴板不可用就让人自己复制 */ }
+    msg.value = `《${job.title}》的分享链接已生成${copied ? '并复制' : '，请手动复制下方链接'}`
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = 0 }
+}
+
 async function apply(job: any) {
   msg.value = ''; err.value = ''; busy.value = job.id
   try {
@@ -27,7 +47,22 @@ async function apply(job: any) {
   finally { busy.value = 0 }
 }
 
-onMounted(load)
+/**
+ * 带分享码进来时先记下归属。
+ *
+ * <p>**失败不打扰用户**:归因不成功最多是这一单没算给分享人,
+ * 而弹一个错会让人以为岗位打不开。已归属别人的返回 attributed:false,
+ * 那不是错误(归属唯一)。
+ */
+async function attributeIfReferred() {
+  const q = location.hash.split('?')[1]
+  const ref = q ? new URLSearchParams(q).get('ref') : null
+  if (!ref) return
+  try { await api('/api/broker/shares/attribute', { body: { code: ref } }) }
+  catch { /* 静默:归因失败不该影响找活 */ }
+}
+
+onMounted(async () => { await attributeIfReferred(); await load() })
 </script>
 
 <template>
@@ -36,6 +71,15 @@ onMounted(load)
 
   <div v-if="msg" class="msg ok">{{ msg }}</div>
   <div v-if="err" class="msg bad">{{ err }}</div>
+
+  <div v-if="shareLink" class="card note">
+    <h3>分享链接</h3>
+    <input :value="shareLink" readonly @focus="($event.target as HTMLInputElement).select()" />
+    <p class="hint" style="margin-bottom:0">
+      发给别人。<b>对方经这个链接报名并成交后，你会自动升级为业务员</b>，
+      之后他产生的业绩你有提成。
+    </p>
+  </div>
 
   <div v-if="recos.length" class="card" style="background:var(--primary-soft);border-color:rgba(34,211,238,.28)">
     <h3>可能适合你</h3>
@@ -75,8 +119,11 @@ onMounted(load)
             </span>
           </td>
           <td>
-            <button class="sm" :disabled="busy === j.id || (j.headcount - j.filledCount) <= 0"
-                    @click="apply(j)">{{ busy === j.id ? '…' : '报名' }}</button>
+            <div class="row" style="gap:6px">
+              <button class="sm" :disabled="busy === j.id || (j.headcount - j.filledCount) <= 0"
+                      @click="apply(j)">{{ busy === j.id ? '…' : '报名' }}</button>
+              <button class="ghost sm" :disabled="busy === j.id" @click="share(j)">分享</button>
+            </div>
           </td>
         </tr>
       </tbody>
