@@ -159,4 +159,86 @@ class BrokerController {
             @PathVariable long orgId, @AuthenticationPrincipal AuthenticatedUser caller) {
         return ResponseEntity.ok(brokerApi.listJoints(orgId, caller.userId()));
     }
+
+    // ─────────────── 分成比例(按业务类目) ───────────────
+
+    record RateRequest(
+            /** 传 null 表示设平台默认(对所有没单独设过的站生效)。 */
+            Long stationOrgId,
+            @jakarta.validation.constraints.NotBlank(message = "请选择业务类目") String category,
+            @jakarta.validation.constraints.Min(value = 0, message = "分成比例必须在 0 到 100 之间")
+            @jakarta.validation.constraints.Max(value = 100, message = "分成比例必须在 0 到 100 之间")
+            int percent,
+            @jakarta.validation.constraints.NotBlank(message = "请填写调整原因") String reason) { }
+
+    @PutMapping("/rates")
+    ResponseEntity<Void> setRate(@RequestBody @jakarta.validation.Valid RateRequest req,
+                                 @AuthenticationPrincipal AuthenticatedUser caller) {
+        brokerApi.setStationRate(req.stationOrgId(), req.category(), req.percent(),
+                req.reason(), caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 平台默认那几档。**排在 /rates/{orgId} 之前**,否则 "defaults" 会被当成路径变量。 */
+    @GetMapping("/rates/defaults")
+    ResponseEntity<java.util.List<BrokerApi.StationRateView>> defaultRates(
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(brokerApi.listStationRates(null, caller.userId()));
+    }
+
+    @GetMapping("/rates/{orgId}")
+    ResponseEntity<java.util.List<BrokerApi.StationRateView>> stationRates(
+            @PathVariable long orgId, @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(brokerApi.listStationRates(orgId, caller.userId()));
+    }
+
+    // ─────────────── 分享与业务员产生 ───────────────
+
+    record ShareRequest(
+            @jakarta.validation.constraints.NotBlank(message = "请指定分享类型") String targetType,
+            @jakarta.validation.constraints.Positive(message = "请指定分享对象") long targetId) { }
+
+    record AttributeRequest(
+            @jakarta.validation.constraints.NotBlank(message = "缺少分享码") String code) { }
+
+    record GrantRequest(
+            @jakarta.validation.constraints.Positive(message = "请选择服务站") long stationOrgId,
+            @jakarta.validation.constraints.Positive(message = "请选择用户") long userId) { }
+
+    /** 分享岗位/商品,拿到分享码。同一个人重复分享同一个东西返回同一个码。 */
+    @PostMapping("/shares")
+    ResponseEntity<java.util.Map<String, String>> share(
+            @RequestBody @jakarta.validation.Valid ShareRequest req,
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(java.util.Map.of(
+                "code", brokerApi.share(caller.userId(), req.targetType(), req.targetId())));
+    }
+
+    /**
+     * 我是通过某个分享码进来的。**归属唯一** —— 已归属别人的不会被改,
+     * 这时返回 {@code attributed:false},不是错误。
+     */
+    @PostMapping("/shares/attribute")
+    ResponseEntity<java.util.Map<String, Boolean>> attribute(
+            @RequestBody @jakarta.validation.Valid AttributeRequest req,
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(java.util.Map.of(
+                "attributed", brokerApi.attributeShare(req.code(), caller.userId())));
+    }
+
+    /** 站长授权某人成为本站业务员。 */
+    @PostMapping("/salesmen/grant")
+    ResponseEntity<Void> grant(@RequestBody @jakarta.validation.Valid GrantRequest req,
+                               @AuthenticationPrincipal AuthenticatedUser caller) {
+        brokerApi.grantBroker(req.stationOrgId(), req.userId(), caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 这个人凭什么是业务员。本人或平台运维可见。 */
+    @GetMapping("/salesmen/{userId}/origin")
+    ResponseEntity<BrokerApi.BrokerOriginView> origin(
+            @PathVariable long userId, @AuthenticationPrincipal AuthenticatedUser caller) {
+        return brokerApi.brokerOrigin(userId, caller.userId())
+                .map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    }
 }

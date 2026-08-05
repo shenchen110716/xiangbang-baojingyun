@@ -12,8 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 class IdentityEventListener {
 
     private final BrokerVerifiedUserRepository verifiedUsers;
+    private final ShareUpgradeService upgrades;
 
-    IdentityEventListener(BrokerVerifiedUserRepository verifiedUsers) {
+    IdentityEventListener(BrokerVerifiedUserRepository verifiedUsers, ShareUpgradeService upgrades) {
+        this.upgrades = upgrades;
         this.verifiedUsers = verifiedUsers;
     }
 
@@ -26,5 +28,8 @@ class IdentityEventListener {
     @Transactional(transactionManager = "brokerTransactionManager", propagation = Propagation.REQUIRES_NEW)
     void on(UserVerified event) {
         verifiedUsers.save(new VerifiedUser(event.userId(), event.occurredAt()));
+        // 实名副本刚落地:如果这个人此前因"未实名"被挡下过升级,现在补上。
+        // 不补的话,只带来一单的分享人会**永久错过**那次升级机会
+        upgrades.onVerified(event.userId());
     }
 }

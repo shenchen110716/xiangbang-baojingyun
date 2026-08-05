@@ -56,6 +56,23 @@ class ShareUpgradeTest {
     @Autowired AgreementApi agreementApi;
     @Autowired BrokerApi brokerApi;
     @Autowired OpsApi opsApi;
+    @Autowired com.xbb.broker.internal.ShareConversionRepository conversions;
+    /**
+     * 直接驱动履约域的中继,不等调度器。
+     *
+     * <p>报名事件由调度器周期性投递。合跑几百个测试时 outbox 排队变长,
+     * 25 秒的等待会失败 —— 而那是**测试基础设施的时序**,不是被测逻辑有问题。
+     * 这个代码库里 SettlementOutboxReliabilityTest 早就是这么做的。
+     */
+    @Autowired com.xbb.engagement.internal.EngagementOutboxRelay engagementRelay;
+
+    /** 报名并把事件推出去。 */
+    private long applyAndDeliver(long jobId, long worker) {
+        java.util.concurrent.atomic.AtomicLong h = new java.util.concurrent.atomic.AtomicLong();
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> h.set(engagementApi.apply(jobId, worker)));
+        engagementRelay.publishPending();
+        return h.get();
+    }
 
     private long verified(String phone, String name, String idNo) {
         long id = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
@@ -116,7 +133,7 @@ class ShareUpgradeTest {
         brokerApi.attributeShare(code, s.newcomer);
 
         // 只报名,不完成履约
-        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> engagementApi.apply(s.jobId, s.newcomer));
+        applyAndDeliver(s.jobId, s.newcomer);
 
         await().atMost(Duration.ofSeconds(25)).untilAsserted(() ->
                 assertThat(brokerApi.brokerOrigin(s.sharer, ops.userId()))
@@ -133,10 +150,7 @@ class ShareUpgradeTest {
         String code = brokerApi.share(s.sharer, RateCategory.JOB, s.jobId);
         brokerApi.attributeShare(code, s.newcomer);
 
-        AtomicLong appH = new AtomicLong();
-        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                appH.set(engagementApi.apply(s.jobId, s.newcomer)));
-        long appId = appH.get();
+        long appId = applyAndDeliver(s.jobId, s.newcomer);
 
         // **报名还不算**。门槛设成 1 却在报名时就升级,等于把"成交"偷换成"报名"
         assertThat(brokerApi.brokerOrigin(s.sharer, ops.userId())).isEmpty();
@@ -160,10 +174,43 @@ class ShareUpgradeTest {
         Scene s = scene("12", "110101199001060012", "13", "110101199001060013",
                 "18400000103", "110101199001060122", "9111000000000k03X");
         brokerApi.attributeShare(brokerApi.share(unverified, RateCategory.JOB, s.jobId), s.newcomer);
-        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> engagementApi.apply(s.jobId, s.newcomer));
+        applyAndDeliver(s.jobId, s.newcomer);
 
         // 业务员要被记进佣金归属、要能收钱,没实名的话这些都无从追溯
         assertThat(brokerApi.brokerOrigin(unverified, ops.userId())).isEmpty();
+    }
+
+    @Test
+    void 实名晚到时不会永久错过升级() {
+        threshold(0);
+        // **分享人先分享、对方先成交,分享人最后才实名。**
+        // 经纪人域的已实名副本是异步来的:副本没到时升级被"未实名"挡下,
+        // 而归因已标记为已计数 —— 不补的话,只带来一单的分享人**再也升不上去**。
+        //
+        // 轻载时副本总是先到,这个缺陷在小范围测试里看不出来;
+        // 223 个测试一起跑、outbox 排队变长时才露出来
+        long sharer = identityApi.loginByPhone("18400000201", codes.issue("18400000201")).userId();
+        Scene s = scene("31", "110101199001070053", "32", "110101199001070054",
+                "18400000202", "110101199001070055", "9111000000000k09X");
+        brokerApi.attributeShare(brokerApi.share(sharer, RateCategory.JOB, s.jobId), s.newcomer);
+        applyAndDeliver(s.jobId, s.newcomer);
+
+        // **先确认归因真的被消耗掉了,再去实名。**
+        // 不等的话,报名事件可能在实名之后才投递 —— 那时走的是正常路径,
+        // 回补有没有都一样,这条守卫就测不到它要守的东西
+        // (第一版就是这样:把回补停掉,它照样绿)
+        await().atMost(Duration.ofSeconds(25)).untilAsserted(() ->
+                assertThat(conversions.findByConvertedUserId(s.newcomer))
+                        .get().extracting(c -> c.getStatus().name())
+                        .isEqualTo("COUNTED"));
+        assertThat(brokerApi.brokerOrigin(sharer, ops.userId()))
+                .as("归因已消耗但人还没实名 —— 此刻升不上去").isEmpty();
+
+        // 现在实名 —— 回补升级
+        identityApi.verifyRealName(sharer, "迟到实名", "110101199001070056");
+        await().atMost(Duration.ofSeconds(25)).untilAsserted(() ->
+                assertThat(brokerApi.brokerOrigin(sharer, ops.userId()))
+                        .as("实名之后要把此前错过的升级补上").isPresent());
     }
 
     // ─────────────── 站长授权 ───────────────

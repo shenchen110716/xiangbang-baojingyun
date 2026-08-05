@@ -140,6 +140,34 @@ public class ShareUpgradeService {
         maybeUpgrade(share.getSharerUserId(), conversion, Math.max(threshold, 1));
     }
 
+    /**
+     * 实名之后回补升级。
+     *
+     * <p><b>为什么需要这条。</b>经纪人域的已实名副本是异步从身份域来的。
+     * 副本还没到时成交事件先到,升级会被"未实名"挡下 —— 而归因已经标记为已计数,
+     * **那次升级机会就永久错过了**:如果这个分享人只带来一单,他再也升不上去。
+     *
+     * <p>轻载时副本总是先到,所以这个缺陷在小范围测试里看不出来;
+     * 223 个测试一起跑、outbox 排队变长时才露出来。
+     */
+    @Transactional("brokerTransactionManager")
+    public void onVerified(long userId) {
+        if (brokers.existsById(userId)) {
+            return;
+        }
+        long threshold = Math.max(opsApi.settingInt(SettingKeys.BROKER_UPGRADE_DEAL_THRESHOLD, 1), 1);
+        long counted = countedOf(userId);
+        if (counted < threshold) {
+            return;
+        }
+        Broker broker = new Broker(userId);
+        broker.assignStation(resolveStation(userId));
+        brokers.save(broker);
+        origins.save(new BrokerOrigin(userId, BrokerOrigin.Origin.AUTO_UPGRADE, null, null));
+        log.info("实名后回补升级:user={} 已成交={}单 归属服务站={}",
+                userId, counted, broker.getStationOrgId());
+    }
+
     private void maybeUpgrade(long sharerUserId, ShareConversion trigger, long needed) {
         // 建立归属关系:不论升不升级,这个人是分享人带来的,佣金要算给他
         if (invitations.findByWorkerUserId(trigger.getConvertedUserId()).isEmpty()) {

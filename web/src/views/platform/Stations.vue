@@ -102,9 +102,16 @@ async function runDemotion() {
 
 const CHANGE_TYPE: Record<string, string> = { STATION: '服务站', PARENT: '上级', STATUS: '状态' }
 const inStation = (orgId: number) => brokers.value.filter(b => b.stationOrgId === orgId)
-onMounted(load)
+onMounted(() => { load(); loadDefaults() })
 
 /** 联合关系(老系统 M10 §3.4)。展开某个站时才拉,免得一进页面就打一串请求。 */
+const manageOpen = ref<number | null>(null)
+async function toggleManage(orgId: number) {
+  if (manageOpen.value === orgId) { manageOpen.value = null; return }
+  manageOpen.value = orgId
+  await loadRates(orgId)
+}
+
 const jointsOf = ref<Record<number, any[]>>({})
 const jointOpen = ref<number | null>(null)
 const jointTo = ref(''); const jointRate = ref('30')
@@ -142,6 +149,87 @@ async function jointAct(orgId: number, id: number, what: 'confirm' | 'cancel' | 
   } catch (e: any) { err.value = e.message }
   finally { busy.value = '' }
 }
+
+
+/** 建站与站长指派(平台端统一管理)。 */
+const newName = ref(''); const newCode = ref('')
+const masterOf = ref<Record<number, string>>({})
+const masterReason = ref<Record<number, string>>({})
+
+async function createStation() {
+  msg.value = ''; err.value = ''; busy.value = 'create'
+  try {
+    const r = await api<{ id: number }>('/api/org/stations', {
+      body: { name: newName.value.trim(), creditCode: newCode.value.trim() } })
+    msg.value = `服务站 #${r.id} 已设立。**还没有站长**，请指派后它才能签联合协议`
+    newName.value = ''; newCode.value = ''
+    await load()
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
+
+async function assignMaster(orgId: number, clear = false) {
+  const reason = masterReason.value[orgId]?.trim()
+  if (!reason) { err.value = '请填写变更原因'; return }
+  msg.value = ''; err.value = ''; busy.value = `master-${orgId}`
+  try {
+    await api(`/api/org/stations/${orgId}/master`, { method: 'PUT', body: {
+      userId: clear ? null : Number(masterOf.value[orgId]), reason } })
+    msg.value = clear ? `服务站 #${orgId} 已撤下站长` : `服务站 #${orgId} 的站长已更新`
+    masterOf.value[orgId] = ''; masterReason.value[orgId] = ''
+    await load()
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
+
+/** 按业务类目的分成比例。 */
+const CATEGORIES = [
+  { v: 'JOB', label: '岗位' },
+  { v: 'PRODUCT', label: '商品' },
+  { v: 'TRAINING', label: '培训' },
+]
+const ratesOf = ref<Record<number, any[]>>({})
+const defaultRates = ref<any[]>([])
+const rateCat = ref('JOB'); const ratePct = ref(''); const rateReason = ref('')
+
+async function loadRates(orgId: number) {
+  try { ratesOf.value[orgId] = await api(`/api/broker/rates/${orgId}`) }
+  catch (e: any) { err.value = e.message; ratesOf.value[orgId] = [] }
+}
+
+async function loadDefaults() {
+  try { defaultRates.value = await api('/api/broker/rates/defaults') }
+  catch { defaultRates.value = [] }
+}
+
+async function setRate(orgId: number | null) {
+  msg.value = ''; err.value = ''; busy.value = `rate-${orgId ?? 'default'}`
+  try {
+    await api('/api/broker/rates', { method: 'PUT', body: {
+      stationOrgId: orgId, category: rateCat.value,
+      percent: Number(ratePct.value), reason: rateReason.value.trim() } })
+    msg.value = orgId ? `服务站 #${orgId} 的${rateCat.value}比例已更新` : '平台默认比例已更新'
+    ratePct.value = ''; rateReason.value = ''
+    if (orgId) await loadRates(orgId); else await loadDefaults()
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
+
+/** 站长授权业务员。 */
+const grantUser = ref<Record<number, string>>({})
+async function grantBroker(orgId: number) {
+  msg.value = ''; err.value = ''; busy.value = `grant-${orgId}`
+  try {
+    await api('/api/broker/salesmen/grant', {
+      body: { stationOrgId: orgId, userId: Number(grantUser.value[orgId]) } })
+    msg.value = `用户 #${grantUser.value[orgId]} 已成为服务站 #${orgId} 的业务员`
+    grantUser.value[orgId] = ''
+    await load()
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
+
+const zhCategory = (v: string) => CATEGORIES.find(c => c.v === v)?.label ?? v
 
 </script>
 
@@ -339,9 +427,77 @@ async function jointAct(orgId: number, id: number, what: 'confirm' | 'cancel' | 
           <tr>
             <td>{{ s.name }}</td>
             <td>#{{ s.orgId }}</td>
-            <td><button class="ghost sm" @click="toggleJoints(s.orgId)">
-              {{ jointOpen === s.orgId ? '收起' : '联合关系' }}</button></td>
+            <td>
+              <div class="row" style="gap:6px">
+                <button class="ghost sm" @click="toggleManage(s.orgId)">
+                  {{ manageOpen === s.orgId ? '收起' : '管理' }}</button>
+                <button class="ghost sm" @click="toggleJoints(s.orgId)">
+                  {{ jointOpen === s.orgId ? '收起' : '联合关系' }}</button>
+              </div>
+            </td>
           </tr>
+          <tr v-if="manageOpen === s.orgId">
+            <td colspan="3" style="background:var(--surface-2);padding:12px">
+              <div class="row" style="align-items:flex-end;gap:8px;margin-bottom:14px">
+                <div class="field" style="flex:0 0 170px">
+                  <label>站长（用户编号）</label>
+                  <input v-model="masterOf[s.orgId]"
+                         :placeholder="s.legalRepUserId ? `当前 #${s.legalRepUserId}` : '当前无站长'" />
+                </div>
+                <div class="field"><label>变更原因<span style="color:var(--bad)">*</span></label>
+                  <input v-model="masterReason[s.orgId]" placeholder="必填，事后查得到是谁换的" /></div>
+                <button :disabled="!masterOf[s.orgId] || busy === `master-${s.orgId}`"
+                        @click="assignMaster(s.orgId)">指派</button>
+                <button v-if="s.legalRepUserId" class="ghost"
+                        :disabled="busy === `master-${s.orgId}`"
+                        @click="assignMaster(s.orgId, true)">撤下站长</button>
+              </div>
+              <p class="hint" style="margin-top:0">
+                换站长会改变<b>谁能设分成比例、谁能签联合协议</b>，所以要填原因。
+              </p>
+
+              <h4 style="margin:14px 0 6px">本站分成比例</h4>
+              <div v-if="!ratesOf[s.orgId]?.length" class="hint" style="margin:0">
+                没有单独设过，跟随平台默认
+              </div>
+              <table v-else>
+                <thead><tr><th style="width:120px">类目</th><th style="width:100px">比例</th>
+                           <th>更新时间</th></tr></thead>
+                <tbody>
+                  <tr v-for="r in ratesOf[s.orgId]" :key="r.category">
+                    <td>{{ zhCategory(r.category) }}</td>
+                    <td>{{ r.percent }}%</td>
+                    <td style="color:var(--muted);font-size:12.5px">{{ when(r.updatedAt) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="row" style="align-items:flex-end;gap:8px;margin-top:8px">
+                <div class="field" style="flex:0 0 130px"><label>类目</label>
+                  <select v-model="rateCat">
+                    <option v-for="c in CATEGORIES" :key="c.v" :value="c.v">{{ c.label }}</option>
+                  </select>
+                </div>
+                <div class="field" style="flex:0 0 110px"><label>比例（%）</label>
+                  <input v-model="ratePct" /></div>
+                <div class="field"><label>调整原因<span style="color:var(--bad)">*</span></label>
+                  <input v-model="rateReason" /></div>
+                <button :disabled="!ratePct || !rateReason.trim()" @click="setRate(s.orgId)">设置</button>
+              </div>
+
+              <h4 style="margin:16px 0 6px">授权业务员</h4>
+              <p class="hint" style="margin-top:0">
+                站长可以直接把某人设为本站业务员。
+                另一条路是<b>员工分享岗位/商品，对方成交后自动升级</b>。
+              </p>
+              <div class="row" style="align-items:flex-end;gap:8px">
+                <div class="field" style="flex:0 0 180px"><label>用户编号</label>
+                  <input v-model="grantUser[s.orgId]" placeholder="要实名认证过" /></div>
+                <button :disabled="!grantUser[s.orgId] || busy === `grant-${s.orgId}`"
+                        @click="grantBroker(s.orgId)">授权为业务员</button>
+              </div>
+            </td>
+          </tr>
+
           <tr v-if="jointOpen === s.orgId">
             <td colspan="3" style="background:var(--surface-2);padding:12px">
               <div v-if="!jointsOf[s.orgId]?.length" class="empty" style="padding:6px 0">
@@ -391,6 +547,54 @@ async function jointAct(orgId: number, id: number, what: 'confirm' | 'cancel' | 
         </template>
       </tbody>
     </table>
+  </div>
+
+
+  <div class="card">
+    <h3>设立服务站</h3>
+    <p class="hint">
+      服务站是平台自己的经营网点，由平台统一设立。
+      <b>建出来时还没有站长</b>——先有点位，再决定派谁去管。
+    </p>
+    <div class="row">
+      <div class="field"><label>服务站名称</label>
+        <input v-model="newName" placeholder="如：郑州高新区服务站" /></div>
+      <div class="field"><label>统一社会信用代码</label>
+        <input v-model="newCode" placeholder="收佣金要开对公账户，必填" /></div>
+      <button style="align-self:flex-end"
+              :disabled="!newName.trim() || !newCode.trim() || busy === 'create'"
+              @click="createStation">设立</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>平台默认分成比例</h3>
+    <p class="hint">
+      对所有没单独设过的服务站生效。<b>岗位、商品、培训的毛利结构不同</b>，
+      用同一个比例要么服务站在商品上亏、要么平台在岗位上亏。
+    </p>
+    <div v-if="!defaultRates.length" class="empty" style="padding:8px 0">还没有设过默认比例</div>
+    <table v-else style="margin-bottom:12px">
+      <thead><tr><th style="width:120px">类目</th><th style="width:100px">比例</th><th>更新时间</th></tr></thead>
+      <tbody>
+        <tr v-for="r in defaultRates" :key="r.category">
+          <td>{{ zhCategory(r.category) }}</td>
+          <td>{{ r.percent }}%</td>
+          <td style="color:var(--muted);font-size:12.5px">{{ when(r.updatedAt) }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="row" style="align-items:flex-end;gap:8px">
+      <div class="field" style="flex:0 0 130px"><label>类目</label>
+        <select v-model="rateCat">
+          <option v-for="c in CATEGORIES" :key="c.v" :value="c.v">{{ c.label }}</option>
+        </select>
+      </div>
+      <div class="field" style="flex:0 0 110px"><label>比例（%）</label><input v-model="ratePct" /></div>
+      <div class="field"><label>调整原因<span style="color:var(--bad)">*</span></label>
+        <input v-model="rateReason" placeholder="必填，事后查得到是谁改的" /></div>
+      <button :disabled="!ratePct || !rateReason.trim()" @click="setRate(null)">设为默认</button>
+    </div>
   </div>
 
 </template>

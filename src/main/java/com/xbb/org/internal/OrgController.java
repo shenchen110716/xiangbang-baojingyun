@@ -66,4 +66,39 @@ class OrgController {
     }
 
     // 400/409/乐观锁冲突等错误映射统一收在 com.xbb.web.GlobalExceptionHandler
+
+    // ─────────────── 平台设立的服务站 ───────────────
+
+    record CreateStationRequest(
+            @jakarta.validation.constraints.NotBlank(message = "请填写服务站名称") String name,
+            @jakarta.validation.constraints.NotBlank(message = "请填写统一社会信用代码") String creditCode) { }
+
+    record AssignMasterRequest(
+            /** 传 null 表示撤下当前站长,该站暂时无人管理。 */
+            Long userId,
+            @jakarta.validation.constraints.NotBlank(message = "请填写变更原因") String reason) { }
+
+    /** 平台直接设立服务站。建出来就是已审核、且还没有站长。 */
+    @PostMapping("/stations")
+    ResponseEntity<java.util.Map<String, Long>> createStation(
+            @RequestBody @jakarta.validation.Valid CreateStationRequest req,
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        long id = orgApi.createStation(req.name(), req.creditCode(), caller.userId());
+        return ResponseEntity.ok(java.util.Map.of("id", id));
+    }
+
+    /** 指派或更换站长。**先留痕再变更** —— 这会改变谁能设分成比例、谁能签联合协议。 */
+    @PutMapping("/stations/{orgId}/master")
+    ResponseEntity<Void> assignMaster(@PathVariable long orgId,
+                                      @RequestBody @jakarta.validation.Valid AssignMasterRequest req,
+                                      @AuthenticationPrincipal AuthenticatedUser caller) {
+        orgApi.assignStationMaster(orgId, req.userId(), req.reason(), caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/stations/{orgId}/master-changes")
+    ResponseEntity<java.util.List<OrgApi.MasterChangeView>> masterChanges(
+            @PathVariable long orgId, @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(orgApi.stationMasterChanges(orgId, caller.userId()));
+    }
 }
