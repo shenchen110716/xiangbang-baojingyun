@@ -24,6 +24,7 @@ class BrokerService implements BrokerApi {
 
     private final BrokerRepository brokers;
     private final StationRepository stations;
+    private final StationJointRepository joints;
     private final BrokerChangeLogRepository changeLogs;
     private final com.xbb.ops.api.OpsApi opsApi;
     private final org.springframework.beans.factory.ObjectProvider<BrokerDemotionTask> demotionTask;
@@ -39,11 +40,13 @@ class BrokerService implements BrokerApi {
                   BrokerVerifiedUserRepository verifiedUsers,
                      BrokerOutboxRepository outbox, ObjectMapper json,
                        IdentityApi identityApi, FundApi fundApi,
-                  StationRepository stations, BrokerChangeLogRepository changeLogs,
+                  StationRepository stations, StationJointRepository joints,
+                  BrokerChangeLogRepository changeLogs,
                   com.xbb.ops.api.OpsApi opsApi,
                   org.springframework.beans.factory.ObjectProvider<BrokerDemotionTask> demotionTask) {
         this.demotionTask = demotionTask;
         this.stations = stations;
+        this.joints = joints;
         this.changeLogs = changeLogs;
         this.opsApi = opsApi;
         this.brokers = brokers;
@@ -153,6 +156,112 @@ class BrokerService implements BrokerApi {
                 .map(c -> new CommissionView(
                 c.getId(), c.getBrokerUserId(), c.getWorkerUserId(), c.getSettlementId(),
                 c.getAmountCents(), c.getStatus()));
+    }
+
+    // ─────────────── 服务站间联合(老系统 M10 §3.4) ───────────────
+
+    /**
+     * 发起联合申请。
+     *
+     * <p>**只有发起方服务站的法人代表能发** —— 这一步是在决定把自己的佣金分一部分出去。
+     * 少了这条,任何人都能替别人的服务站签下分成协议。
+     */
+    @Override
+    @Transactional("brokerTransactionManager")
+    public long applyJoint(long fromOrgId, long toOrgId, int ratePercent, long callerUserId) {
+        Station from = requireStationLegalRep(fromOrgId, callerUserId, "发起联合");
+        stations.findById(toOrgId)
+                .orElseThrow(() -> new IllegalArgumentException("对方不是已审核的服务站"));
+
+        // 反向已经联合过也要拦:A→B 和 B→A 同时存在会让两边互相分成,
+        // 钱在两个站之间来回切,总额虽不超但明细没人看得懂
+        if (joints.findByFromOrgIdAndToOrgIdAndStatus(toOrgId, fromOrgId, StationJoint.Status.ACTIVE).isPresent()) {
+            throw new IllegalStateException("对方已经和你联合,不需要再发起");
+        }
+
+        StationJoint joint = new StationJoint(fromOrgId, toOrgId, ratePercent, callerUserId);
+        try {
+            StationJoint saved = joints.save(joint);
+            log.info("联合申请:{} → {} 比例={}% 发起人={}", from.getName(), toOrgId, ratePercent, callerUserId);
+            return saved.getId();
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 唯一索引兜底。老系统在应用层"已申请则拦截重复",那在并发下无效 ——
+            // 两边同时查到"没有"然后都插入
+            throw new IllegalStateException("已经有一条待确认或生效中的联合,不能重复发起");
+        }
+    }
+
+    /**
+     * 确认联合。
+     *
+     * <p>**只有被邀请方的法人代表能确认。**否则发起方可以自己给自己确认,
+     * 这个"申请—确认"的两步就完全没有意义了。
+     */
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void confirmJoint(long jointId, long callerUserId) {
+        StationJoint joint = joints.findById(jointId)
+                .orElseThrow(() -> new IllegalArgumentException("联合申请不存在"));
+        requireStationLegalRep(joint.getToOrgId(), callerUserId, "确认联合");
+        joint.confirm(callerUserId);
+        joints.save(joint);
+        log.info("联合已确认:{} → {} 比例={}%", joint.getFromOrgId(), joint.getToOrgId(), joint.getRatePercent());
+    }
+
+    /** 撤回未确认的申请。只有发起方能撤。 */
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void cancelJoint(long jointId, long callerUserId) {
+        StationJoint joint = joints.findById(jointId)
+                .orElseThrow(() -> new IllegalArgumentException("联合申请不存在"));
+        requireStationLegalRep(joint.getFromOrgId(), callerUserId, "撤回联合申请");
+        joint.cancel();
+        joints.save(joint);
+    }
+
+    /** 解除已生效的联合。**任一方都可以** —— 合作是双方的,不该只有一方能退出。 */
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void endJoint(long jointId, long callerUserId) {
+        StationJoint joint = joints.findById(jointId)
+                .orElseThrow(() -> new IllegalArgumentException("联合不存在"));
+        boolean isParty = isStationLegalRep(joint.getFromOrgId(), callerUserId)
+                || isStationLegalRep(joint.getToOrgId(), callerUserId)
+                || identityApi.hasRole(callerUserId, Role.PLATFORM_OPS);
+        if (!isParty) {
+            throw new IllegalStateException("只有联合双方的法人代表可以解除联合");
+        }
+        joint.end();
+        joints.save(joint);
+        log.info("联合已解除:{} → {}", joint.getFromOrgId(), joint.getToOrgId());
+    }
+
+    @Override
+    @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
+    public List<StationJointView> listJoints(long orgId, long callerUserId) {
+        // 联合关系里有分成比例 —— 那是两家的商业约定,不该给无关的人看(铁律 5.1)
+        if (!isStationLegalRep(orgId, callerUserId)
+                && !identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            return List.of();
+        }
+        return joints.findByFromOrgIdOrToOrgIdOrderByIdDesc(orgId, orgId).stream()
+                .map(j -> new StationJointView(j.getId(), j.getFromOrgId(), j.getToOrgId(),
+                        j.getRatePercent(), j.getStatus().name(),
+                        j.getCreatedAt(), j.getConfirmedAt(), j.getEndedAt()))
+                .toList();
+    }
+
+    private boolean isStationLegalRep(long orgId, long callerUserId) {
+        return stations.findById(orgId).map(st -> st.getLegalRepUserId() == callerUserId).orElse(false);
+    }
+
+    private Station requireStationLegalRep(long orgId, long callerUserId, String action) {
+        Station station = stations.findById(orgId)
+                .orElseThrow(() -> new IllegalArgumentException("服务站不存在或尚未通过审核"));
+        if (station.getLegalRepUserId() != callerUserId) {
+            throw new IllegalStateException("只有服务站法人代表可以" + action);
+        }
+        return station;
     }
 
     // ─────────────── 服务站与业务员网络 ───────────────

@@ -31,6 +31,7 @@ class FundEventListener {
     private final CommissionRepository commissions;
     private final BrokerRepository brokers;
     private final StationRepository stations;
+    private final StationJointRepository joints;
     private final CommissionBaseRepository bases;
     private final BrokerOutboxRepository outbox;
     private final OpsApi opsApi;
@@ -39,12 +40,14 @@ class FundEventListener {
 
     FundEventListener(InvitationRepository invitations, CommissionRepository commissions,
                       BrokerRepository brokers, StationRepository stations,
+                      StationJointRepository joints,
                       CommissionBaseRepository bases,
                       BrokerOutboxRepository outbox, OpsApi opsApi, FundApi fundApi, ObjectMapper json) {
         this.invitations = invitations;
         this.commissions = commissions;
         this.brokers = brokers;
         this.stations = stations;
+        this.joints = joints;
         this.bases = bases;
         this.outbox = outbox;
         this.opsApi = opsApi;
@@ -96,11 +99,17 @@ class FundEventListener {
 
         CommissionSplitter.Rates rates = ratesFor(stationOrgId);
         CommissionSplitter.Split split = CommissionSplitter.split(
-                base, directBrokerId, stationOrgId, ancestorsOf(direct), rates);
+                base, directBrokerId, stationOrgId, ancestorsOf(direct), rates, jointsOf(stationOrgId));
 
         for (CommissionSplitter.Share s : split.shares()) {
+            // **JOINT 也是发给组织的**,不能落进"发给经纪人"那条 ——
+            // 那样 broker_user_id 会是 null,数据库的归属约束会当场拒绝,
+            // 而这条路径只有真的有联合服务站时才会走到
             Commission saved = s.tier() == CommissionSplitter.Tier.STATION
                     ? commissions.save(Commission.toStation(
+                            s.stationOrgId(), event.payeeUserId(), event.settlementId(), s.amountCents()))
+                    : s.tier() == CommissionSplitter.Tier.JOINT
+                    ? commissions.save(Commission.toJoint(
                             s.stationOrgId(), event.payeeUserId(), event.settlementId(), s.amountCents()))
                     : commissions.save(Commission.toBroker(
                             s.brokerUserId(), event.payeeUserId(), event.settlementId(),
@@ -124,6 +133,21 @@ class FundEventListener {
         log.info("佣金分账完成: settlement={} 基数={}分(发放{}分) 平台={}分 分账{}笔",
                 event.settlementId(), base, event.amountCents(),
                 split.platformCents(), split.shares().size());
+    }
+
+    /**
+     * 归集站当前生效的联合(老系统 M10 §3.4)。
+     *
+     * <p>**只取 ACTIVE。**待确认的还没生效、已解除的属于历史 ——
+     * 把它们算进来就是按一个并不存在的约定分钱。
+     */
+    private List<CommissionSplitter.Joint> jointsOf(Long stationOrgId) {
+        if (stationOrgId == null) {
+            return List.of();
+        }
+        return joints.findByFromOrgIdAndStatus(stationOrgId, StationJoint.Status.ACTIVE).stream()
+                .map(j -> new CommissionSplitter.Joint(j.getToOrgId(), j.getRatePercent()))
+                .toList();
     }
 
     /** 服务站单独设过比例就用它,否则跟随平台默认。 */

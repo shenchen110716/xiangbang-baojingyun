@@ -24,7 +24,17 @@ final class CommissionSplitter {
 
     private CommissionSplitter() { }
 
-    enum Tier { ACTIVE, PASSIVE, STATION }
+    enum Tier {
+        ACTIVE, PASSIVE, STATION,
+        /**
+         * 联合服务站分走的那一份(老系统 M10 §3.4)。
+         *
+         * <p>单列一档而不是复用 STATION:两者的钱来源不同 ——
+         * STATION 是归集站自己挣的,JOINT 是从归集站的份额里切给联合方的。
+         * 混在一起的话,服务站看自己的佣金明细会发现数字对不上,却查不出为什么。
+         */
+        JOINT
+    }
 
     /** 一份分账。收款方是人(brokerUserId)或站(stationOrgId),恰好其一。 */
     record Share(Tier tier, Long brokerUserId, Long stationOrgId, int chainDepth, long amountCents) { }
@@ -67,8 +77,16 @@ final class CommissionSplitter {
      * @param stationOrgId   直接经纪人所属服务站;为 null 时这一档不分
      * @param ancestors      直接经纪人往上的祖先链,由近及远。空表示他是根
      */
+    /** 一条生效的联合:归集站要按 ratePercent 切一份给 toOrgId。 */
+    record Joint(long toOrgId, int ratePercent) { }
+
     static Split split(long baseCents, long directBrokerId, Long stationOrgId,
                        List<Long> ancestors, Rates rates) {
+        return split(baseCents, directBrokerId, stationOrgId, ancestors, rates, List.of());
+    }
+
+    static Split split(long baseCents, long directBrokerId, Long stationOrgId,
+                       List<Long> ancestors, Rates rates, List<Joint> joints) {
         rates.requireSane();
         if (baseCents <= 0) {
             return new Split(0, List.of());
@@ -86,7 +104,26 @@ final class CommissionSplitter {
         long pool     = remainder * rates.passivePct()  / 100;
 
         if (stationOrgId != null && station > 0) {
-            shares.add(new Share(Tier.STATION, null, stationOrgId, 0, station));
+            // **联合分成从归集站自己那份里切,不额外增加总额。**
+            // 从基数里另算的话,分账总额会超过基数 —— 那是平台在倒贴钱,
+            // 而且要等对账才发现
+            long remainingForStation = station;
+            for (Joint joint : joints == null ? List.<Joint>of() : joints) {
+                if (remainingForStation <= 0) {
+                    break;
+                }
+                long jointShare = station * joint.ratePercent() / 100;
+                // 多个联合方累计可能超过归集站那份(比例各自合法、加起来不合法),
+                // 这里按剩余截断:宁可后面的联合方少拿,也不能让总额超过基数
+                jointShare = Math.min(jointShare, remainingForStation);
+                if (jointShare > 0) {
+                    shares.add(new Share(Tier.JOINT, null, joint.toOrgId(), 0, jointShare));
+                    remainingForStation -= jointShare;
+                }
+            }
+            if (remainingForStation > 0) {
+                shares.add(new Share(Tier.STATION, null, stationOrgId, 0, remainingForStation));
+            }
         }
 
         // 被动逐级:每一级拿走**当前剩余**的固定比例,所以越往上越少。

@@ -107,4 +107,64 @@ class CommissionSplitterTest {
                 new CommissionSplitter.Rates(60, 20, 30, 0, 50, 100)))
                 .hasMessageContaining("逐级");
     }
+
+    // ─────────────── 联合服务站(老系统 M10 §3.4) ───────────────
+
+    @Test
+    void 联合分成从归集站自己那份里切_不增加总额() {
+        var noJoint = CommissionSplitter.split(100_000, 1L, 9L, List.of(), defaults());
+        long stationBefore = tierSum(noJoint, CommissionSplitter.Tier.STATION);
+
+        var withJoint = CommissionSplitter.split(100_000, 1L, 9L, List.of(), defaults(),
+                List.of(new CommissionSplitter.Joint(77L, 30)));
+
+        long joint   = tierSum(withJoint, CommissionSplitter.Tier.JOINT);
+        long station = tierSum(withJoint, CommissionSplitter.Tier.STATION);
+
+        // 联合方拿走归集站那份的 30%,剩下的还是归集站的
+        assertThat(joint).isEqualTo(stationBefore * 30 / 100);
+        assertThat(joint + station).isEqualTo(stationBefore);
+        // **总额不变。**从基数里另算的话平台就在倒贴钱,而且要等对账才发现
+        assertThat(withJoint.totalCents()).isEqualTo(noJoint.totalCents());
+    }
+
+    @Test
+    void 多个联合方累计不会超过归集站那份() {
+        // 三个 40% 各自合法,加起来 120% —— 比例是分别设的,没人会发现它们加起来超了
+        var split = CommissionSplitter.split(100_000, 1L, 9L, List.of(), defaults(),
+                List.of(new CommissionSplitter.Joint(71L, 40),
+                        new CommissionSplitter.Joint(72L, 40),
+                        new CommissionSplitter.Joint(73L, 40)));
+
+        long stationBefore = tierSum(
+                CommissionSplitter.split(100_000, 1L, 9L, List.of(), defaults()),
+                CommissionSplitter.Tier.STATION);
+        long jointTotal = split.shares().stream()
+                .filter(x -> x.tier() == CommissionSplitter.Tier.JOINT)
+                .mapToLong(CommissionSplitter.Share::amountCents).sum();
+
+        assertThat(jointTotal)
+                .as("宁可后面的联合方少拿,也不能让总额超过基数")
+                .isLessThanOrEqualTo(stationBefore);
+        assertThat(split.totalCents()).isLessThanOrEqualTo(100_000);
+    }
+
+    @Test
+    void 没有归集站时联合不生效() {
+        // 没有服务站就没有那一档可切。硬切的话会凭空多出一笔钱
+        var split = CommissionSplitter.split(100_000, 1L, null, List.of(), defaults(),
+                List.of(new CommissionSplitter.Joint(77L, 30)));
+        assertThat(split.shares()).noneMatch(x -> x.tier() == CommissionSplitter.Tier.JOINT);
+    }
+
+    @Test
+    void 没有联合时和改动前完全一致() {
+        // 这条守的是"加了联合别把原来的分账弄坏" —— 绝大多数服务站没有联合
+        var before = CommissionSplitter.split(100_000, 1L, 9L, List.of(2L, 3L), defaults());
+        var after  = CommissionSplitter.split(100_000, 1L, 9L, List.of(2L, 3L), defaults(), List.of());
+        assertThat(after.totalCents()).isEqualTo(before.totalCents());
+        assertThat(after.shares()).hasSameSizeAs(before.shares());
+        assertThat(tierSum(after, CommissionSplitter.Tier.STATION))
+                .isEqualTo(tierSum(before, CommissionSplitter.Tier.STATION));
+    }
 }

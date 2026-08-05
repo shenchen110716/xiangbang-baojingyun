@@ -23,6 +23,32 @@ public interface BrokerApi {
     /** 佣金明细。只有挣这笔佣金的经纪人本人或平台运维看得到。 */
     Optional<CommissionView> findCommission(long commissionId, long callerUserId);
 
+    // ─────────────── 服务站间联合(老系统 M10 §3.4) ───────────────
+
+    record StationJointView(long id, long fromOrgId, long toOrgId, int ratePercent,
+                            String status, java.time.Instant createdAt,
+                            java.time.Instant confirmedAt, java.time.Instant endedAt) { }
+
+    /**
+     * 发起联合申请。**只有发起方服务站的法人代表能发** ——
+     * 这一步是在决定把自己的佣金分一部分出去。
+     *
+     * @param ratePercent 从发起方的服务站佣金里切多少给对方(1–99)
+     */
+    long applyJoint(long fromOrgId, long toOrgId, int ratePercent, long callerUserId);
+
+    /** 确认联合。**只有被邀请方的法人代表能确认** —— 否则发起方可以自己给自己确认。 */
+    void confirmJoint(long jointId, long callerUserId);
+
+    /** 撤回未确认的申请(发起方)。 */
+    void cancelJoint(long jointId, long callerUserId);
+
+    /** 解除已生效的联合。任一方都可以。 */
+    void endJoint(long jointId, long callerUserId);
+
+    /** 这个服务站相关的全部联合(含历史)。 */
+    List<StationJointView> listJoints(long orgId, long callerUserId);
+
     // ─────────────── 服务站与业务员网络 ───────────────
 
     record StationView(long orgId, String name, long legalRepUserId,

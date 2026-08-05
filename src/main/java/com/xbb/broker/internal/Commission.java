@@ -26,7 +26,8 @@ public class Commission {
     public enum Status { PENDING, PAID }
 
     /** 与 {@link CommissionSplitter.Tier} 一一对应。 */
-    public enum Tier { ACTIVE, PASSIVE, STATION }
+    /** JOINT = 联合服务站分走的那一档(老系统 M10 §3.4),和 STATION 一样发给组织。 */
+    public enum Tier { ACTIVE, PASSIVE, STATION, JOINT }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -83,6 +84,12 @@ public class Commission {
     }
 
     /** 给服务站的分账。 */
+    static Commission toJoint(long jointOrgId, long workerUserId, long settlementId, long amountCents) {
+        Commission c = toStation(jointOrgId, workerUserId, settlementId, amountCents);
+        c.tier = Tier.JOINT;
+        return c;
+    }
+
     static Commission toStation(long stationOrgId, long workerUserId, long settlementId, long amountCents) {
         Commission c = new Commission();
         c.stationOrgId = stationOrgId;
