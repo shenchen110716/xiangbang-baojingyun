@@ -94,4 +94,35 @@ class IdentityController {
         identityApi.revokeRole(req.targetUserId(), req.role(), caller.userId());
         return ResponseEntity.noContent().build();
     }
+
+    // ─────────────── 微信授权登录 ───────────────
+
+    record WechatCodeRequest(
+            @jakarta.validation.constraints.NotBlank(message = "缺少微信授权码") String code) { }
+
+    /**
+     * 微信登录。**openid 没绑过时返回 userId=0 / newUser=true**,
+     * 前端据此引导去"手机登录 → 绑定微信",而不是凭空开一个走不下去的账号。
+     */
+    @PostMapping("/wechat/login")
+    ResponseEntity<IdentityApi.LoginResult> wechatLogin(
+            @RequestBody @Valid WechatCodeRequest req) {
+        return ResponseEntity.ok(identityApi.loginByWechat(req.code()));
+    }
+
+    /** 把微信绑到当前账号。要先登录。 */
+    @PostMapping("/wechat/bind")
+    ResponseEntity<Void> bindWechat(@RequestBody @Valid WechatCodeRequest req,
+                                    @AuthenticationPrincipal AuthenticatedUser caller) {
+        identityApi.bindWechat(caller.userId(), req.code());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 我绑没绑微信。**只回是否绑定,不回 openid** —— 那是身份标识,前端不需要。 */
+    @GetMapping("/wechat/bound")
+    ResponseEntity<java.util.Map<String, Boolean>> wechatBound(
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(java.util.Map.of(
+                "bound", identityApi.wechatOpenIdOf(caller.userId()).isPresent()));
+    }
 }

@@ -30,6 +30,10 @@ public class SecurityConfig {
                 .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
                 // 拿 token 之前必须能免登录访问:请求验证码、拿验证码换 token
                 .requestMatchers("/api/identity/code", "/api/identity/login").permitAll()
+                // 微信登录**必须匿名可达** —— 它是登录本身,要求先登录在逻辑上不成立。
+                // 只放 login,**不放 bind**:绑定是把微信挂到"当前账号"上,
+                // 放开的话任何人都能把自己的微信绑到别人的账号
+                .requestMatchers("/api/identity/wechat/login").permitAll()
                 // 取验证码的开发端点。这里放行只是让请求能到达控制器——
                 // **真正的门在 DevCodeController 里**(要 X-Dev-Token,且只在 mock 模式装配)。
                 // 放在这一层是因为它必须在登录之前可达,鉴权自然不能靠 JWT。

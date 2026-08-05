@@ -241,4 +241,105 @@ class BrokerController {
         return brokerApi.brokerOrigin(userId, caller.userId())
                 .map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
+
+    // ─────────────── 服务站与用工单位的合作 ───────────────
+
+    record ApplyCoopRequest(
+            @jakarta.validation.constraints.Positive(message = "请选择服务站") long stationOrgId,
+            @jakarta.validation.constraints.Positive(message = "请选择用工单位") long partnerOrgId,
+            boolean initiatedByStation) { }
+
+    record OperatorRequest(
+            @jakarta.validation.constraints.Positive(message = "请选择用户") long userId) { }
+
+    @PostMapping("/cooperations")
+    ResponseEntity<java.util.Map<String, Long>> applyCoop(
+            @RequestBody @jakarta.validation.Valid ApplyCoopRequest req,
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        long id = brokerApi.applyCooperation(req.stationOrgId(), req.partnerOrgId(),
+                req.initiatedByStation(), caller.userId());
+        return ResponseEntity.ok(java.util.Map.of("id", id));
+    }
+
+    /** 确认合作。**只有被申请的那一方能确认**,否则两步流程形同虚设。 */
+    @PutMapping("/cooperations/{id}/confirm")
+    ResponseEntity<Void> confirmCoop(@PathVariable long id,
+                                     @AuthenticationPrincipal AuthenticatedUser caller) {
+        brokerApi.confirmCooperation(id, caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/cooperations/{id}/cancel")
+    ResponseEntity<Void> cancelCoop(@PathVariable long id,
+                                    @AuthenticationPrincipal AuthenticatedUser caller) {
+        brokerApi.cancelCooperation(id, caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 解除合作。会连带解绑该合作下的操作员。 */
+    @PutMapping("/cooperations/{id}/end")
+    ResponseEntity<Void> endCoop(@PathVariable long id,
+                                 @AuthenticationPrincipal AuthenticatedUser caller) {
+        brokerApi.endCooperation(id, caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/cooperations/org/{orgId}")
+    ResponseEntity<java.util.List<BrokerApi.CooperationView>> listCoops(
+            @PathVariable long orgId, @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(brokerApi.listCooperations(orgId, caller.userId()));
+    }
+
+    /** 指派操作员。只有站长能派,且合作要已生效。 */
+    @PostMapping("/cooperations/{id}/operators")
+    ResponseEntity<java.util.Map<String, Long>> assignOperator(
+            @PathVariable long id, @RequestBody @jakarta.validation.Valid OperatorRequest req,
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(java.util.Map.of(
+                "id", brokerApi.assignOperator(id, req.userId(), caller.userId())));
+    }
+
+    @DeleteMapping("/cooperations/{id}/operators/{userId}")
+    ResponseEntity<Void> revokeOperator(@PathVariable long id, @PathVariable long userId,
+                                        @AuthenticationPrincipal AuthenticatedUser caller) {
+        brokerApi.revokeOperator(id, userId, caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/cooperations/{id}/operators")
+    ResponseEntity<java.util.List<BrokerApi.OperatorView>> listOperators(
+            @PathVariable long id, @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(brokerApi.listOperators(id, caller.userId()));
+    }
+
+    // ─────────────── 按类目的整套分配方案 ───────────────
+
+    record SchemeRequest(
+            Long stationOrgId,
+            @jakarta.validation.constraints.NotBlank(message = "请选择业务类目") String category,
+            int activePct, int platformPct, int passivePct, int stationPct,
+            int passiveStepPct, long minPayoutCents,
+            @jakarta.validation.constraints.NotBlank(message = "请填写调整原因") String reason) { }
+
+    @PutMapping("/schemes")
+    ResponseEntity<Void> setScheme(@RequestBody @jakarta.validation.Valid SchemeRequest req,
+                                   @AuthenticationPrincipal AuthenticatedUser caller) {
+        brokerApi.setScheme(req.stationOrgId(), req.category(), req.activePct(), req.platformPct(),
+                req.passivePct(), req.stationPct(), req.passiveStepPct(), req.minPayoutCents(),
+                req.reason(), caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 平台默认那几套。**排在 /{orgId} 之前**,否则 "defaults" 会被当成路径变量。 */
+    @GetMapping("/schemes/defaults")
+    ResponseEntity<java.util.List<BrokerApi.SchemeView>> defaultSchemes(
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(brokerApi.listSchemes(null, caller.userId()));
+    }
+
+    @GetMapping("/schemes/{orgId}")
+    ResponseEntity<java.util.List<BrokerApi.SchemeView>> stationSchemes(
+            @PathVariable long orgId, @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(brokerApi.listSchemes(orgId, caller.userId()));
+    }
 }
