@@ -39,8 +39,13 @@ class RealWechatProvider implements WechatProvider {
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5)).build();
 
-    RealWechatProvider(@Value("${xbb.wechat.app-id}") String appId,
-                       @Value("${xbb.wechat.app-secret}") String appSecret,
+    // 两个键都给空串兜底,**不是为了容忍漏配,恰恰相反**:
+    // 不给默认值时,漏配会在占位符解析阶段就崩成
+    // `Could not resolve placeholder 'xbb.wechat.app-id'` ——
+    // 下面那句写清了该设哪两个环境变量的提示**永远轮不到执行**。
+    // 给空串,让检查落到构造器里,报出人看得懂的话
+    RealWechatProvider(@Value("${xbb.wechat.app-id:}") String appId,
+                       @Value("${xbb.wechat.app-secret:}") String appSecret,
                        @Value("${xbb.wechat.endpoint:https://api.weixin.qq.com/sns/jscode2session}")
                        String endpoint,
                        @Value("${xbb.wechat.code-param:js_code}") String codeParam,

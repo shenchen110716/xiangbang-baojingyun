@@ -199,7 +199,7 @@ class IdentityService implements IdentityApi {
         WechatBinding binding = wechatBindings.findById(wx.openId()).orElse(null);
         if (binding == null) {
             // 未绑定:不建账号,让前端引导去"手机登录 + 绑定微信"
-            log.info("微信 openid 尚未绑定账号,引导去绑定:openId={}", wx.openId());
+            log.info("微信 openid 尚未绑定账号,引导去绑定:openId={}", maskOpenId(wx.openId()));
             return new LoginResult(0L, "", true);
         }
         User user = users.findById(binding.getUserId())
@@ -236,12 +236,24 @@ class IdentityService implements IdentityApi {
             // 并发下两边同时绑,数据库裁决
             throw new IllegalStateException("绑定冲突,请重试");
         }
-        log.info("微信已绑定:user={} openId={}", userId, wx.openId());
+        log.info("微信已绑定:user={} openId={}", userId, maskOpenId(wx.openId()));
     }
 
     @Override
     @Transactional(transactionManager = "identityTransactionManager", readOnly = true)
     public java.util.Optional<String> wechatOpenIdOf(long userId) {
         return wechatBindings.findByUserId(userId).map(WechatBinding::getOpenId);
+    }
+
+    /**
+     * openid 打码。**它能定位到具体某个微信用户**,属于个人信息;
+     * 日志会进聚合平台、会被更多人看到,整串打出去没有必要 ——
+     * 排查问题时头尾各留 4 位足够对上是不是同一个人。
+     */
+    private static String maskOpenId(String openId) {
+        if (openId == null || openId.length() <= 8) {
+            return "****";
+        }
+        return openId.substring(0, 4) + "****" + openId.substring(openId.length() - 4);
     }
 }

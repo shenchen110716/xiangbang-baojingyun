@@ -33,6 +33,12 @@ services:
       # 微信授权登录。**app-secret 是密钥,只在仪表盘里设,不进这个文件。**
       # app-id 不是密钥(它会出现在前端代码里),但也走环境变量 ——
       # 写进源码的话换一个主体就要发一次版
+      # 微信**小程序**(2026-08-06 老板确认)。端点与参数名的默认值就是小程序那条
+      # (sns/jscode2session + js_code),**不用另外配** XBB_WECHAT_ENDPOINT。
+      # 换成公众号网页授权时才需要覆盖那两项。
+      #
+      # 两个都 sync: false —— AppSecret 绝不进仓库(本仓库是公开的);
+      # AppID 虽然本身不算机密,也一并放仪表盘,免得以后有人照着这里的写法把 Secret 也填进来。
       - key: XBB_WECHAT_APP_ID
         sync: false
       - key: XBB_WECHAT_APP_SECRET

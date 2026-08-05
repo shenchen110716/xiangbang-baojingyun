@@ -29,16 +29,24 @@ class TestDataUniquenessTest {
     /** 18 位身份证。测试里的都是 110101 + 生日 + 4 位序号这个形态。 */
     private static final Pattern ID_CARD = Pattern.compile("\"(\\d{6}\\d{8}\\d{4})\"");
 
-    /** 已知的历史重复。**不是豁免,是待办** —— 清掉一个就从这里删一个。 */
-    private static final Set<String> KNOWN_DUPLICATES = Set.of(
-            "110101199001017777");
+    // 这里原先有一份 KNOWN_DUPLICATES 名单,写着「不是豁免,是待办」,
+    // 里面挂着 110101199001017777。**清的时候发现那条重复根本不存在** ——
+    // 那个号只在 IdentityControllerTest 里真用过一次,第二处"出现"是名单自己。
+    //
+    // 扫描把本文件也扫了进来,于是**凡是被加进名单的号都因此变成"重复"**,
+    // 名单自我印证、永远清不掉,而且会掩盖那个号后来真的被别人用了。
+    // 改成跳过本文件之后名单空了,一并删掉。
 
     @Test
     void 测试里的身份证号不能重复() throws IOException {
         Map<String, List<String>> byId = new TreeMap<>();
         Path root = Path.of("src/test/java");
         try (Stream<Path> files = Files.walk(root)) {
-            for (Path f : files.filter(p -> p.toString().endsWith(".java")).toList()) {
+            for (Path f : files.filter(p -> p.toString().endsWith(".java"))
+                    // **跳过本文件。**不跳的话,写在这里的号码字面量会被当成一次"使用",
+                    // 于是任何想在这里说明的号都自动变成跨文件重复
+                    .filter(p -> !p.getFileName().toString().equals("TestDataUniquenessTest.java"))
+                    .toList()) {
                 String src = Files.readString(f);
                 Matcher m = ID_CARD.matcher(src);
                 while (m.find()) {
@@ -51,7 +59,7 @@ class TestDataUniquenessTest {
         Map<String, List<String>> conflicts = new TreeMap<>();
         byId.forEach((id, files) -> {
             Set<String> distinct = new TreeSet<>(files);
-            if (distinct.size() > 1 && !KNOWN_DUPLICATES.contains(id)) {
+            if (distinct.size() > 1) {
                 conflicts.put(id, new ArrayList<>(distinct));
             }
         });
