@@ -50,6 +50,7 @@ export const NAV: Record<RoleKey, { to: string; label: string; badge?: boolean }
     { to: '/stations', label: '服务站管理' },
     { to: '/review-orgs', label: '组织审核' },
     { to: '/payouts', label: '资金与代发' },
+    { to: '/advances', label: '借支管理' },
     { to: '/settlements', label: '结算处理' },
     { to: '/ops', label: '事件投递监控' },
     { to: '/roles', label: '角色管理' },

@@ -9,6 +9,9 @@ const loading = ref(true)
 const err = ref('')
 
 /** 展开中的工资条。按结算单缓存,免得折叠再展开重拉。 */
+const advances = ref<any[]>([])
+const outstanding = ref(0)
+
 const openSlip = ref<number | null>(null)
 const slips = ref<Record<number, any>>({})
 const slipErr = ref<Record<number, string>>({})
@@ -18,6 +21,8 @@ async function load() {
   try {
     settlements.value = await api('/api/settlement/mine')
     payouts.value = await api('/api/fund/payouts/mine')
+    advances.value = await api('/api/fund/advances/mine')
+    outstanding.value = (await api<any>('/api/fund/advances/mine/outstanding')).outstandingCents
   } catch (e: any) { err.value = e.message }
   finally { loading.value = false }
 }
@@ -47,6 +52,28 @@ onMounted(load)
     <p class="hint" style="margin:0">
       测试环境：代发通道是 mock，「已发放」不代表钱真的到账。
     </p>
+  </div>
+
+  <div class="card" v-if="outstanding > 0">
+    <h3>未还借支</h3>
+    <div style="font-size:26px;font-weight:650;color:var(--warn,#eab308);font-family:var(--mono)">
+      {{ yuan(outstanding) }}
+    </div>
+    <p class="hint" style="margin-bottom:0">
+      <b>下次发工资时会从应发里扣掉。</b>扣不完的留到再下次，不会让工资变成负数。
+    </p>
+    <table style="margin-top:10px">
+      <thead><tr><th style="width:70px">编号</th><th style="width:110px">本金</th>
+                 <th style="width:110px">未还</th><th>事由</th></tr></thead>
+      <tbody>
+        <tr v-for="a in advances.filter(x => x.status === 'ACTIVE')" :key="a.id">
+          <td>#{{ a.id }}</td>
+          <td style="font-family:var(--mono)">{{ yuan(a.amountCents) }}</td>
+          <td style="font-family:var(--mono)">{{ yuan(a.outstandingCents) }}</td>
+          <td style="color:var(--muted)">{{ a.reason || '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
   <div class="card">

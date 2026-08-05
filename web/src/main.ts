@@ -30,6 +30,7 @@ const router = createRouter({
     { path: '/stations', component: () => import('./views/platform/Stations.vue') },
     { path: '/review-orgs', component: () => import('./views/platform/ReviewOrgs.vue') },
     { path: '/payouts', component: () => import('./views/platform/Payouts.vue') },
+    { path: '/advances', component: () => import('./views/platform/Advances.vue') },
     { path: '/settlements', component: () => import('./views/platform/Settlements.vue') },
     { path: '/ops', component: () => import('./views/Ops.vue') },
     { path: '/roles', component: () => import('./views/platform/Roles.vue') },

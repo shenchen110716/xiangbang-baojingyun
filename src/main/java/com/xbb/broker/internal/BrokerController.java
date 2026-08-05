@@ -110,4 +110,53 @@ class BrokerController {
     ResponseEntity<Map<String, Integer>> runDemotion(@AuthenticationPrincipal AuthenticatedUser caller) {
         return ResponseEntity.ok(Map.of("processed", brokerApi.runDemotionNow(caller.userId())));
     }
+
+    // ─────────────── 服务站间联合(老系统 M10 §3.4) ───────────────
+
+    record ApplyJointRequest(
+            @jakarta.validation.constraints.Positive(message = "请选择发起方服务站") long fromOrgId,
+            @jakarta.validation.constraints.Positive(message = "请选择联合方服务站") long toOrgId,
+            @jakarta.validation.constraints.Min(value = 1, message = "分成比例必须在 1% 到 99% 之间")
+            @jakarta.validation.constraints.Max(value = 99, message = "分成比例必须在 1% 到 99% 之间")
+            int ratePercent) { }
+
+    /** 发起联合申请。只有发起方站长能发 —— 这一步是在决定把自己的佣金分出去。 */
+    @PostMapping("/joints")
+    ResponseEntity<java.util.Map<String, Long>> applyJoint(
+            @RequestBody @jakarta.validation.Valid ApplyJointRequest req,
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        long id = brokerApi.applyJoint(req.fromOrgId(), req.toOrgId(), req.ratePercent(), caller.userId());
+        return ResponseEntity.ok(java.util.Map.of("id", id));
+    }
+
+    /** 确认联合。**只有被邀请方站长能确认**,否则那个两步流程形同虚设。 */
+    @PutMapping("/joints/{id}/confirm")
+    ResponseEntity<Void> confirmJoint(@PathVariable long id,
+                                      @AuthenticationPrincipal AuthenticatedUser caller) {
+        brokerApi.confirmJoint(id, caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 撤回未确认的申请(发起方)。 */
+    @PutMapping("/joints/{id}/cancel")
+    ResponseEntity<Void> cancelJoint(@PathVariable long id,
+                                     @AuthenticationPrincipal AuthenticatedUser caller) {
+        brokerApi.cancelJoint(id, caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 解除已生效的联合。任一方都可以 —— 合作是双方的。 */
+    @PutMapping("/joints/{id}/end")
+    ResponseEntity<Void> endJoint(@PathVariable long id,
+                                  @AuthenticationPrincipal AuthenticatedUser caller) {
+        brokerApi.endJoint(id, caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 某服务站相关的全部联合。分成比例是两家的商业约定,路人拿到空列表(铁律 5.1)。 */
+    @GetMapping("/joints/station/{orgId}")
+    ResponseEntity<java.util.List<BrokerApi.StationJointView>> listJoints(
+            @PathVariable long orgId, @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(brokerApi.listJoints(orgId, caller.userId()));
+    }
 }

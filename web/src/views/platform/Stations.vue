@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { zhStatus, statusTone } from '../../i18n'
 import { api, when } from '../../api'
 
 type Station = {
@@ -102,6 +103,46 @@ async function runDemotion() {
 const CHANGE_TYPE: Record<string, string> = { STATION: '服务站', PARENT: '上级', STATUS: '状态' }
 const inStation = (orgId: number) => brokers.value.filter(b => b.stationOrgId === orgId)
 onMounted(load)
+
+/** 联合关系(老系统 M10 §3.4)。展开某个站时才拉,免得一进页面就打一串请求。 */
+const jointsOf = ref<Record<number, any[]>>({})
+const jointOpen = ref<number | null>(null)
+const jointTo = ref(''); const jointRate = ref('30')
+
+async function toggleJoints(orgId: number) {
+  if (jointOpen.value === orgId) { jointOpen.value = null; return }
+  jointOpen.value = orgId
+  await loadJoints(orgId)
+}
+
+async function loadJoints(orgId: number) {
+  err.value = ''
+  try { jointsOf.value[orgId] = await api(`/api/broker/joints/station/${orgId}`) }
+  catch (e: any) { err.value = e.message; jointsOf.value[orgId] = [] }
+}
+
+async function applyJoint(fromOrgId: number) {
+  msg.value = ''; err.value = ''; busy.value = `joint-${fromOrgId}`
+  try {
+    await api('/api/broker/joints', { body: {
+      fromOrgId, toOrgId: Number(jointTo.value), ratePercent: Number(jointRate.value) } })
+    msg.value = `已向服务站 #${jointTo.value} 发起联合申请，等对方确认`
+    jointTo.value = ''
+    await loadJoints(fromOrgId)
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
+
+async function jointAct(orgId: number, id: number, what: 'confirm' | 'cancel' | 'end', label: string) {
+  msg.value = ''; err.value = ''; busy.value = `j-${id}`
+  try {
+    await api(`/api/broker/joints/${id}/${what}`, { method: 'PUT' })
+    msg.value = `联合 #${id} ${label}`
+    await loadJoints(orgId)
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
+
 </script>
 
 <template>
@@ -283,4 +324,73 @@ onMounted(load)
       </tbody>
     </table>
   </div>
+
+  <div class="card">
+    <h3>服务站联合</h3>
+    <p class="hint">
+      两个服务站互相引流。<b>发起方从自己的服务站佣金里切一部分给对方</b>，
+      不额外增加总额；需要对方站长确认才生效。
+    </p>
+    <div v-if="!stations.length" class="empty">还没有已审核的服务站</div>
+    <table v-else>
+      <thead><tr><th>服务站</th><th style="width:110px">编号</th><th style="width:110px"></th></tr></thead>
+      <tbody>
+        <template v-for="s in stations" :key="s.orgId">
+          <tr>
+            <td>{{ s.name }}</td>
+            <td>#{{ s.orgId }}</td>
+            <td><button class="ghost sm" @click="toggleJoints(s.orgId)">
+              {{ jointOpen === s.orgId ? '收起' : '联合关系' }}</button></td>
+          </tr>
+          <tr v-if="jointOpen === s.orgId">
+            <td colspan="3" style="background:var(--surface-2);padding:12px">
+              <div v-if="!jointsOf[s.orgId]?.length" class="empty" style="padding:6px 0">
+                还没有联合关系
+              </div>
+              <table v-else>
+                <thead><tr><th style="width:70px">编号</th><th style="width:100px">方向</th>
+                           <th style="width:90px">对方</th><th style="width:90px">分成</th>
+                           <th style="width:90px">状态</th><th style="width:200px"></th></tr></thead>
+                <tbody>
+                  <tr v-for="j in jointsOf[s.orgId]" :key="j.id">
+                    <td>#{{ j.id }}</td>
+                    <td>{{ j.fromOrgId === s.orgId ? '我方发起' : '对方发起' }}</td>
+                    <td>#{{ j.fromOrgId === s.orgId ? j.toOrgId : j.fromOrgId }}</td>
+                    <td>{{ j.ratePercent }}%</td>
+                    <td><span class="tag" :class="statusTone(j.status)">{{ zhStatus(j.status) }}</span></td>
+                    <td>
+                      <div class="row" style="gap:6px">
+                        <button v-if="j.status === 'PENDING' && j.toOrgId === s.orgId" class="sm"
+                                :disabled="busy === `j-${j.id}`"
+                                @click="jointAct(s.orgId, j.id, 'confirm', '已确认')">确认联合</button>
+                        <button v-if="j.status === 'PENDING' && j.fromOrgId === s.orgId" class="ghost sm"
+                                :disabled="busy === `j-${j.id}`"
+                                @click="jointAct(s.orgId, j.id, 'cancel', '已撤回')">撤回</button>
+                        <button v-if="j.status === 'ACTIVE'" class="ghost sm"
+                                :disabled="busy === `j-${j.id}`"
+                                @click="jointAct(s.orgId, j.id, 'end', '已解除')">解除联合</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="row" style="align-items:flex-end;gap:8px;margin-top:12px">
+                <div class="field" style="flex:0 0 180px"><label>联合方服务站编号</label>
+                  <input v-model="jointTo" placeholder="对方的组织编号" /></div>
+                <div class="field" style="flex:0 0 140px"><label>分给对方（%）</label>
+                  <input v-model="jointRate" /></div>
+                <button :disabled="!jointTo || busy === `joint-${s.orgId}`"
+                        @click="applyJoint(s.orgId)">发起联合</button>
+              </div>
+              <p class="hint" style="margin-bottom:0">
+                比例填 1–99。<b>解除后不会删记录</b>——历史佣金要靠它解释当初为什么分给了那个站。
+              </p>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
 </template>
