@@ -60,6 +60,29 @@ public interface BrokerApi {
                            java.time.Instant updatedAt) { }
 
     /**
+     * 某个类目下的一整套分配方案。
+     *
+     * <p>此前只有服务站那一档能按类目设,其余五档全局共用 —— 而岗位、商品、培训的
+     * 分账结构本来就不同,用同一套比例去分,任何一个类目都是错的。
+     */
+    record SchemeView(Long stationOrgId, String category, int activePct, int platformPct,
+                      int passivePct, int stationPct, int passiveStepPct,
+                      long minPayoutCents, java.time.Instant updatedAt) { }
+
+    /**
+     * 设某个类目下的整套分配方案。{@code stationOrgId} 传 null 表示设平台默认。
+     *
+     * <p>三级取数:站点覆盖 → 平台默认 → 全局兜底参数。
+     * **平台 + 被动 + 服务站在同一块"剩余"里分**,三者相加不能超过 100。
+     */
+    void setScheme(Long stationOrgId, String category, int activePct, int platformPct,
+                   int passivePct, int stationPct, int passiveStepPct, long minPayoutCents,
+                   String reason, long callerUserId);
+
+    /** 某站已设的方案(传 null 看平台默认)。 */
+    List<SchemeView> listSchemes(Long stationOrgId, long callerUserId);
+
+    /**
      * 设某个服务站在某个类目上的分成比例。
      *
      * <p>{@code stationOrgId} 传 null 表示设**平台默认**(对所有没单独设过的站生效)。

@@ -32,7 +32,7 @@ class FundEventListener {
     private final BrokerRepository brokers;
     private final StationRepository stations;
     private final StationJointRepository joints;
-    private final StationRateRepository stationRates;
+    private final CommissionSchemeRepository schemes;
     private final CommissionBaseRepository bases;
     private final BrokerOutboxRepository outbox;
     private final OpsApi opsApi;
@@ -41,7 +41,7 @@ class FundEventListener {
 
     FundEventListener(InvitationRepository invitations, CommissionRepository commissions,
                       BrokerRepository brokers, StationRepository stations,
-                      StationJointRepository joints, StationRateRepository stationRates,
+                      StationJointRepository joints, CommissionSchemeRepository schemes,
                       CommissionBaseRepository bases,
                       BrokerOutboxRepository outbox, OpsApi opsApi, FundApi fundApi, ObjectMapper json) {
         this.invitations = invitations;
@@ -49,7 +49,7 @@ class FundEventListener {
         this.brokers = brokers;
         this.stations = stations;
         this.joints = joints;
-        this.stationRates = stationRates;
+        this.schemes = schemes;
         this.bases = bases;
         this.outbox = outbox;
         this.opsApi = opsApi;
@@ -156,40 +156,37 @@ class FundEventListener {
     }
 
     /**
-     * 取服务站这一档的分成比例。**三级取数,一条路径**:
+     * 取这个类目下的**整套分配方案**。三级取数,一条路径:
      * 该站在这个类目上的覆盖 → 平台在这个类目上的默认 → 全局兜底参数。
      *
-     * <p>比例按业务类目分开设(岗位/商品/培训…):三者的毛利结构完全不同,
-     * 用同一个比例要么让服务站在商品上亏,要么让平台在岗位上亏,
-     * 而这件事只有等对账才看得出来。
+     * <p>此前只有服务站那一档按类目分,其余五档全局共用一套 —— 而岗位、商品、培训的
+     * 分账结构本来就不同(商品可能没有被动佣金,培训可能主动佣金极高),
+     * 用同一套主动/被动比例去分,任何一个类目都是错的,且只有对账才看得出来。
      *
-     * <p>旧的 {@code station.station_percent} 已迁进费率表记为 JOB 类目;
-     * 它仍然读得到,是为了万一迁移那条 INSERT 漏了谁,不至于静默回退到平台默认。
+     * <p>最后那级兜底保留着:方案表理论上不会缺行(迁移已种下三个类目的平台默认),
+     * 但真缺了的话**宁可用参数中心的旧口径,也不要分出一堆 0**。
      */
     private CommissionSplitter.Rates ratesFor(Long stationOrgId, String category) {
-        int stationPct = (int) opsApi.settingInt(SettingKeys.COMMISSION_STATION_PERCENT, 50);
-
-        Integer platformDefault = stationRates.findByStationOrgIdIsNullAndCategory(category)
-                .map(StationRate::getPercent).orElse(null);
-        if (platformDefault != null) {
-            stationPct = platformDefault;
-        }
+        CommissionScheme scheme = null;
         if (stationOrgId != null) {
-            // **只读费率表。**曾经这里会回落到 station.station_percent,
-            // 那让同一件事有两个真相来源:老入口写一个、新入口写另一个,
-            // 而运营看不出哪个在生效。老入口现在也写费率表了,回落没有存在意义
-            Integer override = stationRates.findByStationOrgIdAndCategory(stationOrgId, category)
-                    .map(StationRate::getPercent).orElse(null);
-            if (override != null) {
-                stationPct = override;
-            }
+            scheme = schemes.findByStationOrgIdAndCategory(stationOrgId, category).orElse(null);
         }
+        if (scheme == null) {
+            scheme = schemes.findByStationOrgIdIsNullAndCategory(category).orElse(null);
+        }
+        if (scheme != null) {
+            return new CommissionSplitter.Rates(
+                    scheme.getActivePct(), scheme.getPlatformPct(), scheme.getPassivePct(),
+                    scheme.getPassiveStepPct(), scheme.getStationPct(), scheme.getMinPayoutCents());
+        }
+        log.error("类目 {} 没有分配方案(站={}),本次退回参数中心的全局口径。请到后台补一套",
+                category, stationOrgId);
         return new CommissionSplitter.Rates(
                 (int) opsApi.settingInt(SettingKeys.COMMISSION_ACTIVE_PERCENT, 60),
                 (int) opsApi.settingInt(SettingKeys.COMMISSION_PLATFORM_PERCENT, 20),
                 (int) opsApi.settingInt(SettingKeys.COMMISSION_PASSIVE_PERCENT, 30),
                 (int) opsApi.settingInt(SettingKeys.COMMISSION_PASSIVE_STEP_PERCENT, 30),
-                stationPct,
+                (int) opsApi.settingInt(SettingKeys.COMMISSION_STATION_PERCENT, 50),
                 opsApi.settingInt(SettingKeys.COMMISSION_MIN_PAYOUT_CENTS, 100));
     }
 

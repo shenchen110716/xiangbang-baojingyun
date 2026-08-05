@@ -27,6 +27,8 @@ class BrokerService implements BrokerApi {
     private final StationJointRepository joints;
     private final StationRateRepository stationRates;
     private final StationRateChangeRepository rateChanges;
+    private final CommissionSchemeRepository schemes;
+    private final CommissionSchemeChangeRepository schemeChanges;
     private final ShareUpgradeService shareUpgrades;
     private final BrokerOriginRepository origins;
     private final BrokerChangeLogRepository changeLogs;
@@ -46,6 +48,7 @@ class BrokerService implements BrokerApi {
                        IdentityApi identityApi, FundApi fundApi,
                   StationRepository stations, StationJointRepository joints,
                   StationRateRepository stationRates, StationRateChangeRepository rateChanges,
+                  CommissionSchemeRepository schemes, CommissionSchemeChangeRepository schemeChanges,
                   ShareUpgradeService shareUpgrades, BrokerOriginRepository origins,
                   BrokerChangeLogRepository changeLogs,
                   com.xbb.ops.api.OpsApi opsApi,
@@ -55,6 +58,8 @@ class BrokerService implements BrokerApi {
         this.joints = joints;
         this.stationRates = stationRates;
         this.rateChanges = rateChanges;
+        this.schemes = schemes;
+        this.schemeChanges = schemeChanges;
         this.shareUpgrades = shareUpgrades;
         this.origins = origins;
         this.changeLogs = changeLogs;
@@ -306,6 +311,72 @@ class BrokerService implements BrokerApi {
         return rows.stream()
                 .map(r -> new StationRateView(r.getStationOrgId(), r.getCategory(),
                         r.getPercent(), r.getUpdatedAt()))
+                .toList();
+    }
+
+    // ─────────────── 按类目的整套分配方案 ───────────────
+
+    /**
+     * 设整套方案。**要平台运维** —— 这是在改钱怎么分,不该由服务站自己说了算。
+     *
+     * <p>校验(各档 0–100、三档之和不超 100)在实体的 apply 里,
+     * 让每一条写入路径都过同一道关。
+     */
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void setScheme(Long stationOrgId, String category, int activePct, int platformPct,
+                          int passivePct, int stationPct, int passiveStepPct, long minPayoutCents,
+                          String reason, long callerUserId) {
+        if (!identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            throw new org.springframework.security.access.AccessDeniedException("需要平台运维权限");
+        }
+        if (category == null || category.isBlank()) {
+            throw new IllegalArgumentException("请选择业务类目");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("请填写调整原因");
+        }
+        if (stationOrgId != null && stations.findById(stationOrgId).isEmpty()) {
+            throw new IllegalArgumentException("服务站不存在或副本尚未落地");
+        }
+        String cat = category.trim().toUpperCase();
+
+        CommissionScheme existing = (stationOrgId == null
+                ? schemes.findByStationOrgIdIsNullAndCategory(cat)
+                : schemes.findByStationOrgIdAndCategory(stationOrgId, cat)).orElse(null);
+        String before = existing == null ? null : existing.summary();
+
+        CommissionScheme saved;
+        if (existing == null) {
+            saved = schemes.save(new CommissionScheme(stationOrgId, cat, activePct, platformPct,
+                    passivePct, stationPct, passiveStepPct, minPayoutCents, callerUserId));
+        } else {
+            existing.apply(activePct, platformPct, passivePct, stationPct,
+                    passiveStepPct, minPayoutCents, callerUserId);
+            saved = schemes.save(existing);
+        }
+        schemeChanges.save(new CommissionSchemeChange(stationOrgId, cat, before,
+                saved.summary(), callerUserId, reason.trim()));
+        log.info("分配方案变更:站={} 类目={} {} → {} 操作人={}",
+                stationOrgId == null ? "平台默认" : stationOrgId, cat,
+                before == null ? "(新建)" : before, saved.summary(), callerUserId);
+    }
+
+    @Override
+    @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
+    public List<SchemeView> listSchemes(Long stationOrgId, long callerUserId) {
+        boolean isMaster = stationOrgId != null && isStationLegalRep(stationOrgId, callerUserId);
+        if (!isMaster && !identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            // 分配方案是这个站挣多少钱的依据,不该给无关的人看(铁律 5.1)
+            return List.of();
+        }
+        List<CommissionScheme> rows = stationOrgId == null
+                ? schemes.findByStationOrgIdIsNull()
+                : schemes.findByStationOrgId(stationOrgId);
+        return rows.stream()
+                .map(x -> new SchemeView(x.getStationOrgId(), x.getCategory(), x.getActivePct(),
+                        x.getPlatformPct(), x.getPassivePct(), x.getStationPct(),
+                        x.getPassiveStepPct(), x.getMinPayoutCents(), x.getUpdatedAt()))
                 .toList();
     }
 
