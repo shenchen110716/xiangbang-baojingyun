@@ -11,6 +11,30 @@ public interface IdentityApi {
 
     LoginResult loginByPhone(String phone, String code);
 
+    /**
+     * 微信授权登录。
+     *
+     * <p><b>openid 没绑过时不会凭空建账号。</b>这是刻意的:
+     * 平台的核心动作(报名、收工资、当业务员)都要求实名,而实名要手机号。
+     * 让微信独立开户的话,会得到一批**永远走不下去的空账号** ——
+     * 而且同一个人后来用手机登录时又是另一个账号,两边的业绩、佣金对不起来。
+     *
+     * <p>所以未绑定时返回 {@code newUser=true} 且 {@code userId=0},
+     * 前端据此引导去"手机登录 + 绑定微信"。
+     */
+    LoginResult loginByWechat(String code);
+
+    /**
+     * 把微信绑到**当前已登录的账号**上。
+     *
+     * <p>一个账号只能绑一个微信,一个微信也只能绑一个账号 ——
+     * 操作员授权是按人给的,一人多微信等于一份授权能被多个身份使用。
+     */
+    void bindWechat(long userId, String code);
+
+    /** 这个账号绑的微信(没绑返回空)。 */
+    java.util.Optional<String> wechatOpenIdOf(long userId);
+
     Optional<UserView> findVerifiedUser(long userId);
 
     void verifyRealName(long userId, String realName, String idNumber);

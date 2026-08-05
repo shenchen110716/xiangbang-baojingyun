@@ -32,8 +32,14 @@ class IdentityService implements IdentityApi {
     private final IdentityOutboxRepository outbox;
     private final ObjectMapper json;
 
+    private final WechatProvider wechat;
+    private final WechatBindingRepository wechatBindings;
+
     IdentityService(UserRepository users, UserRoleRepository roles, VerificationCodeService codes,
-                    JwtService jwt, IdentityOutboxRepository outbox, ObjectMapper json) {
+                    JwtService jwt, IdentityOutboxRepository outbox, ObjectMapper json,
+                    WechatProvider wechat, WechatBindingRepository wechatBindings) {
+        this.wechat = wechat;
+        this.wechatBindings = wechatBindings;
         this.users = users;
         this.roles = roles;
         this.codes = codes;
@@ -175,5 +181,67 @@ class IdentityService implements IdentityApi {
             sb.append(ALPHABET.charAt(random.nextInt(ALPHABET.length())));
         }
         return sb.toString();
+    }
+
+    // ─────────────── 微信授权登录 ───────────────
+
+    /**
+     * 微信登录。**openid 没绑过时不建账号。**
+     *
+     * <p>平台的核心动作(报名、收工资、当业务员)都要求实名,而实名要手机号。
+     * 让微信独立开户会得到一批走不下去的空账号,而且同一个人后来用手机登录时
+     * 又是另一个账号 —— 两边的业绩和佣金再也对不起来。
+     */
+    @Override
+    @Transactional("identityTransactionManager")
+    public LoginResult loginByWechat(String code) {
+        WechatProvider.WechatUser wx = wechat.exchange(code);
+        WechatBinding binding = wechatBindings.findById(wx.openId()).orElse(null);
+        if (binding == null) {
+            // 未绑定:不建账号,让前端引导去"手机登录 + 绑定微信"
+            log.info("微信 openid 尚未绑定账号,引导去绑定:openId={}", wx.openId());
+            return new LoginResult(0L, "", true);
+        }
+        User user = users.findById(binding.getUserId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "微信绑定指向的账号不存在:user=" + binding.getUserId()));
+        return new LoginResult(user.getId(), jwt.issue(user.getId()), false);
+    }
+
+    /**
+     * 把微信绑到当前账号。
+     *
+     * <p>两个方向都要唯一:一个账号一个微信、一个微信一个账号。
+     * 靠数据库的唯一约束裁决 —— 应用层先查后写在并发下无效。
+     */
+    @Override
+    @Transactional("identityTransactionManager")
+    public void bindWechat(long userId, String code) {
+        users.findById(userId).orElseThrow(() -> new IllegalArgumentException("账号不存在"));
+        WechatProvider.WechatUser wx = wechat.exchange(code);
+
+        WechatBinding byOpenId = wechatBindings.findById(wx.openId()).orElse(null);
+        if (byOpenId != null) {
+            if (byOpenId.getUserId() == userId) {
+                return;   // 已经绑过同一个,幂等
+            }
+            throw new IllegalStateException("这个微信已经绑定了别的账号");
+        }
+        if (wechatBindings.findByUserId(userId).isPresent()) {
+            throw new IllegalStateException("这个账号已经绑过微信,要换请先解绑");
+        }
+        try {
+            wechatBindings.save(new WechatBinding(wx.openId(), userId, wx.unionId(), wx.nickname()));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 并发下两边同时绑,数据库裁决
+            throw new IllegalStateException("绑定冲突,请重试");
+        }
+        log.info("微信已绑定:user={} openId={}", userId, wx.openId());
+    }
+
+    @Override
+    @Transactional(transactionManager = "identityTransactionManager", readOnly = true)
+    public java.util.Optional<String> wechatOpenIdOf(long userId) {
+        return wechatBindings.findByUserId(userId).map(WechatBinding::getOpenId);
     }
 }
