@@ -278,7 +278,18 @@ class SettlementOutboxReliabilityTest {
         assertThat(outboxRowOf(applicationId).getStatus()).isEqualTo(AbstractOutboxEvent.Status.FAILED);
 
         reset(payouts);
-        relay.publishPending();
+
+        // **轮询里重新驱动。**取件用 FOR UPDATE SKIP LOCKED,别的 Spring 上下文的
+        // 中继正持有这行锁时,这里会跳过它 —— 只驱动一次就断言会随机挂。
+        //
+        // 同一个类里另外两处上一轮已经这么改了,**这处漏了** ——
+        // 因为它用 mock 而不是 broken 标志,我当时的锚点没匹配上,
+        // 而没匹配上这件事没有任何提示。
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
+            relay.publishPending();
+            assertThat(outboxRowOf(applicationId).getStatus())
+                    .isEqualTo(AbstractOutboxEvent.Status.PUBLISHED);
+        });
 
         assertThat(outboxRowOf(applicationId).getStatus()).isEqualTo(AbstractOutboxEvent.Status.PUBLISHED);
         assertThat(payouts.findBySettlementId(settlementId)).isPresent();

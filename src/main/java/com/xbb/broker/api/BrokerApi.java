@@ -93,6 +93,45 @@ public interface BrokerApi {
     /** 某站已设的比例(含它继承的平台默认)。 */
     List<StationRateView> listStationRates(Long stationOrgId, long callerUserId);
 
+    // ─────────────── 服务站与用工单位的合作(老系统 M9) ───────────────
+
+    record CooperationView(long id, long stationOrgId, long partnerOrgId, String status,
+                           boolean initiatedByStation, java.time.Instant createdAt,
+                           java.time.Instant confirmedAt, java.time.Instant endedAt) { }
+
+    record OperatorView(long id, long cooperationId, long userId, boolean active,
+                        java.time.Instant createdAt) { }
+
+    /**
+     * 发起合作申请。服务站或用工单位任一方都能发起,**对方确认后才生效**。
+     *
+     * @param initiatedByStation 是否由服务站发起。决定谁能撤回
+     */
+    long applyCooperation(long stationOrgId, long partnerOrgId,
+                          boolean initiatedByStation, long callerUserId);
+
+    /** 确认合作。**只有被申请的那一方能确认** —— 否则两步流程形同虚设。 */
+    void confirmCooperation(long cooperationId, long callerUserId);
+
+    /** 撤回未确认的申请。只有发起方能撤。 */
+    void cancelCooperation(long cooperationId, long callerUserId);
+
+    /** 解除已生效的合作。任一方都可以 —— 合作是双方的。 */
+    void endCooperation(long cooperationId, long callerUserId);
+
+    List<CooperationView> listCooperations(long orgId, long callerUserId);
+
+    /**
+     * 指派操作员。**只有服务站站长能派**,而且只能在**已生效**的合作上派 ——
+     * 合作还没谈成就先派人,那个人拿着的是一份不存在的授权。
+     */
+    long assignOperator(long cooperationId, long userId, long callerUserId);
+
+    /** 解绑操作员。**不删记录** —— 他经办过的事要能查到当时是有授权的。 */
+    void revokeOperator(long cooperationId, long userId, long callerUserId);
+
+    List<OperatorView> listOperators(long cooperationId, long callerUserId);
+
     // ─────────────── 服务站间联合(老系统 M10 §3.4) ───────────────
 
     record StationJointView(long id, long fromOrgId, long toOrgId, int ratePercent,

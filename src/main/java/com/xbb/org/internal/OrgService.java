@@ -194,6 +194,22 @@ class OrgService implements OrgApi {
 
     @Override
     @Transactional(transactionManager = "orgTransactionManager", readOnly = true)
+    public boolean isLegalRepOf(long orgId, long userId) {
+        return orgs.findById(orgId)
+                .map(o -> java.util.Objects.equals(o.getLegalRepUserId(), userId))
+                .orElse(false);
+    }
+
+    @Override
+    @Transactional(transactionManager = "orgTransactionManager", readOnly = true)
+    public Optional<OrgSummary> summaryOf(long orgId) {
+        return orgs.findById(orgId)
+                .map(o -> new OrgSummary(o.getId(), o.getType(), o.getName(),
+                        o.getStatus() == Organization.Status.APPROVED));
+    }
+
+    @Override
+    @Transactional(transactionManager = "orgTransactionManager", readOnly = true)
     public List<OrgView> listByLegalRep(long legalRepUserId) {
         // 归属天然由查询条件保证:只查"法人代表是我"的行,不存在越权看到别人组织的可能。
         // 这比"查出来再过滤"稳 —— 过滤那一步漏写不会有任何症状。

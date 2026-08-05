@@ -29,6 +29,9 @@ class BrokerService implements BrokerApi {
     private final StationRateChangeRepository rateChanges;
     private final CommissionSchemeRepository schemes;
     private final CommissionSchemeChangeRepository schemeChanges;
+    private final StationCooperationRepository cooperations;
+    private final CooperationOperatorRepository operators;
+    private final com.xbb.org.api.OrgApi orgApi;
     private final ShareUpgradeService shareUpgrades;
     private final BrokerOriginRepository origins;
     private final BrokerChangeLogRepository changeLogs;
@@ -49,6 +52,8 @@ class BrokerService implements BrokerApi {
                   StationRepository stations, StationJointRepository joints,
                   StationRateRepository stationRates, StationRateChangeRepository rateChanges,
                   CommissionSchemeRepository schemes, CommissionSchemeChangeRepository schemeChanges,
+                  StationCooperationRepository cooperations, CooperationOperatorRepository operators,
+                  com.xbb.org.api.OrgApi orgApi,
                   ShareUpgradeService shareUpgrades, BrokerOriginRepository origins,
                   BrokerChangeLogRepository changeLogs,
                   com.xbb.ops.api.OpsApi opsApi,
@@ -60,6 +65,9 @@ class BrokerService implements BrokerApi {
         this.rateChanges = rateChanges;
         this.schemes = schemes;
         this.schemeChanges = schemeChanges;
+        this.cooperations = cooperations;
+        this.operators = operators;
+        this.orgApi = orgApi;
         this.shareUpgrades = shareUpgrades;
         this.origins = origins;
         this.changeLogs = changeLogs;
@@ -380,6 +388,198 @@ class BrokerService implements BrokerApi {
                 .toList();
     }
 
+    // ─────────────── 服务站与用工单位的合作(老系统 M9) ───────────────
+
+    /**
+     * 发起合作申请。
+     *
+     * <p>对方必须是**已审核的企业或工厂** —— 服务站之间的关系走"联合"那条路,
+     * 两者的分账含义不同,混起来会让钱走错档。
+     */
+    @Override
+    @Transactional("brokerTransactionManager")
+    public long applyCooperation(long stationOrgId, long partnerOrgId,
+                                 boolean initiatedByStation, long callerUserId) {
+        stations.findById(stationOrgId)
+                .orElseThrow(() -> new IllegalArgumentException("服务站不存在或副本尚未落地"));
+        var partner = orgApi.summaryOf(partnerOrgId)
+                .orElseThrow(() -> new IllegalArgumentException("对方组织不存在"));
+        if (partner.type() == com.xbb.org.api.OrgType.SERVICE_STATION) {
+            throw new IllegalArgumentException("服务站之间请走「联合」,不是「合作」");
+        }
+        if (!partner.approved()) {
+            throw new IllegalStateException("对方组织尚未通过审核");
+        }
+        // 发起方必须是自己那一边的负责人 —— 否则任何人都能替别人签下合作
+        if (initiatedByStation) {
+            requireStationLegalRep(stationOrgId, callerUserId, "发起合作");
+        } else {
+            requirePartnerLegalRep(partnerOrgId, callerUserId, "发起合作");
+        }
+
+        try {
+            var saved = cooperations.save(new StationCooperation(
+                    stationOrgId, partnerOrgId, initiatedByStation, callerUserId));
+            log.info("合作申请:服务站 {} ↔ 用工单位 {} 发起方={}",
+                    stationOrgId, partnerOrgId, initiatedByStation ? "服务站" : "用工单位");
+            return saved.getId();
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 唯一索引兜底。老系统在应用层"已申请则拦截重复",并发下无效
+            throw new IllegalStateException("已经有一条待确认或生效中的合作,不能重复发起");
+        }
+    }
+
+    /** 确认合作。**只有被申请的那一方能确认**,否则那个两步流程形同虚设。 */
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void confirmCooperation(long cooperationId, long callerUserId) {
+        StationCooperation coop = cooperations.findById(cooperationId)
+                .orElseThrow(() -> new IllegalArgumentException("合作申请不存在"));
+        if (coop.isInitiatedByStation()) {
+            requirePartnerLegalRep(coop.getPartnerOrgId(), callerUserId, "确认合作");
+        } else {
+            requireStationLegalRep(coop.getStationOrgId(), callerUserId, "确认合作");
+        }
+        coop.confirm(callerUserId);
+        cooperations.save(coop);
+        log.info("合作已确认:{} ↔ {}", coop.getStationOrgId(), coop.getPartnerOrgId());
+    }
+
+    /** 撤回未确认的申请。只有发起方能撤。 */
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void cancelCooperation(long cooperationId, long callerUserId) {
+        StationCooperation coop = cooperations.findById(cooperationId)
+                .orElseThrow(() -> new IllegalArgumentException("合作申请不存在"));
+        if (coop.isInitiatedByStation()) {
+            requireStationLegalRep(coop.getStationOrgId(), callerUserId, "撤回合作申请");
+        } else {
+            requirePartnerLegalRep(coop.getPartnerOrgId(), callerUserId, "撤回合作申请");
+        }
+        coop.cancel();
+        cooperations.save(coop);
+    }
+
+    /** 解除已生效的合作。**任一方都可以** —— 合作是双方的,不该只有一方能退出。 */
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void endCooperation(long cooperationId, long callerUserId) {
+        StationCooperation coop = cooperations.findById(cooperationId)
+                .orElseThrow(() -> new IllegalArgumentException("合作不存在"));
+        boolean isParty = isStationLegalRep(coop.getStationOrgId(), callerUserId)
+                || isPartnerLegalRep(coop.getPartnerOrgId(), callerUserId)
+                || identityApi.hasRole(callerUserId, Role.PLATFORM_OPS);
+        if (!isParty) {
+            throw new IllegalStateException("只有合作双方的负责人可以解除合作");
+        }
+        coop.end();
+        cooperations.save(coop);
+
+        // **合作没了,操作员的授权也就没了。**留着的话,那个人还挂着一份
+        // 指向已结束合作的授权 —— 而授权是用来判断"他能不能替这家办事"的
+        int revoked = 0;
+        for (CooperationOperator op : operators.findByCooperationIdAndActiveTrue(cooperationId)) {
+            op.revoke();
+            operators.save(op);
+            revoked++;
+        }
+        log.info("合作已解除:{} ↔ {},连带解绑操作员 {} 人",
+                coop.getStationOrgId(), coop.getPartnerOrgId(), revoked);
+    }
+
+    @Override
+    @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
+    public List<CooperationView> listCooperations(long orgId, long callerUserId) {
+        // 合作关系是两家的商业约定,不该给无关的人看(铁律 5.1)
+        if (!isStationLegalRep(orgId, callerUserId) && !isPartnerLegalRep(orgId, callerUserId)
+                && !identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            return List.of();
+        }
+        var mine = new java.util.ArrayList<StationCooperation>();
+        mine.addAll(cooperations.findByStationOrgIdOrderByIdDesc(orgId));
+        mine.addAll(cooperations.findByPartnerOrgIdOrderByIdDesc(orgId));
+        return mine.stream()
+                .map(c -> new CooperationView(c.getId(), c.getStationOrgId(), c.getPartnerOrgId(),
+                        c.getStatus().name(), c.isInitiatedByStation(), c.getCreatedAt(),
+                        c.getConfirmedAt(), c.getEndedAt()))
+                .toList();
+    }
+
+    /**
+     * 指派操作员。
+     *
+     * <p>**只有服务站站长能派,且只能在已生效的合作上派** ——
+     * 合作还没谈成就先派人,那个人拿着的是一份不存在的授权。
+     */
+    @Override
+    @Transactional("brokerTransactionManager")
+    public long assignOperator(long cooperationId, long userId, long callerUserId) {
+        StationCooperation coop = cooperations.findById(cooperationId)
+                .orElseThrow(() -> new IllegalArgumentException("合作不存在"));
+        requireStationLegalRep(coop.getStationOrgId(), callerUserId, "指派操作员");
+        if (coop.getStatus() != StationCooperation.Status.ACTIVE) {
+            throw new IllegalStateException("只有已生效的合作可以指派操作员");
+        }
+        if (verifiedUsers.findById(userId).isEmpty()) {
+            // 操作员要代表服务站对外办事,没实名的话出了事追溯不到人
+            throw new IllegalStateException("操作员需要完成实名认证");
+        }
+        var existing = operators.findByCooperationIdAndUserIdAndActiveTrue(cooperationId, userId);
+        if (existing.isPresent()) {
+            return existing.get().getId();   // 幂等:重复指派同一个人
+        }
+        var saved = operators.save(new CooperationOperator(cooperationId, userId, callerUserId));
+        log.info("指派操作员:合作={} 用户={} 指派人={}", cooperationId, userId, callerUserId);
+        return saved.getId();
+    }
+
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void revokeOperator(long cooperationId, long userId, long callerUserId) {
+        StationCooperation coop = cooperations.findById(cooperationId)
+                .orElseThrow(() -> new IllegalArgumentException("合作不存在"));
+        requireStationLegalRep(coop.getStationOrgId(), callerUserId, "解绑操作员");
+        CooperationOperator op = operators
+                .findByCooperationIdAndUserIdAndActiveTrue(cooperationId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("这个人不是该合作的操作员"));
+        op.revoke();
+        operators.save(op);
+    }
+
+    @Override
+    @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
+    public List<OperatorView> listOperators(long cooperationId, long callerUserId) {
+        StationCooperation coop = cooperations.findById(cooperationId).orElse(null);
+        if (coop == null) {
+            return List.of();
+        }
+        boolean isParty = isStationLegalRep(coop.getStationOrgId(), callerUserId)
+                || isPartnerLegalRep(coop.getPartnerOrgId(), callerUserId)
+                || identityApi.hasRole(callerUserId, Role.PLATFORM_OPS);
+        if (!isParty) {
+            return List.of();
+        }
+        return operators.findByCooperationIdAndActiveTrue(cooperationId).stream()
+                .map(o -> new OperatorView(o.getId(), o.getCooperationId(), o.getUserId(),
+                        o.isActive(), o.getCreatedAt()))
+                .toList();
+    }
+
+    private boolean isPartnerLegalRep(long orgId, long callerUserId) {
+        // 走 org 域的窄接口:只问"是不是法人",不把整个组织(含信用代码)拿过来。
+        // 第一版我拿一个假的"内部身份"去调 findById 绕过归属校验 ——
+        // 那是在别处开洞,任何人读到那个常量就能照抄
+        return orgApi.isLegalRepOf(orgId, callerUserId);
+    }
+
+    private void requirePartnerLegalRep(long orgId, long callerUserId, String action) {
+        if (!isPartnerLegalRep(orgId, callerUserId)) {
+            throw new IllegalStateException("只有用工单位的法人代表可以" + action);
+        }
+    }
+
+
+
     // ─────────────── 服务站间联合(老系统 M10 §3.4) ───────────────
 
     /**
@@ -481,7 +681,9 @@ class BrokerService implements BrokerApi {
         Station station = stations.findById(orgId)
                 .orElseThrow(() -> new IllegalArgumentException("服务站不存在或尚未通过审核"));
         if (station.getLegalRepUserId() != callerUserId) {
-            throw new IllegalStateException("只有服务站法人代表可以" + action);
+            // 说"站长"而不是"服务站法人代表":界面上、老板口中、这份代码的别处
+            // 用的都是"站长"。同一个角色在报错里换个叫法,用户会以为是另一种权限
+            throw new IllegalStateException("只有服务站站长可以" + action);
         }
         return station;
     }

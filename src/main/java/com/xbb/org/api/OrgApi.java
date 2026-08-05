@@ -50,6 +50,31 @@ public interface OrgApi {
       */
     Optional<OrgView> findById(long orgId, long callerUserId);
 
+    /**
+     * 这个人是不是这个组织的法人代表 / 站长。
+     *
+     * <p>**存在的理由:别的域需要判断归属,但不该因此拿到整个组织。**
+     * findById 会连信用代码一起给出去,而调用方只想要一个是非。
+     * 我第一版是拿一个假的"内部身份"去调 findById 绕过归属校验 ——
+     * 那是在别处开洞:任何人读到那个常量就能照抄一份。
+     *
+     * <p>只回答是非,不泄露任何组织信息,所以对所有调用方开放。
+     */
+    boolean isLegalRepOf(long orgId, long userId);
+
+    /** 组织类型与状态。合作/联合要据此判断"对方是不是用工单位"。 */
+    Optional<OrgSummary> summaryOf(long orgId);
+
+    /**
+     * 不含信用代码与法人的公开摘要。
+     *
+     * <p>**用 approved 而不是把 Organization.Status 暴露出来** ——
+     * 那个枚举在 org.internal 里,放进 api 包等于把内部类型漏给所有调用方,
+     * 以后想加一个状态就会牵动别的域。ModularityTests 当场抓住了这一点。
+     * 调用方真正关心的只有"能不能用",一个布尔就够。
+     */
+    record OrgSummary(long id, com.xbb.org.api.OrgType type, String name, boolean approved) { }
+
     /** 某人作为法人代表的组织列表。 */
     List<OrgView> listByLegalRep(long legalRepUserId);
 

@@ -98,7 +98,7 @@ class StationJointTest {
         // **少了这条,"申请—确认"两步就完全没有意义** ——
         // 任何站都能单方面给自己安排一份别人的佣金
         assertThatThrownBy(() -> brokerApi.confirmJoint(jointId, a.legalRep()))
-                .hasMessageContaining("法人代表");
+                .hasMessageContaining("站长");
     }
 
     @Test
@@ -109,7 +109,7 @@ class StationJointTest {
 
         // 这一步是在决定把别人的佣金分出去
         assertThatThrownBy(() -> brokerApi.applyJoint(a.orgId(), b.orgId(), 30, outsider))
-                .hasMessageContaining("法人代表");
+                .hasMessageContaining("站长");
     }
 
     @Test
