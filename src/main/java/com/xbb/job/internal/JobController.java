@@ -23,12 +23,17 @@ class JobController {
     }
 
     record PostJobRequest(@Positive long orgId, @NotBlank String title,
-                           @NotBlank String description, @Positive long wageCents) { }
+                           @NotBlank String description, @Positive long wageCents,
+                           /** 名额,不填按 1 个算。 */
+                           Integer headcount,
+                           /** 这个岗位的工作地点,选填。不填时客户端退回单位地址。 */
+                           String workAddress) { }
 
     @PostMapping
     ResponseEntity<Map<String, Long>> postJob(@AuthenticationPrincipal AuthenticatedUser caller,
                                                @RequestBody @Valid PostJobRequest req) {
-        long id = jobApi.postJob(req.orgId(), req.title(), req.description(), req.wageCents(), caller.userId());
+        long id = jobApi.postJob(req.orgId(), req.title(), req.description(), req.wageCents(),
+                req.headcount() == null ? 1 : req.headcount(), req.workAddress(), caller.userId());
         return ResponseEntity.ok(Map.of("id", id));
     }
 

@@ -9,6 +9,8 @@ const loading = ref(true)
 const err = ref(''); const msg = ref('')
 
 const orgId = ref(''); const title = ref(''); const desc = ref(''); const wage = ref('200')
+/** 这个岗位的工作地点。留空则显示单位注册地址。 */
+const workAddress = ref(''); const headcount = ref('1')
 
 /** 展开中的岗位 → 它的应聘者。按岗位缓存,免得每次折叠再展开都重拉。 */
 const expanded = ref<number | null>(null)
@@ -30,9 +32,13 @@ async function post() {
   try {
     const r = await api<{ id: number }>('/api/job', { body: {
       orgId: Number(orgId.value), title: title.value.trim(),
-      description: desc.value.trim(), wageCents: Math.round(Number(wage.value) * 100) } })
-    msg.value = `岗位 #${r.id} 已发布`
-    title.value = ''; desc.value = ''
+      description: desc.value.trim(), wageCents: Math.round(Number(wage.value) * 100),
+      headcount: Math.max(1, Number(headcount.value) || 1),
+      workAddress: workAddress.value.trim() || null } })
+    msg.value = workAddress.value.trim()
+      ? `岗位 #${r.id} 已发布,工作地点:${workAddress.value.trim()}`
+      : `岗位 #${r.id} 已发布。**没填工作地点**,求职端会显示单位注册地址`
+    title.value = ''; desc.value = ''; workAddress.value = ''; headcount.value = '1'
     await load()
   } catch (e: any) { err.value = e.message }
 }
@@ -138,8 +144,16 @@ onMounted(load)
       </div>
       <div class="field"><label>岗位标题</label><input v-model="title" placeholder="如：装配工 · 白班" /></div>
       <div class="field" style="flex:0 0 130px"><label>日薪（元）</label><input v-model="wage" /></div>
+      <div class="field" style="flex:0 0 110px"><label>名额</label><input v-model="headcount" /></div>
     </div>
-    <div class="field"><label>岗位描述</label><textarea v-model="desc" placeholder="工作内容、要求、地点"></textarea></div>
+    <div class="field"><label>工作地点（选填）</label>
+      <input v-model="workAddress" placeholder="如：苏州市吴中区太湖大道 99 号 3 号工地" /></div>
+    <p class="hint">
+      <b>每个岗位可以在不同的地方。</b>同一家单位常在几个工地同时开工——
+      留空的话求职端显示的是<b>单位注册地址</b>，工人可能跑错地方，
+      而这种错只有到了现场才发现。
+    </p>
+    <div class="field"><label>岗位描述</label><textarea v-model="desc" placeholder="工作内容、要求"></textarea></div>
     <button :disabled="!orgId || !title || !desc" @click="post">发布</button>
   </div>
 </template>

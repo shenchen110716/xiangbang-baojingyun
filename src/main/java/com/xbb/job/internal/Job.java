@@ -25,6 +25,13 @@ public class Job {
     @Column(name = "wage_cents", nullable = false)
     private long wageCents;
 
+    /**
+     * 这个岗位的工作地点。**可空** —— 老岗位没有,不填的也没有。
+     * 不在这里抄一份单位地址:抄了之后单位改地址,这些岗位还留着旧的。
+     */
+    @Column(name = "work_address", length = 200)
+    private String workAddress;
+
     /** 名额(§4.2)。招满即关闭,匹配的硬约束"名额未满"靠它。 */
     @Column(nullable = false)
     private int headcount = 1;
@@ -49,6 +56,12 @@ public class Job {
     protected Job() { }
 
     public Job(long orgId, String title, String description, long wageCents, int headcount) {
+        this(orgId, title, description, wageCents, headcount, null);
+    }
+
+    public Job(long orgId, String title, String description, long wageCents, int headcount,
+                String workAddress) {
+        this.workAddress = workAddress;
         if (headcount < 1) {
             throw new IllegalArgumentException("名额至少为 1");
         }
@@ -108,4 +121,6 @@ public class Job {
     public int getFilledCount() { return filledCount; }
     public Status getStatus() { return status; }
     public Instant getClosedAt() { return closedAt; }
+    /** @return 可能为 null —— 展示层为空时退回单位地址 */
+    public String getWorkAddress() { return workAddress; }
 }

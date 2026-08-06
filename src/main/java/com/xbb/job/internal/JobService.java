@@ -28,6 +28,16 @@ class JobService implements JobApi {
         this.json = json;
     }
 
+    /**
+     * 空串和只有空白的一律当成"没填"。
+     * 留着空串的话,"有没有工作地点"变成两种判断,展示层的退回逻辑会漏一种。
+     */
+    private static String trimToNull(String v) {
+        if (v == null) return null;
+        String t = v.trim();
+        return t.isEmpty() ? null : t;
+    }
+
     private String serialize(Object event) {
         try {
             return json.writeValueAsString(event);
@@ -47,8 +57,16 @@ class JobService implements JobApi {
     @Transactional("jobTransactionManager")
     public long postJob(long orgId, String title, String description, long wageCents,
                          int headcount, long callerUserId) {
+        return postJob(orgId, title, description, wageCents, headcount, null, callerUserId);
+    }
+
+    @Override
+    @Transactional("jobTransactionManager")
+    public long postJob(long orgId, String title, String description, long wageCents,
+                         int headcount, String workAddress, long callerUserId) {
         requireLegalRep(orgId, callerUserId, "发布岗位");
-        Job job = jobs.save(new Job(orgId, title, description, wageCents, headcount));
+        Job job = jobs.save(new Job(orgId, title, description, wageCents, headcount,
+                trimToNull(workAddress)));
         JobPosted posted = new JobPosted(job.getId(), orgId, wageCents, headcount, Instant.now());
         outbox.save(new JobOutboxEvent(java.util.UUID.randomUUID().toString(),
                 JobPosted.class.getName(), serialize(posted)));
@@ -135,7 +153,8 @@ class JobService implements JobApi {
         return new JobView(j.getId(), j.getOrgId(), j.getTitle(), j.getDescription(),
                 j.getWageCents(), j.getStatus(), j.getHeadcount(), j.getFilledCount(),
                 org == null ? null : org.getName(),
-                org == null ? null : org.getAddress());
+                org == null ? null : org.getAddress(),
+                j.getWorkAddress());
     }
 
     /**

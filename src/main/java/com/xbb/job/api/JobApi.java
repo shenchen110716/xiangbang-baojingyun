@@ -8,11 +8,14 @@ public interface JobApi {
 
     /**
      * @param orgName 用工单位名称。**可能为 null** —— 副本还没到,或旧载荷里没有
-     * @param orgAddress 单位地址,可能为 null
+     * @param orgAddress 单位注册地址,可能为 null
+     * @param workAddress 这个岗位自己的工作地点,可能为 null。
+     *                    **为空时由展示层退回 orgAddress** —— 在后端抄一份的话,
+     *                    单位改了地址这些岗位还留着旧的,而且分不清哪个是抄来的
      */
     record JobView(long id, long orgId, String title, String description, long wageCents,
                     Job.Status status, int headcount, int filledCount,
-                    String orgName, String orgAddress) {
+                    String orgName, String orgAddress, String workAddress) {
 
         public int remainingSlots() { return headcount - filledCount; }
     }
@@ -21,6 +24,15 @@ public interface JobApi {
     long postJob(long orgId, String title, String description, long wageCents, long callerUserId);
 
     long postJob(long orgId, String title, String description, long wageCents, int headcount, long callerUserId);
+
+    /**
+     * 带工作地点发岗。**每个岗位可以在不同地方** ——
+     * 同一家单位在几个工地同时开工是常态,只有单位注册地址的话工人会跑错地方。
+     *
+     * @param workAddress 可空;只有空白也当作没填
+     */
+    long postJob(long orgId, String title, String description, long wageCents, int headcount,
+                    String workAddress, long callerUserId);
 
     /** 法人代表手动关闭岗位。已关闭的再关一次不报错,但不会重复发关闭事件。 */
     void closeJob(long jobId, long callerUserId);
