@@ -94,25 +94,56 @@ class MiniprogramJobFeedTest {
     }
 
     /**
-     * <b>当前:岗位列表要登录才能看。</b>这条测试记录的是现状,不是主张。
+     * 岗位浏览对未登录开放(老板 2026-08-06 拍板)。
      *
-     * <p>我原先想当然地断言它是公开的 —— 真跑一遍才发现是 401。
-     * (铁律 5.1 里说的"岗位保持公开"指的是**已登录用户之间**不做归属过滤,
-     * 不是"匿名可读"。这两件事我一开始混为一谈了。)
+     * <p><b>为什么必须开。</b>求职端第一屏就是岗位,而没绑过微信的新用户拿不到
+     * token —— 后端对陌生 openid **不建账号**(那条是特意设计的:自动建号的话
+     * 任何人扫一下就多一个没实名没归属的用户)。两条规则叠在一起,
+     * 新用户第一屏永远是空的,还没看到任何东西就被挡在门外。
      *
-     * <p><b>这对小程序是个真问题:</b>求职端第一屏就是岗位,而没绑过微信的新用户
-     * 拿不到 token(后端对陌生 openid 不建账号),于是**第一屏永远是空的**,
-     * 用户还没看到任何东西就被挡在门外。
-     *
-     * <p>要放开的话改 SecurityConfig 一行。但那是在放开一个访问控制,
-     * **不该由我单方面决定** —— 等老板拍板。在那之前这条守住现状:
-     * 有人顺手放开时它会变红,提醒那是一次访问控制变更,不是顺手改的小事。
+     * <p><b>放开的范围就这两个,一个字都不能多。</b>它们不收 caller、
+     * 回的是岗位标题/薪资/单位名/地址,不含任何个人信息。
+     * 同在 /api/job 下的 /mine 和发岗必须仍然要登录 —— 下面逐条守住。
      */
     @Test
-    void 岗位列表当前需要登录() {
-        ResponseEntity<String> res = get("/api/job/open?limit=5", null);
-        assertThat(res.getStatusCode())
-                .as("现状记录:未登录读岗位列表返回 401。要改成公开需明确决定")
+    void 未登录可以浏览岗位列表和详情() {
+        assertThat(get("/api/job/open?limit=5", null).getStatusCode())
+                .as("第一屏。挡住的话新用户什么都看不到")
+                .isEqualTo(HttpStatus.OK);
+
+        String phone = "13003000003";
+        long rep = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
+        identityApi.verifyRealName(rep, "法人", "110101199001100003");
+        AtomicLong org = new AtomicLong();
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                org.set(orgApi.submitWithAddress(OrgType.FACTORY, "匿名可见厂",
+                        "9111000000000v02X", rep, "地址")));
+        orgApi.approve(org.get(), ops.userId());
+        AtomicLong job = new AtomicLong();
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                job.set(jobApi.postJob(org.get(), "匿名可见岗", "描述", 2000, rep)));
+
+        // 列表能看、点进去看不了的话,等于没开
+        assertThat(get("/api/job/" + job.get(), null).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void 放开的只有浏览_发岗和我的岗位仍然要登录() {
+        // **这条才是那次放开的安全边界。**
+        // 图省事写成 /api/job/** 的话,/mine 也会被放开 ——
+        // 它靠 caller 取数,匿名进去要么 500 要么把别人的岗位列出来
+        assertThat(get("/api/job/mine", null).getStatusCode())
+                .as("我的岗位靠 caller 取数,绝不能匿名")
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<String> posted = rest.exchange(url("/api/job"), HttpMethod.POST,
+                new HttpEntity<>("{\"orgId\":1,\"title\":\"匿名发岗\",\"description\":\"x\",\"wageCents\":100}", h),
+                String.class);
+        assertThat(posted.getStatusCode())
+                .as("匿名发岗必须挡住")
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 }

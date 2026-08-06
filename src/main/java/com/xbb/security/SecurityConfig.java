@@ -8,6 +8,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 
 @Configuration
@@ -41,6 +42,19 @@ public class SecurityConfig {
                 // 前端静态资源。前端本身不含任何机密,所有数据都要带 token 现取;
                 // 不放行的话打开首页就是 401,等于没有前端。
                 .requestMatchers("/", "/index.html", "/favicon.svg", "/assets/**").permitAll()
+                // 岗位浏览对未登录开放(老板 2026-08-06 拍板)。
+                //
+                // **为什么必须开。**求职端小程序第一屏就是岗位,而没绑过微信的新用户
+                // 拿不到 token —— 后端对陌生 openid 不建账号(那条是特意设计的)。
+                // 两条规则叠在一起,新用户第一屏永远是空的,还没看到任何东西就被挡在门外。
+                //
+                // **范围就这两个,而且只放 GET。**它们不收 caller,回的是
+                // 岗位标题/薪资/单位名/地址,不含任何个人信息。
+                // 写成 `/api/job/**` 的话 /mine 也会被放开 —— 它靠 caller 取数,
+                // 匿名进去要么 500 要么把别人的岗位列出来;POST 更是直接能匿名发岗。
+                // MiniprogramJobFeedTest 里逐条守着这条边界。
+                .requestMatchers(HttpMethod.GET, "/api/job/open").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/job/{id:[0-9]+}").permitAll()
                 // 健康检查要给编排/负载均衡探活用,必须免鉴权。
                 // 只放行 health,**不放行 metrics** —— 那里会暴露内部结构。
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
