@@ -224,6 +224,18 @@ class AdvanceService implements AdvanceApi {
                 .toList();
     }
 
+    @Override
+    @Transactional(transactionManager = "fundTransactionManager", readOnly = true)
+    public List<AdvanceView> listByOrg(long orgId, long callerUserId) {
+        if (!orgApi.isLegalRepOf(orgId, callerUserId)
+                && !identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            // 借支是谁欠了这家多少钱,别家看得到等于把用工成本公开了(铁律 5.1)。
+            // **返回空列表而不是抛异常** —— 列表接口挡住路人时回 200 [] 是对的
+            return List.of();
+        }
+        return advances.findByOrgIdOrderByIdDesc(orgId).stream().map(AdvanceService::toView).toList();
+    }
+
     private static AdvanceView toView(Advance a) {
         return new AdvanceView(a.getId(), a.getWorkerUserId(), a.getAmountCents(),
                 a.getOutstandingCents(), a.getStatus().name(), a.getReason(),

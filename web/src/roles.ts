@@ -36,6 +36,10 @@ export const NAV: Record<RoleKey, { to: string; label: string; badge?: boolean }
     { to: '/my-jobs', label: '我的岗位' },
     { to: '/attendance', label: '考勤录入' },
     { to: '/pay-plans', label: '计薪方案' },
+    // 资金与借支 2026-08-06 从平台端搬过来:账户按单位分账之后,
+    // "我的余额""我批的借支"才成立。平台端保留同名入口做总览
+    { to: '/org-funds', label: '资金与代发' },
+    { to: '/org-advances', label: '借支管理' },
     { to: '/voice', label: '语音发单' },
     { to: '/talent', label: '人才库' },
     { to: '/review', label: '评价' },

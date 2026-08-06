@@ -46,6 +46,14 @@ public interface AdvanceApi {
     /** 查某人的借支。本人或平台运维,其他人得到空列表。 */
     List<AdvanceView> listOf(long workerUserId, long callerUserId);
 
+    /**
+     * 这家单位批过的借支。机构端"借支管理"要靠它。
+     *
+     * <p>谁能看:这家单位的法人代表,或平台运维。
+     * <b>借支是谁欠了这家多少钱</b>,别家看得到等于把用工成本公开了(铁律 5.1)。
+     */
+    List<AdvanceView> listByOrg(long orgId, long callerUserId);
+
     Optional<AdvanceView> findById(long advanceId, long callerUserId);
 
     List<RepaymentView> repaymentsOf(long advanceId, long callerUserId);

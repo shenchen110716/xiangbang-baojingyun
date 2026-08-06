@@ -155,4 +155,23 @@ class PerOrgAccountTest {
                 advanceApi.grantAdvance(null, worker, 10_000, "越权垫", a.rep()))
                 .hasMessageContaining("平台运维");
     }
+
+    // ─────────────── 机构端的列表 ───────────────
+
+    @Test
+    void 机构只看得到自己那家的代发单和借支() {
+        Org a = org("13004000013", "110101199001110013", "列表甲厂", "9111000000000l11X");
+        Org b = org("13004000014", "110101199001110014", "列表乙厂", "9111000000000l12X");
+        long worker = verified("13004000015", "工人丙", "110101199001110015");
+        advanceApi.grantAdvance(a.orgId(), worker, 5_000, "甲厂预支", a.rep());
+
+        assertThat(advanceApi.listByOrg(a.orgId(), a.rep())).hasSize(1);
+        // 借支是谁欠了这家多少钱,别家看得到等于把用工成本公开了(铁律 5.1)。
+        // **列表接口挡住路人时回空列表,不是抛异常** —— 那是这个项目定下的口径
+        assertThat(advanceApi.listByOrg(a.orgId(), b.rep())).isEmpty();
+        // 挡住路人不能连平台运维一起挡掉
+        assertThat(advanceApi.listByOrg(a.orgId(), ops.userId())).hasSize(1);
+
+        assertThat(fundApi.listByOrg(a.orgId(), b.rep())).isEmpty();
+    }
 }

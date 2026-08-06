@@ -84,6 +84,8 @@ class FundController {
     // ─────────────── 借支与还款(老系统 M8「借押保」) ───────────────
 
     record GrantRequest(
+            /** 批这笔的用工单位。**不填表示平台自己垫**,那条只有平台运维能走。 */
+            Long orgId,
             @jakarta.validation.constraints.Positive(message = "请选择工人") long workerUserId,
             @jakarta.validation.constraints.Positive(message = "借支金额必须为正") long amountCents,
             @jakarta.validation.constraints.NotBlank(message = "请填写借支事由") String reason) { }
@@ -91,11 +93,16 @@ class FundController {
     record RepayRequest(
             @jakarta.validation.constraints.Positive(message = "还款金额必须为正") long amountCents) { }
 
-    /** 批一笔借支。要平台运维 —— 这是平台垫钱,不是工人自助。 */
+    /**
+     * 批一笔借支。**用工单位的法人代表**,或平台运维(平台自己垫时)。
+     *
+     * <p>不是工人自助 —— 借支是有人替他先垫上,再从工资里扣回来。
+     */
     @PostMapping("/advances")
     ResponseEntity<Map<String, Long>> grantAdvance(@RequestBody @jakarta.validation.Valid GrantRequest req,
                                                    @AuthenticationPrincipal AuthenticatedUser caller) {
-        long id = advanceApi.grantAdvance(req.workerUserId(), req.amountCents(), req.reason(), caller.userId());
+        long id = advanceApi.grantAdvance(req.orgId(), req.workerUserId(), req.amountCents(),
+                req.reason(), caller.userId());
         return ResponseEntity.ok(Map.of("id", id));
     }
 
@@ -112,6 +119,43 @@ class FundController {
     }
 
     /** 查某人的借支。本人或平台运维,其他人拿到空列表(不是 403 —— 见铁律 5.1)。 */
+    /** 这家单位要付的代发单。机构端"资金与代发"用。 */
+    @GetMapping("/payouts/org/{orgId}")
+    ResponseEntity<List<FundApi.PayoutView>> payoutsOfOrg(@PathVariable long orgId,
+                                                           @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(fundApi.listByOrg(orgId, caller.userId()));
+    }
+
+    /** 这家单位的账户余额。**必须排在 /accounts/{accountType} 之后**,否则路径会打架。 */
+    @GetMapping("/accounts/org/{orgId}/{accountType}")
+    ResponseEntity<java.util.Map<String, Long>> orgBalance(@PathVariable long orgId,
+                                                            @PathVariable com.xbb.fund.api.AccountType accountType,
+                                                            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(java.util.Map.of(
+                "balance", fundApi.orgBalanceOf(orgId, accountType, caller.userId())));
+    }
+
+    record OrgTopUpRequest(long amountCents, String reason,
+                            @jakarta.validation.constraints.NotBlank(message = "入账必须带幂等键")
+                            String idempotencyKey) { }
+
+    /** 机构给自己的账户充值。 */
+    @PostMapping("/accounts/org/{orgId}/{accountType}/top-up")
+    ResponseEntity<Void> orgTopUp(@PathVariable long orgId, @PathVariable com.xbb.fund.api.AccountType accountType,
+                                   @RequestBody @jakarta.validation.Valid OrgTopUpRequest req,
+                                   @AuthenticationPrincipal AuthenticatedUser caller) {
+        fundApi.topUpOrg(orgId, accountType, req.amountCents(), req.reason(),
+                req.idempotencyKey(), caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 这家单位批过的借支。机构端"借支管理"用。 */
+    @GetMapping("/advances/org/{orgId}")
+    ResponseEntity<List<AdvanceApi.AdvanceView>> advancesOfOrg(@PathVariable long orgId,
+                                                                @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(advanceApi.listByOrg(orgId, caller.userId()));
+    }
+
     @GetMapping("/advances/worker/{workerUserId}")
     ResponseEntity<List<AdvanceApi.AdvanceView>> advancesOf(@PathVariable long workerUserId,
                                                             @AuthenticationPrincipal AuthenticatedUser caller) {

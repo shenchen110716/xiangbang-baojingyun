@@ -22,6 +22,8 @@ const router = createRouter({
     // 企业端
     { path: '/my-orgs', component: () => import('./views/employer/MyOrgs.vue') },
     { path: '/my-jobs', component: () => import('./views/employer/MyJobs.vue') },
+    { path: '/org-funds', component: () => import('./views/employer/OrgFunds.vue') },
+    { path: '/org-advances', component: () => import('./views/employer/OrgAdvances.vue') },
     { path: '/attendance', component: () => import('./views/employer/Attendance.vue') },
     { path: '/pay-plans', component: () => import('./views/employer/PayPlans.vue') },
 

@@ -76,6 +76,13 @@ public interface FundApi {
      */
     long orgBalanceOf(Long orgId, AccountType accountType, long callerUserId);
 
+    /**
+     * 这家单位要付的代发单。机构端"资金与代发"要靠它。
+     *
+     * <p>谁能看:这家单位的法人代表,或平台运维。
+     */
+    java.util.List<PayoutView> listByOrg(long orgId, long callerUserId);
+
     /** 域内/跨域在进程内取余额,不经过 HTTP,因而不做角色校验。**不要把它接到控制器上。** */
     long balanceOf(AccountType accountType);
 

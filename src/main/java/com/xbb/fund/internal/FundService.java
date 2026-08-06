@@ -215,6 +215,17 @@ class FundService implements FundApi {
         disbursements.save(disbursement);
     }
 
+    @Override
+    @Transactional(transactionManager = "fundTransactionManager", readOnly = true)
+    public java.util.List<PayoutView> listByOrg(long orgId, long callerUserId) {
+        if (!orgApi.isLegalRepOf(orgId, callerUserId)
+                && !identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            // 列表接口挡住路人时回 200 [] 是对的(铁律 5.1)
+            return java.util.List.of();
+        }
+        return payouts.findByOrgIdOrderByIdDesc(orgId).stream().map(this::toView).toList();
+    }
+
     private static String idempotencyKeyFor(long payoutId) {
         return "payout-" + payoutId;
     }

@@ -12,4 +12,7 @@ public interface PayoutRepository extends JpaRepository<Payout, Long> {
 
     /** 我的待发放/已发放记录。 */
     List<Payout> findByPayeeUserIdOrderByIdDesc(long payeeUserId);
+
+    /** 这家单位要付的代发单。 */
+    java.util.List<Payout> findByOrgIdOrderByIdDesc(long orgId);
 }

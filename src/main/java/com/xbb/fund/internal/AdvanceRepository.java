@@ -11,6 +11,9 @@ public interface AdvanceRepository extends JpaRepository<Advance, Long> {
 
     List<Advance> findByWorkerUserIdOrderByIdDesc(long workerUserId);
 
+    /** 这家单位批过的借支。 */
+    List<Advance> findByOrgIdOrderByIdDesc(long orgId);
+
     /**
      * 这笔结算能用来抵扣的借支:**这家单位批的** + 平台垫的。
      *
