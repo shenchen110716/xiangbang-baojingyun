@@ -39,6 +39,14 @@ public class Organization {
     private String address;
 
     /**
+     * 劳务派遣经营许可证编号。<b>只有派遣主体有</b>,别的类型为 null。
+     * 由数据库 CHECK 保证派遣主体必须有 —— 没证做劳务派遣是违法的,
+     * 而且这笔留存要开发票,查得到证号才说得清钱付给了谁。
+     */
+    @Column(name = "dispatch_license_no", length = 64)
+    private String dispatchLicenseNo;
+
+    /**
      * 法人代表 / 站长。
      *
      * <p><b>服务站可以为空</b> —— 平台先建点位、再派人管。
@@ -132,4 +140,16 @@ public class Organization {
     public com.xbb.org.api.SubjectType getSubjectType() { return subjectType; }
     /** @return 可能为 null —— 老数据没有地址 */
     public String getAddress() { return address; }
+    /** @return 只有派遣主体非空 */
+    public String getDispatchLicenseNo() { return dispatchLicenseNo; }
+
+    /** 派遣主体。建出来就是已审核 —— 这条路只有平台运维能走。 */
+    static Organization dispatchAgency(String name, String creditCode, String licenseNo,
+                                        long legalRepUserId, String address) {
+        Organization o = new Organization(com.xbb.org.api.OrgType.DISPATCH_AGENCY,
+                name, creditCode, legalRepUserId, address);
+        o.dispatchLicenseNo = licenseNo;
+        o.status = Status.APPROVED;
+        return o;
+    }
 }
