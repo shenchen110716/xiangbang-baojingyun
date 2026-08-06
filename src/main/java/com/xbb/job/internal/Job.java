@@ -27,6 +27,24 @@ public class Job {
     private Long totalPriceCents;
 
     /**
+     * 发单时定死的分账。<b>不在结算时重算</b> ——
+     * 工人是看着"这单 900 元"才接的,中途改比例不该让他少拿。
+     */
+    @Column(name = "worker_cents")
+    private Long workerCents;
+
+    @Column(name = "commission_cents")
+    private Long commissionCents;
+
+    @Column(name = "dispatch_retain_cents")
+    private Long dispatchRetainCents;
+
+    /** 收留存的派遣公司;留存为 0 时为 null。 */
+    @Column(name = "dispatch_org_id")
+    private Long dispatchOrgId;
+
+
+    /**
      * 国标行政区划代码。佣金比例按「类目 + 地区」配。
      * <b>必须是选出来的,不能从地址文本里解析</b> —— 解析错了不会报错,
      * 只会静默套上另一个地区的比例。
@@ -154,7 +172,9 @@ public class Job {
     public String getWorkAddress() { return workAddress; }
     /** 个人发单。总价与地区必填,由数据库 CHECK 兜底。 */
     static Job byIndividual(long posterUserId, String title, String description,
-                             long totalPriceCents, String regionCode, String workAddress) {
+                             long totalPriceCents, String regionCode, String workAddress,
+                             long workerCents, long commissionCents,
+                             long dispatchRetainCents, Long dispatchOrgId) {
         Job j = new Job();
         j.posterUserId = posterUserId;
         j.title = title;
@@ -164,7 +184,13 @@ public class Job {
         j.workAddress = workAddress;
         // 总价模式下没有"单价"这个概念。**填 0 而不是留空** ——
         // wage_cents 是 NOT NULL,而这一单的钱由总价决定
-        j.wageCents = 0;
+        j.workerCents = workerCents;
+        j.commissionCents = commissionCents;
+        j.dispatchRetainCents = dispatchRetainCents;
+        j.dispatchOrgId = dispatchOrgId;
+        // **wageCents 存员工价而不是 0。**下游(履约→结算)读的是这个字段,
+        // 存 0 的话工人结算出来是 0 元,而界面上显示的是总价 —— 两边对不上
+        j.wageCents = workerCents;
         j.headcount = 1;
         return j;
     }
@@ -175,4 +201,10 @@ public class Job {
     public Long getTotalPriceCents() { return totalPriceCents; }
     /** @return null 表示没填地区 */
     public String getRegionCode() { return regionCode; }
+    /** @return 员工价;非总价模式为 null */
+    public Long getWorkerCents() { return workerCents; }
+    public Long getCommissionCents() { return commissionCents; }
+    public Long getDispatchRetainCents() { return dispatchRetainCents; }
+    /** @return 收留存的派遣公司;没有则为 null */
+    public Long getDispatchOrgId() { return dispatchOrgId; }
 }

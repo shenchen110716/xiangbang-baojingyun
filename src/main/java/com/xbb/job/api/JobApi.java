@@ -12,6 +12,8 @@ public interface JobApi {
      * @param posterUserId 个人发单方,单位发单时为 null
      * @param totalPriceCents 总价模式的总价;按小时/按天计薪的岗位为 null
      * @param regionCode 国标行政区划代码,佣金比例按「类目 + 地区」配
+     * @param workerCents 员工价。<b>发单时就定死了</b> ——
+     *                    工人是看着这个数接的,后来改比例不该让他少拿
      * @param orgAddress 单位注册地址,可能为 null
      * @param workAddress 这个岗位自己的工作地点,可能为 null。
      *                    **为空时由展示层退回 orgAddress** —— 在后端抄一份的话,
@@ -20,7 +22,9 @@ public interface JobApi {
     record JobView(long id, Long orgId, String title, String description, long wageCents,
                     Job.Status status, int headcount, int filledCount,
                     String orgName, String orgAddress, String workAddress,
-                    Long posterUserId, Long totalPriceCents, String regionCode) {
+                    Long posterUserId, Long totalPriceCents, String regionCode,
+                    Long workerCents, Long commissionCents, Long dispatchRetainCents,
+                    Long dispatchOrgId) {
 
         public int remainingSlots() { return headcount - filledCount; }
     }
@@ -46,12 +50,16 @@ public interface JobApi {
      * <p>不给个人造一个"个人组织" —— organization 上有一串针对企业的约束,
      * 硬塞进去要么放宽那些约束、要么填假数据。
      *
-     * @param regionCode 国标行政区划代码,<b>必填且必须是选出来的</b>。
-     *                   没有它就取不到佣金比例,这单结算时会卡住 ——
-     *                   与其那时候报错,不如发单时就拦
+     * @param regionCode 国标行政区划代码,<b>必填且必须是选出来的</b>
+     * @param workerCents 员工价等四个数由调用方(控制器)先问经纪人域算好。
+     *                    <b>不在这里算</b>:比例配在经纪人域,而 job → broker
+     *                    会闭合一个模块环。数据库上有 CHECK 保证三段加起来正好是总价 ——
+     *                    调用方传一组对不上的数字会被当场拒绝
      */
     long postJobByIndividual(long posterUserId, String title, String description,
-                              long totalPriceCents, String regionCode, String workAddress);
+                              long totalPriceCents, String regionCode, String workAddress,
+                              long workerCents, long commissionCents,
+                              long dispatchRetainCents, Long dispatchOrgId);
 
     /** 法人代表手动关闭岗位。已关闭的再关一次不报错,但不会重复发关闭事件。 */
     void closeJob(long jobId, long callerUserId);

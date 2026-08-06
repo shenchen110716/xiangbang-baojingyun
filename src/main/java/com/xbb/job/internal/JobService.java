@@ -27,6 +27,7 @@ class JobService implements JobApi {
     /** 判断发单人有没有实名。**现查不缓存** —— 岗位域那张副本表没人维护。 */
     private final com.xbb.identity.api.IdentityApi identityApi;
 
+
     JobService(JobRepository jobs, ApprovedOrgRepository approvedOrgs, JobOutboxRepository outbox,
                 com.xbb.identity.api.IdentityApi identityApi, ObjectMapper json) {
         this.identityApi = identityApi;
@@ -114,7 +115,9 @@ class JobService implements JobApi {
     @Override
     @Transactional("jobTransactionManager")
     public long postJobByIndividual(long posterUserId, String title, String description,
-                                     long totalPriceCents, String regionCode, String workAddress) {
+                                     long totalPriceCents, String regionCode, String workAddress,
+                                     long workerCents, long commissionCents,
+                                     long dispatchRetainCents, Long dispatchOrgId) {
         // **现查身份域,不用副本。**job.verified_user 那张表存在但没有任何代码
         // 在维护它 —— 靠它判断的话,任何人都能发单
         // **findVerifiedUser 名不副实:它返回任何用户,实名与否在 verified 字段里。**
@@ -140,14 +143,18 @@ class JobService implements JobApi {
         }
         Job job = jobs.save(Job.byIndividual(posterUserId, title.trim(),
                 description == null ? "" : description.trim(),
-                totalPriceCents, region, trimToNull(workAddress)));
+                totalPriceCents, region, trimToNull(workAddress),
+                workerCents, commissionCents, dispatchRetainCents, dispatchOrgId));
         // **个人单也要进撮合与下游。**不发事件的话它只存在于岗位表里,
         // 求职端搜得到但报名之后的链路全是断的
-        JobPosted posted = new JobPosted(job.getId(), 0L, totalPriceCents, 1, Instant.now());
+        // **事件里带员工价,不是总价。**下游按这个数发钱;
+        // 带总价的话工人会拿到含佣金的那个数
+        JobPosted posted = new JobPosted(job.getId(), 0L, workerCents, 1, Instant.now());
         outbox.save(new JobOutboxEvent(java.util.UUID.randomUUID().toString(),
                 JobPosted.class.getName(), serialize(posted)));
-        LOG.info("个人发单:job={} 发单人={} 总价={}分 地区={}",
-                job.getId(), posterUserId, totalPriceCents, region);
+        LOG.info("个人发单:job={} 发单人={} 总价={}分 员工价={}分 佣金={}分 派遣留存={}分 地区={}",
+                job.getId(), posterUserId, totalPriceCents, workerCents,
+                commissionCents, dispatchRetainCents, region);
         return job.getId();
     }
 
@@ -205,7 +212,9 @@ class JobService implements JobApi {
                 org == null ? null : org.getName(),
                 org == null ? null : org.getAddress(),
                 j.getWorkAddress(),
-                j.getPosterUserId(), j.getTotalPriceCents(), j.getRegionCode());
+                j.getPosterUserId(), j.getTotalPriceCents(), j.getRegionCode(),
+                j.getWorkerCents(), j.getCommissionCents(),
+                j.getDispatchRetainCents(), j.getDispatchOrgId());
     }
 
     /**

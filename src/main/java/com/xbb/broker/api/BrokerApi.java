@@ -83,6 +83,50 @@ public interface BrokerApi {
     List<SchemeView> listSchemes(Long stationOrgId, long callerUserId);
 
     /**
+     * 总价怎么分成三段(老板 2026-08-06 的公式):
+     * <pre>
+     *   员工价     = 总价 − 佣金总额
+     *   佣金总额   = 总价 × 佣金比例(类目 + 地区)
+     *   派遣公司留存 = 佣金总额 × 派遣留存比例
+     *   服务站佣金总额 = 佣金总额 − 派遣公司留存
+     * </pre>
+     *
+     * <p><b>发单时算一次、存下来,不在结算时再算。</b>
+     * 工人是看着"这单 900 元"才接的 —— 中途有人改了比例,
+     * 结算时重算会让他拿到手变成 850。承诺过的价钱不该被事后改动。
+     *
+     * <p>没配比例时**抛异常,不给默认值**:编一个数字出来就是拿别人的钱冒险。
+     *
+     * @param regionCode 国标行政区划代码,从细到粗回退到全国
+     */
+    TotalPriceSplit splitTotalPrice(String category, String regionCode, long totalPriceCents);
+
+    /**
+     * 配「类目 + 地区」的佣金比例。{@code regionCode} 传 null 表示全国兜底。
+     *
+     * <p><b>留了派遣比例就必须指定收款的派遣公司</b> ——
+     * 那笔钱从佣金池里扣掉却挂不到任何收款方,对账时是个凭空消失的窟窿。
+     *
+     * <p>改比例**只影响之后发的单**:已发出的单在发单时就把分账定死了。
+     */
+    void setCommissionRate(String category, String regionCode, int commissionPct,
+                            int dispatchRetainPct, Long dispatchOrgId,
+                            String reason, long callerUserId);
+
+    record CommissionRateView(String category, String regionCode, int commissionPct,
+                               int dispatchRetainPct, Long dispatchOrgId,
+                               java.time.Instant updatedAt) { }
+
+    List<CommissionRateView> listCommissionRates(long callerUserId);
+
+    /**
+     * @param dispatchOrgId 收留存的派遣公司;没有派遣公司时为 null(留存必然是 0)
+     */
+    record TotalPriceSplit(long totalPriceCents, long workerCents, long commissionCents,
+                            long dispatchRetainCents, long stationPoolCents,
+                            Long dispatchOrgId) { }
+
+    /**
      * 设某个服务站在某个类目上的分成比例。
      *
      * <p>{@code stationOrgId} 传 null 表示设**平台默认**(对所有没单独设过的站生效)。

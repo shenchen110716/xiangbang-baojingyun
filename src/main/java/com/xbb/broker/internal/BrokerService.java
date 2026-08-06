@@ -29,6 +29,10 @@ class BrokerService implements BrokerApi {
     private final StationRateChangeRepository rateChanges;
     private final CommissionSchemeRepository schemes;
     private final CommissionSchemeChangeRepository schemeChanges;
+    /** 按「类目 + 地区」取佣金比例,从细到粗回退。 */
+    private final CommissionRateResolver rateResolver;
+    private final CommissionRateRepository rates;
+    private final CommissionRateChangeRepository rateChangeRepo;
     private final StationCooperationRepository cooperations;
     private final CooperationOperatorRepository operators;
     private final com.xbb.org.api.OrgApi orgApi;
@@ -52,6 +56,9 @@ class BrokerService implements BrokerApi {
                   StationRepository stations, StationJointRepository joints,
                   StationRateRepository stationRates, StationRateChangeRepository rateChanges,
                   CommissionSchemeRepository schemes, CommissionSchemeChangeRepository schemeChanges,
+                  CommissionRateResolver rateResolver,
+                  CommissionRateRepository rates,
+                  CommissionRateChangeRepository rateChangeRepo,
                   StationCooperationRepository cooperations, CooperationOperatorRepository operators,
                   com.xbb.org.api.OrgApi orgApi,
                   ShareUpgradeService shareUpgrades, BrokerOriginRepository origins,
@@ -65,6 +72,9 @@ class BrokerService implements BrokerApi {
         this.rateChanges = rateChanges;
         this.schemes = schemes;
         this.schemeChanges = schemeChanges;
+        this.rateResolver = rateResolver;
+        this.rates = rates;
+        this.rateChangeRepo = rateChangeRepo;
         this.cooperations = cooperations;
         this.operators = operators;
         this.orgApi = orgApi;
@@ -915,5 +925,68 @@ class BrokerService implements BrokerApi {
         // 不在这里开事务:任务内部按人各自开 REQUIRES_NEW,
         // 外面再包一层大事务会让"一人一事务"失去意义(一个失败全回滚)。
         return demotionTask.getObject().run();
+    }
+
+    @Override
+    @Transactional("brokerTransactionManager")
+    public void setCommissionRate(String category, String regionCode, int commissionPct,
+                                   int dispatchRetainPct, Long dispatchOrgId,
+                                   String reason, long callerUserId) {
+        if (!identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            throw new org.springframework.security.access.AccessDeniedException("需要平台运维权限");
+        }
+        if (category == null || category.isBlank()) {
+            throw new IllegalArgumentException("请选择业务类目");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("请填写调整原因");
+        }
+        String cat = category.trim().toUpperCase();
+        String region = regionCode == null || regionCode.isBlank() ? null : regionCode.trim();
+
+        CommissionRate existing = (region == null
+                ? rates.findByCategoryAndRegionCodeIsNull(cat)
+                : rates.findByCategoryAndRegionCode(cat, region)).orElse(null);
+        String before = existing == null ? null : existing.summary();
+
+        CommissionRate saved;
+        if (existing == null) {
+            saved = rates.save(new CommissionRate(cat, region, commissionPct,
+                    dispatchRetainPct, dispatchOrgId, callerUserId));
+        } else {
+            existing.apply(commissionPct, dispatchRetainPct, dispatchOrgId, callerUserId);
+            saved = rates.save(existing);
+        }
+        rateChangeRepo.save(new CommissionRateChange(cat, region, before,
+                saved.summary(), callerUserId, reason.trim()));
+        log.info("佣金比例变更:类目={} 地区={} {} → {} 操作人={}",
+                cat, region == null ? "全国" : region, before, saved.summary(), callerUserId);
+    }
+
+    @Override
+    @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
+    public List<CommissionRateView> listCommissionRates(long callerUserId) {
+        if (!identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            // 列表接口挡住路人时回空列表(铁律 5.1)
+            return List.of();
+        }
+        return rates.findAllByOrderByCategoryAscRegionCodeAsc().stream()
+                .map(r -> new CommissionRateView(r.getCategory(), r.getRegionCode(),
+                        r.getCommissionPct(), r.getDispatchRetainPct(),
+                        r.getDispatchOrgId(), r.getUpdatedAt()))
+                .toList();
+    }
+
+    @Override
+    @Transactional(transactionManager = "brokerTransactionManager", readOnly = true)
+    public TotalPriceSplit splitTotalPrice(String category, String regionCode, long totalPriceCents) {
+        CommissionRate rate = rateResolver.resolve(
+                category == null ? com.xbb.broker.api.RateCategory.JOB : category.trim().toUpperCase(),
+                regionCode);
+        TotalPricePlan plan = TotalPricePlan.of(
+                totalPriceCents, rate.getCommissionPct(), rate.getDispatchRetainPct());
+        return new TotalPriceSplit(plan.totalPriceCents(), plan.workerCents(),
+                plan.commissionCents(), plan.dispatchRetainCents(), plan.stationPoolCents(),
+                rate.getDispatchOrgId());
     }
 }
