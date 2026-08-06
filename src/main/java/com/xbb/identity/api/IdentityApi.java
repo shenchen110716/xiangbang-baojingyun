@@ -35,6 +35,17 @@ public interface IdentityApi {
     /** 这个账号绑的微信(没绑返回空)。 */
     java.util.Optional<String> wechatOpenIdOf(long userId);
 
+    /**
+     * 按 id 查用户。
+     *
+     * <p><b>名字有误导:它返回任何用户,不筛已实名的。</b>
+     * 实名与否看 {@link UserView#verified()} —— 只判 {@code isEmpty()} 的话,
+     * 未实名的人会被当成已实名放过去。
+     *
+     * <p>2026-08-06 有人(我)照名字理解写错过一次,测试当场抓住。
+     * 名字没改是因为它已经在几处被调用,改名要一起动;
+     * 这段注释是为了让下一个人在读到名字之前先读到它。
+     */
     Optional<UserView> findVerifiedUser(long userId);
 
     void verifyRealName(long userId, String realName, String idNumber);

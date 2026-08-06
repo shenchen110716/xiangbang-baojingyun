@@ -8,14 +8,19 @@ public interface JobApi {
 
     /**
      * @param orgName 用工单位名称。**可能为 null** —— 副本还没到,或旧载荷里没有
+     * @param orgId <b>个人发单时为 null</b> —— 和 posterUserId 恰好有一个非空
+     * @param posterUserId 个人发单方,单位发单时为 null
+     * @param totalPriceCents 总价模式的总价;按小时/按天计薪的岗位为 null
+     * @param regionCode 国标行政区划代码,佣金比例按「类目 + 地区」配
      * @param orgAddress 单位注册地址,可能为 null
      * @param workAddress 这个岗位自己的工作地点,可能为 null。
      *                    **为空时由展示层退回 orgAddress** —— 在后端抄一份的话,
      *                    单位改了地址这些岗位还留着旧的,而且分不清哪个是抄来的
      */
-    record JobView(long id, long orgId, String title, String description, long wageCents,
+    record JobView(long id, Long orgId, String title, String description, long wageCents,
                     Job.Status status, int headcount, int filledCount,
-                    String orgName, String orgAddress, String workAddress) {
+                    String orgName, String orgAddress, String workAddress,
+                    Long posterUserId, Long totalPriceCents, String regionCode) {
 
         public int remainingSlots() { return headcount - filledCount; }
     }
@@ -33,6 +38,20 @@ public interface JobApi {
      */
     long postJob(long orgId, String title, String description, long wageCents, int headcount,
                     String workAddress, long callerUserId);
+
+    /**
+     * 个人发单(老板 2026-08-06)。<b>只填总价</b>,员工价和佣金由平台按
+     * 「类目 + 地区」的比例算出来。
+     *
+     * <p>不给个人造一个"个人组织" —— organization 上有一串针对企业的约束,
+     * 硬塞进去要么放宽那些约束、要么填假数据。
+     *
+     * @param regionCode 国标行政区划代码,<b>必填且必须是选出来的</b>。
+     *                   没有它就取不到佣金比例,这单结算时会卡住 ——
+     *                   与其那时候报错,不如发单时就拦
+     */
+    long postJobByIndividual(long posterUserId, String title, String description,
+                              long totalPriceCents, String regionCode, String workAddress);
 
     /** 法人代表手动关闭岗位。已关闭的再关一次不报错,但不会重复发关闭事件。 */
     void closeJob(long jobId, long callerUserId);

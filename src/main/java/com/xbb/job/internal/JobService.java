@@ -21,7 +21,15 @@ class JobService implements JobApi {
     private final JobOutboxRepository outbox;
     private final ObjectMapper json;
 
-    JobService(JobRepository jobs, ApprovedOrgRepository approvedOrgs, JobOutboxRepository outbox, ObjectMapper json) {
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(JobService.class);
+
+    /** 判断发单人有没有实名。**现查不缓存** —— 岗位域那张副本表没人维护。 */
+    private final com.xbb.identity.api.IdentityApi identityApi;
+
+    JobService(JobRepository jobs, ApprovedOrgRepository approvedOrgs, JobOutboxRepository outbox,
+                com.xbb.identity.api.IdentityApi identityApi, ObjectMapper json) {
+        this.identityApi = identityApi;
         this.jobs = jobs;
         this.approvedOrgs = approvedOrgs;
         this.outbox = outbox;
@@ -103,6 +111,46 @@ class JobService implements JobApi {
         }
     }
 
+    @Override
+    @Transactional("jobTransactionManager")
+    public long postJobByIndividual(long posterUserId, String title, String description,
+                                     long totalPriceCents, String regionCode, String workAddress) {
+        // **现查身份域,不用副本。**job.verified_user 那张表存在但没有任何代码
+        // 在维护它 —— 靠它判断的话,任何人都能发单
+        // **findVerifiedUser 名不副实:它返回任何用户,实名与否在 verified 字段里。**
+        // 只判 isEmpty 的话未实名的人照样能发单 —— 我第一版就是这么写的,
+        // 测试当场抓住了
+        if (identityApi.findVerifiedUser(posterUserId)
+                .filter(com.xbb.identity.api.IdentityApi.UserView::verified).isEmpty()) {
+            // 发单方要付钱、要签协议、出了纠纷要找得到人。没实名这些都无从追溯
+            throw new IllegalStateException("发单人未实名认证");
+        }
+        if (title == null || title.isBlank()) {
+            throw new IllegalArgumentException("请填写岗位标题");
+        }
+        if (totalPriceCents <= 0) {
+            // 0 元的单子没有业务含义,负数更是会算出负佣金
+            throw new IllegalArgumentException("总价必须为正,当前 " + totalPriceCents);
+        }
+        String region = regionCode == null ? "" : regionCode.trim();
+        if (region.isBlank()) {
+            // 没有地区就取不到佣金比例,这单结算时会卡住 ——
+            // **与其那时候报错,不如发单时就拦**:那时候工人已经干完活了
+            throw new IllegalArgumentException("请选择地区");
+        }
+        Job job = jobs.save(Job.byIndividual(posterUserId, title.trim(),
+                description == null ? "" : description.trim(),
+                totalPriceCents, region, trimToNull(workAddress)));
+        // **个人单也要进撮合与下游。**不发事件的话它只存在于岗位表里,
+        // 求职端搜得到但报名之后的链路全是断的
+        JobPosted posted = new JobPosted(job.getId(), 0L, totalPriceCents, 1, Instant.now());
+        outbox.save(new JobOutboxEvent(java.util.UUID.randomUUID().toString(),
+                JobPosted.class.getName(), serialize(posted)));
+        LOG.info("个人发单:job={} 发单人={} 总价={}分 地区={}",
+                job.getId(), posterUserId, totalPriceCents, region);
+        return job.getId();
+    }
+
     private void requireLegalRep(long orgId, long callerUserId, String action) {
         ApprovedOrg org = approvedOrgs.findById(orgId)
                 .orElseThrow(() -> new IllegalStateException("组织未通过审核"));
@@ -145,7 +193,9 @@ class JobService implements JobApi {
     }
 
     private JobView toView(Job j) {
-        ApprovedOrg org = approvedOrgs.findById(j.getOrgId()).orElse(null);
+        // 个人发的单没有组织,不去查副本 —— 拿 null 当 id 查会 NPE
+        ApprovedOrg org = j.getOrgId() == null
+                ? null : approvedOrgs.findById(j.getOrgId()).orElse(null);
         return toView(j, org);
     }
 
@@ -154,7 +204,8 @@ class JobService implements JobApi {
                 j.getWageCents(), j.getStatus(), j.getHeadcount(), j.getFilledCount(),
                 org == null ? null : org.getName(),
                 org == null ? null : org.getAddress(),
-                j.getWorkAddress());
+                j.getWorkAddress(),
+                j.getPosterUserId(), j.getTotalPriceCents(), j.getRegionCode());
     }
 
     /**
@@ -166,8 +217,11 @@ class JobService implements JobApi {
             return List.of();
         }
         java.util.Map<Long, ApprovedOrg> byId = new java.util.HashMap<>();
-        approvedOrgs.findAllById(list.stream().map(Job::getOrgId).distinct().toList())
+        approvedOrgs.findAllById(list.stream().map(Job::getOrgId)
+                        .filter(java.util.Objects::nonNull).distinct().toList())
                 .forEach(o -> byId.put(o.getOrgId(), o));
-        return list.stream().map(j -> toView(j, byId.get(j.getOrgId()))).toList();
+        return list.stream()
+                .map(j -> toView(j, j.getOrgId() == null ? null : byId.get(j.getOrgId())))
+                .toList();
     }
 }

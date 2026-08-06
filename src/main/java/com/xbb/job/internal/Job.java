@@ -13,8 +13,36 @@ public class Job {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "org_id", nullable = false)
-    private long orgId;
+    /**
+     * 个人发单方。<b>和 org_id 恰好有一个非空</b>(数据库 CHECK 保证)。
+     *
+     * <p>不给个人造一个"个人组织" —— organization 上已经有一串针对企业的约束
+     * (信用代码、法人、审核状态),硬塞进去要么放宽那些约束、要么填假数据。
+     */
+    @Column(name = "poster_user_id")
+    private Long posterUserId;
+
+    /** 总价模式:发单方只填一个总数,员工价和佣金按比例算出来。 */
+    @Column(name = "total_price_cents")
+    private Long totalPriceCents;
+
+    /**
+     * 国标行政区划代码。佣金比例按「类目 + 地区」配。
+     * <b>必须是选出来的,不能从地址文本里解析</b> —— 解析错了不会报错,
+     * 只会静默套上另一个地区的比例。
+     */
+    @Column(name = "region_code", length = 6)
+    private String regionCode;
+
+
+    /**
+     * 用工单位。<b>个人发单时为 null</b> —— 和 posterUserId 恰好有一个非空。
+     *
+     * <p>类型从 {@code long} 改成 {@code Long}:原始类型没法表达"没有单位",
+     * 用 0 当哨兵的话,哪天真有 id=0 的组织就分不清了。
+     */
+    @Column(name = "org_id")
+    private Long orgId;
 
     @Column(nullable = false)
     private String title;
@@ -113,7 +141,8 @@ public class Job {
     }
 
     public Long getId() { return id; }
-    public long getOrgId() { return orgId; }
+    /** @return null 表示这是个人发的 */
+    public Long getOrgId() { return orgId; }
     public String getTitle() { return title; }
     public String getDescription() { return description; }
     public long getWageCents() { return wageCents; }
@@ -123,4 +152,27 @@ public class Job {
     public Instant getClosedAt() { return closedAt; }
     /** @return 可能为 null —— 展示层为空时退回单位地址 */
     public String getWorkAddress() { return workAddress; }
+    /** 个人发单。总价与地区必填,由数据库 CHECK 兜底。 */
+    static Job byIndividual(long posterUserId, String title, String description,
+                             long totalPriceCents, String regionCode, String workAddress) {
+        Job j = new Job();
+        j.posterUserId = posterUserId;
+        j.title = title;
+        j.description = description;
+        j.totalPriceCents = totalPriceCents;
+        j.regionCode = regionCode;
+        j.workAddress = workAddress;
+        // 总价模式下没有"单价"这个概念。**填 0 而不是留空** ——
+        // wage_cents 是 NOT NULL,而这一单的钱由总价决定
+        j.wageCents = 0;
+        j.headcount = 1;
+        return j;
+    }
+
+    /** @return null 表示这是单位发的 */
+    public Long getPosterUserId() { return posterUserId; }
+    /** @return null 表示不是总价模式 */
+    public Long getTotalPriceCents() { return totalPriceCents; }
+    /** @return null 表示没填地区 */
+    public String getRegionCode() { return regionCode; }
 }
