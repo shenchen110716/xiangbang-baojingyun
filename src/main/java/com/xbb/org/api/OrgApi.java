@@ -103,6 +103,18 @@ public interface OrgApi {
     List<OrgView> listByLegalRep(long legalRepUserId);
 
     /**
+     * 这个人是不是**任何一家已审核组织**的法人代表。
+     *
+     * <p>调用方要的只是这个布尔值。让它自己去 {@code listByLegalRep} 里筛
+     * {@code status == APPROVED} 的话,就得引用 {@code Organization.Status} ——
+     * 那是内部类型,ModularityTests 会拦(2026-08-07 审计时就撞上了)。
+     *
+     * <p><b>现查不缓存</b>(铁律 5):组织被驳回或法人换人之后,
+     * 原来那个人立刻就不该再有这个身份。
+     */
+    boolean isApprovedLegalRepOfAny(long userId);
+
+    /**
      * 待审核组织队列。要 {@link com.xbb.identity.api.Role#PLATFORM_OPS} ——
      * 这是平台的活儿,没有"归属"可查,只能靠角色(见铁律 5)。
      */

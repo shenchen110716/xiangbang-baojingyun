@@ -292,6 +292,13 @@ class OrgService implements OrgApi {
         return t.isEmpty() ? null : t;
     }
 
+    @Override
+    @Transactional(transactionManager = "orgTransactionManager", readOnly = true)
+    public boolean isApprovedLegalRepOfAny(long userId) {
+        return orgs.findByLegalRepUserIdOrderByIdDesc(userId).stream()
+                .anyMatch(o -> o.getStatus() == Organization.Status.APPROVED);
+    }
+
     private static OrgView toView(Organization o) {
         return new OrgView(o.getId(), o.getType(), o.getName(), o.getCreditCode(),
                 o.getLegalRepUserId(), o.getStatus(), o.getSubjectType(), o.getAddress());

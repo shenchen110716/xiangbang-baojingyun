@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.*;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -159,20 +160,55 @@ class ObjectAccessAuditTest {
                 new Probe("/api/agreement/" + appId,                       "别人的劳务协议正文"),
                 new Probe("/api/review/" + appId,                          "别人的评价", true),
                 new Probe("/api/org/" + orgId,                             "组织的信用代码与法人"),
-                new Probe("/api/fund/accounts/USER_FUNDS",                 "平台监管账户余额")
+                new Probe("/api/fund/accounts/USER_FUNDS",                 "平台监管账户余额"),
+
+                // ── 2026-08-07 审计补的。此前 36 个按编号取数的 GET 里
+                // 只有 11 个进了这张表 —— **体检没跟上新端点** ──
+                new Probe("/api/fund/accounts/org/" + orgId + "/USER_FUNDS", "别家单位的账户余额"),
+                new Probe("/api/fund/advances/org/" + orgId,               "别家单位批过的借支", true),
+                new Probe("/api/fund/payouts/org/" + orgId,                "别家单位要付的代发单", true),
+                new Probe("/api/fund/advances/worker/" + worker.userId(),  "别人欠了多少钱", true),
+                new Probe("/api/attendance/application/" + appId,          "别人的考勤", true),
+                new Probe("/api/attendance/application/" + appId + "/summary", "别人的工时汇总"),
+                new Probe("/api/settlement/job/" + jobId + "/pay-plans",   "别家的计薪方案", true),
+                new Probe("/api/settlement/job/" + jobId + "/pay-plan/active", "别家生效中的计薪方案"),
+                new Probe("/api/engagement/job/" + jobId + "/applicants",  "别家岗位的应聘者名单", true),
+                new Probe("/api/talent/" + worker.userId(),                "别人的人才档案"),
+                new Probe("/api/broker/rates/" + orgId,                    "别家服务站的分成比例", true),
+                new Probe("/api/broker/schemes/" + orgId,                  "别家服务站的分配方案", true),
+                new Probe("/api/broker/joints/station/" + orgId,           "别家服务站的联合关系", true),
+                new Probe("/api/broker/cooperations/org/" + orgId,         "别家服务站的合作关系", true),
+                new Probe("/api/org/stations/" + orgId + "/master-changes","别家服务站的站长变更史", true),
+                new Probe("/api/profile/jobs/" + jobId,                    "别家岗位的画像")
         );
 
         List<String> leaks = new ArrayList<>();
+        List<String> nonConforming = new ArrayList<>();
         for (Probe p : probes) {
             var r = get(p.path(), outsider.token());
             String body = r.getBody() == null ? "" : r.getBody().trim();
-            boolean leaked = p.list()
-                    ? !body.equals("[]")                    // 列表:必须空
-                    : r.getStatusCode().is2xxSuccessful();  // 单对象:必须查不到
+            // **区分两件事**:
+            //  ① 真泄露 —— 2xx 且带着数据。必须修。
+            //  ② 挡住了,但状态码不合铁律 5.1(不可见该回 404 / 空列表)。
+            //     不是泄露,但那句"只有组织法人代表可以…"**确认了这个编号存在**,
+            //     顺着编号一个个试就能摸清哪些 id 是真的。
+            boolean blocked = !r.getStatusCode().is2xxSuccessful();
+            boolean leaked = blocked ? false
+                    : (p.list() ? !body.equals("[]") : true);
             if (leaked) {
                 leaks.add(p.what() + "  ←  " + p.path() + "  返回 " + r.getStatusCode()
                         + "  " + preview(r.getBody()));
+            } else if (blocked && !r.getStatusCode().equals(HttpStatus.NOT_FOUND)) {
+                nonConforming.add(p.what() + "  ←  " + p.path() + "  返回 " + r.getStatusCode());
             }
+        }
+
+        // 状态码不一致的单独打出来,**不让它把这条测试染红** ——
+        // 它们没泄露数据,而永远红的测试最后只会被人忽略。
+        // 要不要统一成 404 是产品决定(2026-08-07 审计提出,待拍板)。
+        if (!nonConforming.isEmpty()) {
+            System.out.println("【审计】挡住了但状态码不合铁律 5.1(该 404):");
+            nonConforming.forEach(x -> System.out.println("    " + x));
         }
 
         assertThat(leaks)

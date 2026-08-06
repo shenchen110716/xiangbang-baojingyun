@@ -22,16 +22,28 @@ class TalentService implements TalentApi {
 
     /** 候选池上限,理由同匹配域:标签命中还在内存里算,只有它能挡住"一次检索扫全表"。 */
     private final int poolLimit;
+    /** 判断能不能翻人才库。**现查不缓存**(铁律 5)。 */
+    private final com.xbb.identity.api.IdentityApi identityApi;
+    private final com.xbb.org.api.OrgApi orgApi;
+
 
     TalentService(TalentProfileRepository profiles,
+                   com.xbb.identity.api.IdentityApi identityApi,
+                   com.xbb.org.api.OrgApi orgApi,
                    @Value("${xbb.talent.candidate-pool-limit:1000}") int poolLimit) {
+        this.identityApi = identityApi;
+        this.orgApi = orgApi;
         this.profiles = profiles;
         this.poolLimit = poolLimit;
     }
 
     @Override
     @Transactional(transactionManager = "talentTransactionManager", readOnly = true)
-    public List<TalentView> search(List<String> tags, int limit) {
+    public List<TalentView> search(List<String> tags, int limit, long callerUserId) {
+        if (!mayBrowse(callerUserId)) {
+            // 列表接口挡住无关的人时回空列表(铁律 5.1)
+            return List.of();
+        }
         if (tags == null || tags.isEmpty() || limit <= 0) return List.of();
         return candidatePool().stream()
                 .map(p -> toView(p, (int) tags.stream().filter(t -> p.getTags().containsKey(t)).count()))
@@ -67,12 +79,33 @@ class TalentService implements TalentApi {
 
     @Override
     @Transactional(transactionManager = "talentTransactionManager", readOnly = true)
-    public Optional<TalentView> findTalent(long userId) {
+    public Optional<TalentView> findTalent(long userId, long callerUserId) {
+        // 本人当然看得到自己
+        if (userId != callerUserId && !mayBrowse(callerUserId)) {
+            // 不可见就当不存在 —— 控制器把 empty 转成 404(铁律 5.1)
+            return Optional.empty();
+        }
         return profiles.findById(userId).map(p -> toView(p, 0));
     }
 
     private static TalentView toView(TalentProfile p, int matchedTagCount) {
         return new TalentView(p.getUserId(), p.getTags(), p.getExpectedWageCents(),
                 p.getCompletedEngagements(), p.getLastActiveAt(), matchedTagCount);
+    }
+
+    /**
+     * 谁能翻人才库:<b>平台运维,或任一已审核组织的法人代表</b>。
+     *
+     * <p>人才库是给用工方找人的,不是公开名录。此前**谁都能翻** ——
+     * 任何注册用户按编号就能拿到别人的期望薪资、履约次数、最近活跃,
+     * 而且可以顺着编号把整个工人库扒下来。2026-08-07 审计发现。
+     *
+     * <p>归属现查不缓存(铁律 5):组织被驳回或法人换人之后,原来那个人就不该再翻得动。
+     */
+    private boolean mayBrowse(long callerUserId) {
+        if (identityApi.hasRole(callerUserId, com.xbb.identity.api.Role.PLATFORM_OPS)) {
+            return true;
+        }
+        return orgApi.isApprovedLegalRepOfAny(callerUserId);
     }
 }

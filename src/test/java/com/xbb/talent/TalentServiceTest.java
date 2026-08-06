@@ -67,8 +67,8 @@ class TalentServiceTest {
 
         profileApi.submitTags(userId, List.of("叉车", "质检"));
 
-        await().atMost(Duration.ofSeconds(15)).until(() -> talentApi.findTalent(userId).isPresent());
-        TalentApi.TalentView view = talentApi.findTalent(userId).orElseThrow();
+        await().atMost(Duration.ofSeconds(15)).until(() -> talentApi.findTalent(userId, ops.userId()).isPresent());
+        TalentApi.TalentView view = talentApi.findTalent(userId, ops.userId()).orElseThrow();
         assertThat(view.tags()).containsOnlyKeys("叉车", "质检");
     }
 
@@ -76,9 +76,9 @@ class TalentServiceTest {
     void 按标签检索命中() {
         long userId = registeredUser("16000000002");
         profileApi.submitTags(userId, List.of("焊工"));
-        await().atMost(Duration.ofSeconds(15)).until(() -> talentApi.findTalent(userId).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> talentApi.findTalent(userId, ops.userId()).isPresent());
 
-        List<TalentApi.TalentView> found = talentApi.search(List.of("焊工"), 20);
+        List<TalentApi.TalentView> found = talentApi.search(List.of("焊工"), 20, ops.userId());
 
         assertThat(found).extracting(TalentApi.TalentView::userId).contains(userId);
     }
@@ -90,9 +90,9 @@ class TalentServiceTest {
         long oneTag = registeredUser("16000000004");
         profileApi.submitTags(oneTag, List.of("电工"));
         await().atMost(Duration.ofSeconds(15)).until(() ->
-                talentApi.findTalent(twoTags).isPresent() && talentApi.findTalent(oneTag).isPresent());
+                talentApi.findTalent(twoTags, ops.userId()).isPresent() && talentApi.findTalent(oneTag, ops.userId()).isPresent());
 
-        List<TalentApi.TalentView> found = talentApi.search(List.of("电工", "注塑"), 20);
+        List<TalentApi.TalentView> found = talentApi.search(List.of("电工", "注塑"), 20, ops.userId());
 
         assertThat(found.get(0).userId()).isEqualTo(twoTags);
         assertThat(found.get(0).matchedTagCount()).isEqualTo(2);
@@ -100,7 +100,7 @@ class TalentServiceTest {
 
     @Test
     void 检索不存在的标签返回空() {
-        assertThat(talentApi.search(List.of("保安"), 20))
+        assertThat(talentApi.search(List.of("保安"), 20, ops.userId()))
                 .extracting(TalentApi.TalentView::userId)
                 .doesNotContain(-1L);   // 只要不炸即可,标签没人有就应为空或不含该人
     }
@@ -135,14 +135,14 @@ class TalentServiceTest {
                 engagementApi.completeApplication(applicationId, legalRep));
 
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                assertThat(talentApi.findTalent(worker).orElseThrow().completedEngagements())
+                assertThat(talentApi.findTalent(worker, ops.userId()).orElseThrow().completedEngagements())
                         .withFailMessage("本单 applicationId=%s;该工人被计入的履约单=%s",
                                 applicationId,
                                 counted.findAll().stream()
                                         .filter(c -> c.getUserId() == worker)
                                         .map(c -> String.valueOf(c.getApplicationId())).toList())
                         .isEqualTo(1));
-        assertThat(talentApi.findTalent(worker).orElseThrow().lastActiveAt()).isNotNull();
+        assertThat(talentApi.findTalent(worker, ops.userId()).orElseThrow().lastActiveAt()).isNotNull();
     }
 
     @Test
@@ -153,7 +153,7 @@ class TalentServiceTest {
         long fresh = registeredUser("16000000008");
         profileApi.submitTags(fresh, List.of("仓管"));
         await().atMost(Duration.ofSeconds(15)).until(() ->
-                talentApi.findTalent(experienced).isPresent() && talentApi.findTalent(fresh).isPresent());
+                talentApi.findTalent(experienced, ops.userId()).isPresent() && talentApi.findTalent(fresh, ops.userId()).isPresent());
 
         // 给 experienced 造一次真实的履约完成
         long legalRep = verifiedUser("16000000009", "法人仓管", "110101199001026009");
@@ -179,10 +179,10 @@ class TalentServiceTest {
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 engagementApi.completeApplication(appHolder.get(), legalRep));
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                assertThat(talentApi.findTalent(experienced).orElseThrow().completedEngagements())
+                assertThat(talentApi.findTalent(experienced, ops.userId()).orElseThrow().completedEngagements())
                         .isGreaterThan(0));
 
-        List<TalentApi.TalentView> found = talentApi.search(List.of("仓管"), 20);
+        List<TalentApi.TalentView> found = talentApi.search(List.of("仓管"), 20, ops.userId());
 
         int expIdx = indexOf(found, experienced);
         int freshIdx = indexOf(found, fresh);
@@ -206,14 +206,14 @@ class TalentServiceTest {
 
         events.publishEvent(EngagementCompleted.of(
                 applicationId, 9_700_201L, worker, 9_700_301L, 30_000, java.time.Instant.now()));
-        int afterFirst = talentApi.findTalent(worker).orElseThrow().completedEngagements();
+        int afterFirst = talentApi.findTalent(worker, ops.userId()).orElseThrow().completedEngagements();
 
         // 换一个 eventId 重发同一单,模拟中继重投
         events.publishEvent(EngagementCompleted.of(
                 applicationId, 9_700_201L, worker, 9_700_301L, 30_000, java.time.Instant.now()));
 
         assertThat(afterFirst).isEqualTo(1);
-        assertThat(talentApi.findTalent(worker).orElseThrow().completedEngagements()).isEqualTo(1);
+        assertThat(talentApi.findTalent(worker, ops.userId()).orElseThrow().completedEngagements()).isEqualTo(1);
     }
 
     /**

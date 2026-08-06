@@ -2,6 +2,7 @@ package com.xbb.talent.internal;
 
 import com.xbb.talent.api.TalentApi;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,13 +19,15 @@ class TalentController {
 
     @GetMapping("/search")
     ResponseEntity<List<TalentApi.TalentView>> search(@RequestParam List<String> tags,
-                                                        @RequestParam(defaultValue = "20") int limit) {
-        return ResponseEntity.ok(talentApi.search(tags, limit));
+                                                        @RequestParam(defaultValue = "20") int limit,
+                                                        @AuthenticationPrincipal com.xbb.security.AuthenticatedUser caller) {
+        return ResponseEntity.ok(talentApi.search(tags, limit, caller.userId()));
     }
 
     @GetMapping("/{userId}")
-    ResponseEntity<TalentApi.TalentView> get(@PathVariable long userId) {
-        return talentApi.findTalent(userId).map(ResponseEntity::ok)
+    ResponseEntity<TalentApi.TalentView> get(@PathVariable long userId,
+                                              @AuthenticationPrincipal com.xbb.security.AuthenticatedUser caller) {
+        return talentApi.findTalent(userId, caller.userId()).map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }

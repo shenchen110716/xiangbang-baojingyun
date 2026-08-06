@@ -37,7 +37,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 会把同类用例互相挤出候选池,那种失败极难排查。
  */
 @SpringBootTest(properties = "xbb.talent.candidate-pool-limit=2")
-@Import({TestcontainersConfig.class, TestCodeAccessor.class})
+@Import({TestcontainersConfig.class, TestCodeAccessor.class,
+        com.xbb.identity.TestPlatformOps.class})
 class TalentPoolLimitTest {
 
     @DynamicPropertySource
@@ -48,6 +49,11 @@ class TalentPoolLimitTest {
     private static final String TAG = "限流专用标签";
 
     @Autowired TalentApi talentApi;
+    /**
+     * 翻人才库要有用工方或平台身份(2026-08-07 审计加的)。
+     * <b>此前谁都能翻</b> —— 任何注册用户按编号就能扒别人的期望薪资和履约记录。
+     */
+    @Autowired com.xbb.identity.TestPlatformOps.Accessor ops;
     @Autowired TalentProfileRepository profiles;
 
     private ListAppender<ILoggingEvent> logs;
@@ -93,7 +99,7 @@ class TalentPoolLimitTest {
         seedProfile(9_310_002L, 899);
         seedProfile(9_310_003L, 898);
 
-        List<TalentApi.TalentView> found = talentApi.search(List.of(TAG), 10);
+        List<TalentApi.TalentView> found = talentApi.search(List.of(TAG), 10, ops.userId());
 
         // 上限 2:第三个人标签明明命中,也进不了候选池
         assertThat(found).extracting(TalentApi.TalentView::userId)
@@ -114,7 +120,7 @@ class TalentPoolLimitTest {
         seedProfile(9_310_012L, 919);
         seedProfile(9_310_013L, 900);
 
-        assertThat(talentApi.search(List.of(TAG), 10))
+        assertThat(talentApi.search(List.of(TAG), 10, ops.userId()))
                 .extracting(TalentApi.TalentView::userId)
                 .doesNotContain(9_310_013L);
 
@@ -124,7 +130,7 @@ class TalentPoolLimitTest {
         }
         profiles.save(promoted);
 
-        assertThat(talentApi.search(List.of(TAG), 10))
+        assertThat(talentApi.search(List.of(TAG), 10, ops.userId()))
                 .extracting(TalentApi.TalentView::userId)
                 .startsWith(9_310_013L);
     }

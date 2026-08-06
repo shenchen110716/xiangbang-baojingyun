@@ -118,8 +118,11 @@ class JobService implements JobApi {
                                      long totalPriceCents, String regionCode, String workAddress,
                                      long workerCents, long commissionCents,
                                      long dispatchRetainCents, Long dispatchOrgId) {
-        // **现查身份域,不用副本。**job.verified_user 那张表存在但没有任何代码
-        // 在维护它 —— 靠它判断的话,任何人都能发单
+        // **现查身份域,不用副本。**岗位域没有已实名用户的副本 ——
+        // job.verified_user 那张表在 V3 就被删了。
+        //
+        // (我第一次把理由写成"表存在但没人维护",**那是错的**;
+        //  2026-08-07 审计时核对迁移才发现。结论没变,理由改对。)
         // **findVerifiedUser 名不副实:它返回任何用户,实名与否在 verified 字段里。**
         // 只判 isEmpty 的话未实名的人照样能发单 —— 我第一版就是这么写的,
         // 测试当场抓住了
