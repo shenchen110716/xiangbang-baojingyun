@@ -34,6 +34,8 @@ class FundService implements FundApi {
     private final FundOutboxRepository outbox;
     private final ObjectMapper json;
     private final IdentityApi identityApi;
+    /** 判断"这个人是不是这家单位的法人代表"。**现查不缓存**(铁律 5)。 */
+    private final com.xbb.org.api.OrgApi orgApi;
     /** 自身代理:三段式里每一段都要各自的事务边界,自调用会绕过代理。 */
     private final ObjectProvider<FundService> self;
 
@@ -42,6 +44,7 @@ class FundService implements FundApi {
                  GuaranteePolicy guaranteePolicy, WorkerCreditRepository credits,
                  FundOutboxRepository outbox, ObjectMapper json,
                        IdentityApi identityApi,
+                 com.xbb.org.api.OrgApi orgApi,
                  ObjectProvider<FundService> self) {
         this.payouts = payouts;
         this.disbursements = disbursements;
@@ -52,6 +55,7 @@ class FundService implements FundApi {
         this.outbox = outbox;
         this.json = json;
         this.identityApi = identityApi;
+        this.orgApi = orgApi;
         this.self = self;
     }
 
@@ -238,6 +242,54 @@ class FundService implements FundApi {
     public long balanceOf(AccountType accountType, long callerUserId) {
         requirePlatformOps(callerUserId);
         return escrow.balanceOf(accountType);
+    }
+
+    @Override
+    @Transactional("fundTransactionManager")
+    public void topUpOrg(Long orgId, AccountType accountType, long amountCents, String reason,
+                          String idempotencyKey, long callerUserId) {
+        requireCanOperate(orgId, callerUserId, "给账户入账");
+        if (amountCents <= 0) {
+            throw new IllegalArgumentException("入账金额必须为正");
+        }
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            // 充值重发一次就多一笔钱。幂等键是唯一能拦住的东西
+            throw new IllegalArgumentException("入账必须带幂等键");
+        }
+        log.info("账户入账:单位={} 账户={} 金额={}分 事由={} 幂等键={} 操作人={}",
+                orgId == null ? "平台" : orgId, accountType, amountCents,
+                reason, idempotencyKey, callerUserId);
+        escrow.credit(orgId, accountType, amountCents, reason, idempotencyKey);
+    }
+
+    @Override
+    @Transactional(transactionManager = "fundTransactionManager", readOnly = true)
+    public long orgBalanceOf(Long orgId, AccountType accountType, long callerUserId) {
+        requireCanOperate(orgId, callerUserId, "查看账户余额");
+        return escrow.balanceOf(orgId, accountType);
+    }
+
+    /**
+     * 能不能动这个账户:这家单位的法人代表,或平台运维。
+     *
+     * <p><b>平台账户(orgId 为 null)只有平台运维能动。</b>
+     *
+     * <p>归属**现查不缓存**(铁律 5)。换了法人代表之后,旧的那个人
+     * 不该还能从这家单位账上把钱发出去。
+     */
+    private void requireCanOperate(Long orgId, long callerUserId, String what) {
+        if (orgId == null) {
+            requirePlatformOps(callerUserId);
+            return;
+        }
+        if (orgApi.isLegalRepOf(orgId, callerUserId)
+                || identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            return;
+        }
+        // 往别人账户里打钱看着像做好事,但那笔钱随后会被用来发薪,
+        // 等于替别人承担了用工责任
+        throw new org.springframework.security.access.AccessDeniedException(
+                "只有单位 #" + orgId + " 的法人代表或平台运维可以" + what);
     }
 
     @Override

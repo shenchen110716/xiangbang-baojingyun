@@ -81,4 +81,36 @@ class TotalPricePlanTest {
         }
         assertThat(RegionScope.candidates(null)).containsExactly((String) null);
     }
+
+    // ─────────────── 老板 2026-08-06 给的个人发单公式 ───────────────
+
+    @Test
+    void 四段加起来正好等于总价_一分不多一分不少() {
+        // 老板的写法:
+        //   员工价 = 总价 × (1 − 佣金比例)
+        //   佣金   = 总价 × 佣金比例 × (1 − 派遣留存比例)
+        // 和这里的模型是同一个,只是他把员工价显式写了出来。
+        //
+        // **这条守的是那个恒等式。**员工价、派遣留存、服务站佣金三段
+        // 加起来必须正好是总价 —— 差一分就是有一分钱没有归属,
+        // 而对账时没人认领的钱最难查。
+        for (long total : new long[] {100_000, 3_333, 1, 999_999, 7}) {
+            for (int c : new int[] {0, 3, 10, 33, 100}) {
+                for (int d : new int[] {0, 7, 30, 100}) {
+                    var p = TotalPricePlan.of(total, c, d);
+                    assertThat(p.workerCents() + p.dispatchRetainCents() + p.stationPoolCents())
+                            .as("总价 %d 佣金%d%% 留存%d%%".formatted(total, c, d))
+                            .isEqualTo(total);
+                }
+            }
+        }
+    }
+
+    @Test
+    void 员工价就是总价减佣金总额() {
+        var p = TotalPricePlan.of(100_000, 10, 30);
+        assertThat(p.workerCents()).isEqualTo(90_000);
+        assertThat(p.stationPoolCents()).isEqualTo(7_000);
+        assertThat(p.dispatchRetainCents()).isEqualTo(3_000);
+    }
 }

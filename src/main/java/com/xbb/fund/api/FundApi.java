@@ -51,6 +51,26 @@ public interface FundApi {
     /** 监管账户余额。**要平台运维** —— 这是平台自己的钱,不是谁都能看的。 */
     long balanceOf(AccountType accountType, long callerUserId);
 
+    /**
+     * 给**某家单位**的账户入账。老板 2026-08-06 选了乙:机构自己充值、自己发薪。
+     *
+     * <p>谁能充:这家单位的法人代表,或平台运维。
+     * <b>别人充不了</b> —— 往别人账户里打钱看着像做好事,
+     * 但那笔钱随后会被用来发薪,等于替别人承担了用工责任。
+     *
+     * @param orgId null 表示平台自己的账户
+     */
+    void topUpOrg(Long orgId, AccountType accountType, long amountCents, String reason,
+                    String idempotencyKey, long callerUserId);
+
+    /**
+     * 某家单位的账户余额。
+     *
+     * <p>谁能看:这家单位的法人代表,或平台运维。
+     * <b>余额是经营信息</b>,路人看得到的话等于把这家单位的资金状况公开了(铁律 5.1)。
+     */
+    long orgBalanceOf(Long orgId, AccountType accountType, long callerUserId);
+
     /** 域内/跨域在进程内取余额,不经过 HTTP,因而不做角色校验。**不要把它接到控制器上。** */
     long balanceOf(AccountType accountType);
 
