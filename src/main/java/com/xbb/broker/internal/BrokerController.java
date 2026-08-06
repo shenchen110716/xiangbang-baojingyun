@@ -180,6 +180,34 @@ class BrokerController {
     }
 
     /** 平台默认那几档。**排在 /rates/{orgId} 之前**,否则 "defaults" 会被当成路径变量。 */
+    record CommissionRateRequest(
+            @jakarta.validation.constraints.NotBlank(message = "请选择业务类目") String category,
+            /** 国标行政区划代码。**留空 = 全国兜底。** */
+            String regionCode,
+            int commissionPct, int dispatchRetainPct,
+            /** 收留存的派遣公司。留了比例就必须指定,否则那笔钱挂不到任何收款方。 */
+            Long dispatchOrgId,
+            @jakarta.validation.constraints.NotBlank(message = "请填写调整原因") String reason) { }
+
+    /**
+     * 配总价模式的佣金比例(类目 + 地区)。
+     *
+     * <p><b>改比例只影响之后发的单</b> —— 已发出的单在发单时就把分账定死了。
+     */
+    @PutMapping("/commission-rates")
+    ResponseEntity<Void> setCommissionRate(@RequestBody @jakarta.validation.Valid CommissionRateRequest req,
+                                            @AuthenticationPrincipal AuthenticatedUser caller) {
+        brokerApi.setCommissionRate(req.category(), req.regionCode(), req.commissionPct(),
+                req.dispatchRetainPct(), req.dispatchOrgId(), req.reason(), caller.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/commission-rates")
+    ResponseEntity<java.util.List<BrokerApi.CommissionRateView>> listCommissionRates(
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        return ResponseEntity.ok(brokerApi.listCommissionRates(caller.userId()));
+    }
+
     @GetMapping("/rates/defaults")
     ResponseEntity<java.util.List<BrokerApi.StationRateView>> defaultRates(
             @AuthenticationPrincipal AuthenticatedUser caller) {

@@ -102,7 +102,7 @@ async function runDemotion() {
 
 const CHANGE_TYPE: Record<string, string> = { STATION: '服务站', PARENT: '上级', STATUS: '状态' }
 const inStation = (orgId: number) => brokers.value.filter(b => b.stationOrgId === orgId)
-onMounted(() => { load(); loadDefaults(); loadDefaultStation(); loadDefaultSchemes() })
+onMounted(() => { load(); loadDefaults(); loadDefaultStation(); loadDefaultSchemes(); loadRatesByRegion() })
 
 /** 联合关系(老系统 M10 §3.4)。展开某个站时才拉,免得一进页面就打一串请求。 */
 /**
@@ -268,6 +268,41 @@ const zhCategory = (v: string) => CATEGORIES.find(c => c.v === v)?.label ?? v
  */
 const schemesOf = ref<Record<number, any[]>>({})
 const defaultSchemes = ref<any[]>([])
+
+/** 总价模式的佣金比例(类目 + 地区)。**这是分配方案的上一层。** */
+const rates = ref<any[]>([])
+const rateForm = ref({
+  category: 'JOB', regionCode: '', commissionPct: '10',
+  dispatchRetainPct: '0', dispatchOrgId: '', reason: '',
+})
+
+async function loadRatesByRegion() {
+  try { rates.value = await api('/api/broker/commission-rates') }
+  catch (e: any) { err.value = e.message }
+}
+
+async function saveRate() {
+  const f = rateForm.value
+  if (!f.reason.trim()) { err.value = '请填写调整原因'; return }
+  if (Number(f.dispatchRetainPct) > 0 && !f.dispatchOrgId) {
+    // 那笔钱从佣金池里扣掉却挂不到任何收款方 —— 对账时是个凭空消失的窟窿
+    err.value = '留了派遣比例就必须指定收款的派遣公司'; return
+  }
+  msg.value = ''; err.value = ''; busy.value = 'rate'
+  try {
+    await api('/api/broker/commission-rates', { method: 'PUT', body: {
+      category: f.category,
+      regionCode: f.regionCode.trim() || null,
+      commissionPct: Number(f.commissionPct),
+      dispatchRetainPct: Number(f.dispatchRetainPct),
+      dispatchOrgId: f.dispatchOrgId ? Number(f.dispatchOrgId) : null,
+      reason: f.reason.trim() } })
+    msg.value = `${zhCategory(f.category)} · ${f.regionCode.trim() || '全国'} 的佣金比例已更新`
+    f.reason = ''
+    await loadRatesByRegion()
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
 const schemeForm = ref({
   category: 'JOB', activePct: '60', platformPct: '20', passivePct: '30',
   stationPct: '50', passiveStepPct: '30', minPayoutYuan: '1', reason: '',
@@ -546,6 +581,66 @@ async function revokeOperator(coopId: number, userId: number) {
         </tr>
       </tbody>
     </table>
+  </div>
+
+  <div class="card">
+    <h3>总价模式的佣金比例（类目 + 地区）</h3>
+    <p class="hint">
+      <b>这是下面那套方案的上一层。</b>它决定「总价里有多少进佣金池、派遣公司先拿走多少」；
+      下面那套决定「剩下的池子在业务员／上级／平台／服务站之间怎么分」。
+      <br>
+      <b>改比例只影响之后发的单</b>——已发出的单在发单时就把价钱定死了，
+      工人是看着那个数接的。
+    </p>
+
+    <div v-if="!rates.length" class="empty" style="padding:8px 0">
+      还没配过。<b>没配的地区发不了总价单</b>——发单时会被直接拦下，
+      而不是发出一张结算时才卡住的单。
+    </div>
+    <table v-else style="margin-bottom:12px">
+      <thead><tr><th style="width:90px">类目</th><th style="width:120px">地区</th>
+                 <th style="width:100px">佣金比例</th><th style="width:110px">派遣留存</th>
+                 <th>派遣公司</th></tr></thead>
+      <tbody>
+        <tr v-for="r in rates" :key="r.category + (r.regionCode || '')">
+          <td>{{ zhCategory(r.category) }}</td>
+          <td>{{ r.regionCode || '全国' }}</td>
+          <td>{{ r.commissionPct }}%</td>
+          <td>{{ r.dispatchRetainPct }}%</td>
+          <td>{{ r.dispatchOrgId ? '#' + r.dispatchOrgId : '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="row">
+      <div class="field" style="flex:0 0 120px"><label>类目</label>
+        <select v-model="rateForm.category">
+          <option v-for="c in CATEGORIES" :key="c.v" :value="c.v">{{ c.label }}</option>
+        </select>
+      </div>
+      <div class="field" style="flex:0 0 180px"><label>地区代码（留空=全国）</label>
+        <input v-model="rateForm.regionCode" placeholder="如：320506" /></div>
+      <div class="field" style="flex:0 0 130px"><label>佣金比例 %</label>
+        <input v-model="rateForm.commissionPct" /></div>
+      <div class="field" style="flex:0 0 130px"><label>派遣留存 %</label>
+        <input v-model="rateForm.dispatchRetainPct" /></div>
+      <div class="field" style="flex:0 0 160px"><label>派遣公司编号</label>
+        <input v-model="rateForm.dispatchOrgId" placeholder="留存>0 时必填" /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>调整原因<span style="color:var(--bad)">*</span></label>
+        <input v-model="rateForm.reason" placeholder="必填，事后查得到是谁改的" /></div>
+      <button style="align-self:flex-end"
+              :disabled="!rateForm.reason.trim() || busy === 'rate'"
+              @click="saveRate">保存</button>
+    </div>
+    <p class="hint" style="margin-bottom:0">
+      <b>地区用国标行政区划代码</b>，取数从细到粗：区县 → 市 → 省 → 全国，先配到的赢。
+      所以配一条「全国」兜底就不会有地区取不到比例。
+      <br>
+      <b>留了派遣比例就必须指定派遣公司</b>——否则那笔钱从佣金池里扣掉了、
+      却挂不到任何收款方，对账时是个凭空消失的窟窿，而且要等月底才看得见。
+    </p>
   </div>
 
   <div class="card">

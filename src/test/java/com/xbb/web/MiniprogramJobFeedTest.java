@@ -146,4 +146,54 @@ class MiniprogramJobFeedTest {
                 .as("匿名发岗必须挡住")
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
+
+    /**
+     * 个人发单那条链路,**走真实 HTTP**:配比例 → 发单 → 出现在岗位列表里。
+     *
+     * <p>为什么要走 HTTP:服务层的测试证明不了端点注册了、请求体字段名对得上。
+     * 这个项目里「后端写了但接不上」已经出现过五次。
+     */
+    @Test
+    void 配比例到个人发单_走真实HTTP() {
+        String opsPhone = com.xbb.identity.TestPlatformOps.Accessor.PHONE;
+        ops.userId();
+        String adminToken = identityApi.loginByPhone(opsPhone, codes.issue(opsPhone)).token();
+
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.APPLICATION_JSON);
+        h.setBearerAuth(adminToken);
+
+        // ① 平台配比例
+        ResponseEntity<String> set = rest.exchange(url("/api/broker/commission-rates"),
+                HttpMethod.PUT,
+                new HttpEntity<>("""
+                        {"category":"JOB","regionCode":"350100","commissionPct":10,
+                         "dispatchRetainPct":0,"dispatchOrgId":null,"reason":"端到端"}""", h),
+                String.class);
+        assertThat(set.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        // ② 个人发单
+        String phone = "13003000004";
+        long poster = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
+        identityApi.verifyRealName(poster, "个人发单人", "110101199001100004");
+        String posterToken = identityApi.loginByPhone(phone, codes.issue(phone)).token();
+
+        HttpHeaders ph = new HttpHeaders();
+        ph.setContentType(MediaType.APPLICATION_JSON);
+        ph.setBearerAuth(posterToken);
+        ResponseEntity<String> posted = rest.exchange(url("/api/job/individual"), HttpMethod.POST,
+                new HttpEntity<>("""
+                        {"title":"HTTP个人单","description":"搬家","totalPriceCents":100000,
+                         "regionCode":"350100","workAddress":"福州市鼓楼区"}""", ph),
+                String.class);
+        assertThat(posted.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // ③ 出现在公开岗位列表里,**员工价是 900 不是 1000**
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
+            String body = get("/api/job/open?limit=100", null).getBody();
+            assertThat(body).contains("\"title\":\"HTTP个人单\"");
+            assertThat(body).contains("\"workerCents\":90000");
+            assertThat(body).contains("\"totalPriceCents\":100000");
+        });
+    }
 }
