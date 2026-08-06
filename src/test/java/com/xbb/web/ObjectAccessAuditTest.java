@@ -130,10 +130,14 @@ class ObjectAccessAuditTest {
         long settlementId = await().atMost(Duration.ofSeconds(25))
                 .until(() -> settlements.findByApplicationId(appId).map(s -> s.getId()).orElse(null),
                         java.util.Objects::nonNull);
-        fundApi.topUp(AccountType.USER_FUNDS, 5_000_000, "体检备资");
-        long payoutId = await().atMost(Duration.ofSeconds(25))
-                .until(() -> fundApi.findBySettlementId(settlementId).map(p -> p.id()).orElse(null),
+        var payout = await().atMost(Duration.ofSeconds(25))
+                .until(() -> fundApi.findBySettlementId(settlementId).orElse(null),
                         java.util.Objects::nonNull);
+        long payoutId = payout.id();
+        // **出资单位从代发单上读。**按单位分账之后企业的薪水必须从企业自己的账户出,
+        // 充平台账户没用;而传错单位会以"余额不足"的形式报出来,看着像备资不够
+        fundApi.topUpOrg(payout.orgId(), AccountType.USER_FUNDS, 5_000_000,
+                "体检备资", "audit-topup-" + payoutId, ops.userId());
         fundApi.disburse(payoutId, ops.userId());
         long commissionId = await().atMost(Duration.ofSeconds(25))
                 .until(() -> commissions.findAllBySettlementId(settlementId).stream()
@@ -218,10 +222,14 @@ class ObjectAccessAuditTest {
         long settlementId = await().atMost(Duration.ofSeconds(25))
                 .until(() -> settlements.findByApplicationId(appId).map(s -> s.getId()).orElse(null),
                         java.util.Objects::nonNull);
-        fundApi.topUp(AccountType.USER_FUNDS, 5_000_000, "正主备资");
-        long payoutId = await().atMost(Duration.ofSeconds(25))
-                .until(() -> fundApi.findBySettlementId(settlementId).map(p -> p.id()).orElse(null),
+        var payout = await().atMost(Duration.ofSeconds(25))
+                .until(() -> fundApi.findBySettlementId(settlementId).orElse(null),
                         java.util.Objects::nonNull);
+        long payoutId = payout.id();
+        // **出资单位从代发单上读。**按单位分账之后企业的薪水必须从企业自己的账户出,
+        // 充平台账户没用;而传错单位会以"余额不足"的形式报出来,看着像备资不够
+        fundApi.topUpOrg(payout.orgId(), AccountType.USER_FUNDS, 5_000_000,
+                "体检备资", "audit-topup-" + payoutId, ops.userId());
         fundApi.disburse(payoutId, ops.userId());
         long commissionId = await().atMost(Duration.ofSeconds(25))
                 .until(() -> commissions.findAllBySettlementId(settlementId).stream()

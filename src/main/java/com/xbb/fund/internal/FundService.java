@@ -121,13 +121,21 @@ class FundService implements FundApi {
     public Disbursement reserveForDisbursement(long payoutId) {
         Payout payout = payouts.findById(payoutId)
                 .orElseThrow(() -> new IllegalArgumentException("发放记录不存在"));
+        // **状态检查排在动钱之前。**原来它在 Payout.markPaid 里,也就是扣完款才拦 ——
+        // 事务会回滚所以不会丢钱,但报出来的是扣款那一步的错(比如"余额不足"),
+        // 而真正的原因是"这笔已作废"。运营照着"余额不足"去备资,备完还是发不出去
+        if (payout.getStatus() == Payout.Status.CANCELLED) {
+            throw new IllegalStateException("该结算已作废,不能发放");
+        }
         Optional<Disbursement> existing = disbursements.findByPayoutId(payoutId);
         if (existing.isPresent() && existing.get().getStatus() == Disbursement.Status.SUCCESS) {
             return null;
         }
         Disbursement disbursement = existing.orElseGet(() -> disbursements.save(new Disbursement(
                 payoutId, payout.getPayeeUserId(), payout.getAmountCents(), idempotencyKeyFor(payoutId))));
-        escrow.debit(AccountType.USER_FUNDS, disbursement.getAmountCents(),
+        // **从出资单位的账户扣。**payout.orgId 为 null 时扣平台账户 ——
+        // 老的代发单没有这个信息,那时的行为就是从平台账户出
+        escrow.debit(payout.getOrgId(), AccountType.USER_FUNDS, disbursement.getAmountCents(),
                 "代发预扣 payout#" + payoutId, "disburse-" + payoutId);
         return disbursement;
     }
@@ -139,12 +147,13 @@ class FundService implements FundApi {
         if (disbursement.getStatus() == Disbursement.Status.SUCCESS) {
             throw new IllegalStateException("该笔代发已成功,无需重发");
         }
-        payouts.findById(payoutId).orElseThrow(() -> new IllegalArgumentException("发放记录不存在"));
+        Payout payout = payouts.findById(payoutId)
+                .orElseThrow(() -> new IllegalArgumentException("发放记录不存在"));
         disbursement.recordRetry();
         disbursements.save(disbursement);
         // 上一轮失败时已经原路退回,这里要重新预扣。重试用不同的幂等键,
         // 否则第二次预扣会被当成重复而跳过,钱没扣就把款打出去了。
-        escrow.debit(AccountType.USER_FUNDS, disbursement.getAmountCents(),
+        escrow.debit(payout.getOrgId(), AccountType.USER_FUNDS, disbursement.getAmountCents(),
                 "代发预扣(重试) payout#" + payoutId,
                 "disburse-" + payoutId + "-retry-" + disbursement.getRetryCount());
         return disbursement;
@@ -196,8 +205,12 @@ class FundService implements FundApi {
     @Transactional("fundTransactionManager")
     public void recordFailure(long disbursementId, String error) {
         Disbursement disbursement = disbursements.findById(disbursementId).orElseThrow();
-        escrow.credit(AccountType.USER_FUNDS, disbursement.getAmountCents(),
-                "代发失败冲正 payout#" + disbursement.getPayoutId());
+        // **必须退回扣款的那一家。**退错的话 A 家的钱进了 B 家的账户,
+        // 两边余额都对不上,而且这种错不会报任何异常 —— 只有对账才看得出来
+        Long orgId = payouts.findById(disbursement.getPayoutId())
+                .map(Payout::getOrgId).orElse(null);
+        escrow.credit(orgId, AccountType.USER_FUNDS, disbursement.getAmountCents(),
+                "代发失败冲正 payout#" + disbursement.getPayoutId(), null);
         disbursement.markFailed(error);
         disbursements.save(disbursement);
     }
@@ -350,6 +363,7 @@ class FundService implements FundApi {
     }
 
     private PayoutView toView(Payout p) {
-        return new PayoutView(p.getId(), p.getSettlementId(), p.getPayeeUserId(), p.getAmountCents(), p.getStatus());
+        return new PayoutView(p.getId(), p.getSettlementId(), p.getPayeeUserId(),
+                p.getAmountCents(), p.getStatus(), p.getOrgId());
     }
 }

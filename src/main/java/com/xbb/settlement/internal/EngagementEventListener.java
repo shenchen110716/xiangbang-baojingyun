@@ -20,6 +20,9 @@ import java.time.Instant;
 @Component
 class EngagementEventListener {
 
+    /** 岗位→单位的只读副本。代发要知道钱从哪个单位的账户出。 */
+    private final SettlementPostedJobRepository postedJobs;
+
     private static final org.slf4j.Logger log =
             org.slf4j.LoggerFactory.getLogger(EngagementEventListener.class);
 
@@ -33,12 +36,14 @@ class EngagementEventListener {
     EngagementEventListener(SettlementRepository settlements, SettlementOutboxRepository outbox,
                              PayPlanRepository payPlans, PayPlanFactorRepository payPlanFactors,
                              com.xbb.attendance.api.AttendanceApi attendanceApi,
+                             SettlementPostedJobRepository postedJobs,
                              ObjectMapper json) {
         this.settlements = settlements;
         this.outbox = outbox;
         this.payPlans = payPlans;
         this.payPlanFactors = payPlanFactors;
         this.attendanceApi = attendanceApi;
+        this.postedJobs = postedJobs;
         this.json = json;
     }
 
@@ -64,9 +69,19 @@ class EngagementEventListener {
 
         // 关键:结算记录与 outbox 行**在同一个事务里**落库。
         // 要么都成功要么都回滚,不会出现"结算生成了但下游永远收不到通知"。
+        // 用工单位:从岗位副本里取。**取不到时传 null,不猜** ——
+        // 猜错的话钱会从另一家单位的账户里扣走,而那是把 A 公司的钱
+        // 发给了 B 公司的工人。null 时资金域退回平台账户(和改动前一致)
+        Long orgId = postedJobs.findById(event.jobId())
+                .map(SettlementPostedJob::getOrgId).orElse(null);
+        if (orgId == null) {
+            log.warn("结算 {} 找不到岗位 {} 的单位副本,代发将退回平台账户",
+                    settlement.getId(), event.jobId());
+        }
+
         SettlementCalculated calculated = new SettlementCalculated(
                 settlement.getId(), event.applicationId(), event.workerUserId(),
-                computed.amountCents(), computed.commissionBaseCents(), Instant.now());
+                computed.amountCents(), computed.commissionBaseCents(), orgId, Instant.now());
         outbox.save(new SettlementOutboxEvent(
                 event.eventId(), SettlementCalculated.class.getName(), serialize(calculated)));
     }

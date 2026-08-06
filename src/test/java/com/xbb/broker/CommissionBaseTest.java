@@ -120,7 +120,9 @@ class CommissionBaseTest {
                 .isEqualTo(4_000);
 
         // 真的发一笔,看佣金按哪个数算
-        fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "测试备资");
+        // 按单位分账之后,企业的薪水必须从**企业自己的账户**出 —— 充平台账户没用
+        fundApi.topUpOrg(orgH.get(), AccountType.USER_FUNDS, 1_000_000,
+                "测试备资", "cb-topup-" + orgH.get(), ops.userId());
         var payoutId = await().atMost(Duration.ofSeconds(25))
                 .until(() -> fundApi.findBySettlementId(settlementId).map(p -> p.id()).orElse(null),
                         java.util.Objects::nonNull);

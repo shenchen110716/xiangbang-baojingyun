@@ -38,3 +38,9 @@ CREATE INDEX escrow_ledger_org_idx ON fund.escrow_ledger (org_id, id DESC);
 -- 可空:老的代发单没有这个信息,它们从平台账户出(和迁移前一致)。
 ALTER TABLE fund.payout ADD COLUMN org_id BIGINT;
 CREATE INDEX payout_org_idx ON fund.payout (org_id, id DESC);
+
+-- 铁律 1:新序列要显式授权。
+-- `ADD COLUMN id BIGSERIAL` 会**顺手建一个序列**,而 V1 里那句
+-- `GRANT ... ON ALL SEQUENCES` 只对当时已存在的序列生效 ——
+-- 不补这一条,机构第一次充值时报 "permission denied for sequence"。
+GRANT USAGE, SELECT ON SEQUENCE fund.escrow_account_id_seq TO fund_user;

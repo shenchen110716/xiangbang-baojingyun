@@ -129,11 +129,16 @@ class NotificationTest {
         outboxRelay.publishPending();
 
         AtomicLong payoutHolder = new AtomicLong();
+        AtomicLong orgHolder = new AtomicLong();
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
             long settlementId = settlementApi.findByApplicationId(ids[0]).orElseThrow().id();
-            payoutHolder.set(fundApi.findBySettlementId(settlementId).orElseThrow().id());
+            var view = fundApi.findBySettlementId(settlementId).orElseThrow();
+            payoutHolder.set(view.id());
+            orgHolder.set(view.orgId() == null ? 0L : view.orgId());
         });
-        fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "备资");
+        // 按单位分账之后,企业的薪水必须从**企业自己的账户**出 —— 充平台账户没用
+        fundApi.topUpOrg(orgHolder.get(), AccountType.USER_FUNDS, 1_000_000,
+                "备资", "nt-topup-" + orgHolder.get(), ops.userId());
         fundApi.disburse(payoutHolder.get(), ops.userId());
 
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {

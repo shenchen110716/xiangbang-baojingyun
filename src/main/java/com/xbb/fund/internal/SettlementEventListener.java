@@ -57,7 +57,10 @@ class SettlementEventListener {
             // 也是这个抵扣只能放在这里的原因(结算域反向依赖资金域会成环)。
             long gross = event.amountCents();
             long deducted = advances.deductFromSalary(event.workerUserId(), event.settlementId(), gross);
-            payouts.save(new Payout(event.settlementId(), event.workerUserId(), gross - deducted));
+            // orgId 可能为 null:老载荷重放、或岗位副本还没到。
+            // 那时代发退回平台账户 —— 和按单位分账之前的行为一致
+            payouts.save(new Payout(event.settlementId(), event.workerUserId(),
+                    gross - deducted, event.orgId()));
         } catch (DataIntegrityViolationException e) {
             // **只在确认记录真的已存在时才吞。**
             //

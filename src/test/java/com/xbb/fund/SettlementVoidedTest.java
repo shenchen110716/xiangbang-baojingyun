@@ -99,8 +99,9 @@ class SettlementVoidedTest {
                 assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status())
                         .isEqualTo(com.xbb.fund.internal.Payout.Status.CANCELLED));
 
-        // 备足资金,确保这里挡下发放的原因是"已作废"而不是"余额不足"
-        fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "测试备资");
+        // **不备资也该报"已作废"。**状态检查排在动钱之前,
+        // 所以这里根本走不到扣款那一步 —— 原来它在扣完款才拦,
+        // 于是账户一有问题就报成"余额不足",运营照着去备资,备完还是发不出去
         assertThatThrownBy(() -> fundApi.disburse(payoutId, ops.userId()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("已作废");

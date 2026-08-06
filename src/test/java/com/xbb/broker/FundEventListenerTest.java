@@ -96,10 +96,19 @@ class FundEventListenerTest {
 
     private long disburse(long settlementId) {
         AtomicLong payoutIdHolder = new AtomicLong();
-        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                payoutIdHolder.set(fundApi.findBySettlementId(settlementId).orElseThrow().id()));
+        AtomicLong orgHolder = new AtomicLong();
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+            var view = fundApi.findBySettlementId(settlementId).orElseThrow();
+            payoutIdHolder.set(view.id());
+            // **出资单位从代发单上读**,不靠调用方传 —— 传错了就是充错账户,
+            // 而那会以"余额不足"的形式报出来,看着像备资不够
+            orgHolder.set(view.orgId() == null ? 0L : view.orgId());
+        });
+        long orgId = orgHolder.get();
         // 代发要从监管账户扣款(§6.4.2),先备资
-        fundApi.topUp(AccountType.USER_FUNDS, 1_000_000, "测试备资");
+        // 按单位分账之后,企业的薪水必须从**企业自己的账户**出 —— 充平台账户没用
+        fundApi.topUpOrg(orgId, AccountType.USER_FUNDS, 1_000_000,
+                "测试备资", "fel-topup-" + orgId, ops.userId());
         fundApi.disburse(payoutIdHolder.get(), ops.userId());
         return payoutIdHolder.get();
     }

@@ -6,8 +6,13 @@ import java.util.Optional;
 
 public interface FundApi {
 
+    /**
+     * @param orgId 出资单位 —— 钱从哪家的账户扣。<b>可能为 null</b>:
+     *              老的代发单没有这个信息,那时从平台账户出。
+     *              机构端要靠它筛出"我要付的款"
+     */
     record PayoutView(long id, long settlementId, long payeeUserId, long amountCents,
-                       Payout.Status status) { }
+                       Payout.Status status, Long orgId) { }
 
     /*
      * 下面三个查询都带 callerUserId。**不是多余的参数** ——
