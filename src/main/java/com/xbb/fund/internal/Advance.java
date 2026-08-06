@@ -28,6 +28,16 @@ public class Advance {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /**
+     * 批这笔借支的用工单位。<b>NULL = 平台垫的</b>(老数据,以及平台自己批的)。
+     *
+     * <p>还款只能从这家的结算里扣 —— 不记的话,甲公司批的借支会从
+     * 乙公司给同一个工人的付款里扣走,而两边都不会报错。
+     */
+    @Column(name = "org_id")
+    private Long orgId;
+
+
     @Column(name = "worker_user_id", nullable = false)
     private long workerUserId;
 
@@ -66,6 +76,12 @@ public class Advance {
     protected Advance() { }
 
     public Advance(long workerUserId, long amountCents, String reason, long grantedBy) {
+        this(workerUserId, amountCents, reason, grantedBy, null);
+    }
+
+    /** @param orgId 批这笔的用工单位;null 表示平台垫的 */
+    public Advance(long workerUserId, long amountCents, String reason, long grantedBy, Long orgId) {
+        this.orgId = orgId;
         if (amountCents <= 0) {
             throw new IllegalArgumentException("借支金额必须为正数");
         }
@@ -110,6 +126,9 @@ public class Advance {
     }
 
     public Long getId() { return id; }
+    /** @return null 表示平台垫的 */
+    public Long getOrgId() { return orgId; }
+
     public long getWorkerUserId() { return workerUserId; }
     public long getAmountCents() { return amountCents; }
     public long getOutstandingCents() { return outstandingCents; }

@@ -56,7 +56,9 @@ class SettlementEventListener {
             // 结算域算的是应发,它不知道这人欠平台多少 —— 那是资金域的事,
             // 也是这个抵扣只能放在这里的原因(结算域反向依赖资金域会成环)。
             long gross = event.amountCents();
-            long deducted = advances.deductFromSalary(event.workerUserId(), event.settlementId(), gross);
+            // **把出资单位传下去。**不传的话甲公司批的借支会从乙公司的付款里扣走
+            long deducted = advances.deductFromSalary(
+                    event.workerUserId(), event.settlementId(), gross, event.orgId());
             // orgId 可能为 null:老载荷重放、或岗位副本还没到。
             // 那时代发退回平台账户 —— 和按单位分账之前的行为一致
             payouts.save(new Payout(event.settlementId(), event.workerUserId(),

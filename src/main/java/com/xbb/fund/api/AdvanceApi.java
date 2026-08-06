@@ -21,6 +21,17 @@ public interface AdvanceApi {
     /** 批一笔借支。要平台运维 —— 这是平台垫钱,不是工人自助。 */
     long grantAdvance(long workerUserId, long amountCents, String reason, long callerUserId);
 
+    /**
+     * 用工单位批一笔借支(老板 2026-08-06:借支属于机构端)。
+     * {@code orgId} 传 null 表示平台自己垫,那条仍然只有平台运维能走。
+     *
+     * <p><b>批了之后只能从这家单位的结算里扣回来</b> ——
+     * 不记归属的话,甲公司批的借支会从乙公司给同一个工人的付款里扣走,
+     * 甲的钱没出、乙的工人少拿了,而两边都不会报错。
+     */
+    long grantAdvance(Long orgId, long workerUserId, long amountCents,
+                       String reason, long callerUserId);
+
     /** 登记线下还款。 */
     void recordManualRepayment(long advanceId, long amountCents, long callerUserId);
 

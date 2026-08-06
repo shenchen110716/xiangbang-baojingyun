@@ -45,6 +45,7 @@ class PerOrgAccountTest {
     @Autowired TestPlatformOps.Accessor ops;
     @Autowired OrgApi orgApi;
     @Autowired FundApi fundApi;
+    @Autowired com.xbb.fund.api.AdvanceApi advanceApi;
 
     private long verified(String phone, String name, String idNo) {
         long id = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
@@ -126,5 +127,32 @@ class PerOrgAccountTest {
         assertThat(fundApi.orgBalanceOf(a.orgId(), AccountType.USER_FUNDS, a.rep()))
                 .as("重发不该让余额翻倍")
                 .isEqualTo(2_000);
+    }
+
+    // ─────────────── 借支归属 ───────────────
+
+    @Test
+    void 借支只能由本单位法人或平台批() {
+        Org a = org("13004000008", "110101199001110008", "借支厂", "9111000000000l08X");
+        Org b = org("13004000009", "110101199001110009", "外人借支厂", "9111000000000l09X");
+        long worker = verified("13004000010", "工人", "110101199001110010");
+
+        // 替别家批借支,等于替别家承诺了一笔要从工资里扣回来的钱
+        assertThatThrownBy(() ->
+                advanceApi.grantAdvance(a.orgId(), worker, 10_000, "越权批", b.rep()))
+                .hasMessageContaining("法人代表");
+
+        // 本单位法人可以
+        long id = advanceApi.grantAdvance(a.orgId(), worker, 10_000, "预支生活费", a.rep());
+        assertThat(id).isPositive();
+    }
+
+    @Test
+    void 平台自己垫那条仍然只有平台运维能走() {
+        Org a = org("13004000011", "110101199001110011", "平台垫厂", "9111000000000l10X");
+        long worker = verified("13004000012", "工人乙", "110101199001110012");
+        assertThatThrownBy(() ->
+                advanceApi.grantAdvance(null, worker, 10_000, "越权垫", a.rep()))
+                .hasMessageContaining("平台运维");
     }
 }

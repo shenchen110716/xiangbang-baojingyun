@@ -25,13 +25,16 @@ class AdvanceService implements AdvanceApi {
     private final AdvanceRepository advances;
     private final AdvanceRepaymentRepository repayments;
     private final IdentityApi identityApi;
+    /** 判断"这个人是不是这家单位的法人代表"。**现查不缓存**(铁律 5)。 */
+    private final com.xbb.org.api.OrgApi orgApi;
     private final OpsApi opsApi;
 
     AdvanceService(AdvanceRepository advances, AdvanceRepaymentRepository repayments,
-                   IdentityApi identityApi, OpsApi opsApi) {
+                   IdentityApi identityApi, com.xbb.org.api.OrgApi orgApi, OpsApi opsApi) {
         this.advances = advances;
         this.repayments = repayments;
         this.identityApi = identityApi;
+        this.orgApi = orgApi;
         this.opsApi = opsApi;
     }
 
@@ -50,7 +53,29 @@ class AdvanceService implements AdvanceApi {
     @Override
     @Transactional("fundTransactionManager")
     public long grantAdvance(long workerUserId, long amountCents, String reason, long callerUserId) {
-        requirePlatformOps(callerUserId);
+        return grantAdvance(null, workerUserId, amountCents, reason, callerUserId);
+    }
+
+    /**
+     * 用工单位批一笔借支。老板 2026-08-06:借支属于机构端。
+     *
+     * <p>{@code orgId} 传 null 表示平台自己垫 —— 那条仍然只有平台运维能走。
+     *
+     * <p><b>批了之后只能从这家单位的结算里扣回来。</b>
+     * 不记归属的话,甲公司批的借支会从乙公司给同一个工人的付款里扣走。
+     */
+    @Override
+    @Transactional("fundTransactionManager")
+    public long grantAdvance(Long orgId, long workerUserId, long amountCents,
+                              String reason, long callerUserId) {
+        if (orgId == null) {
+            requirePlatformOps(callerUserId);
+        } else if (!orgApi.isLegalRepOf(orgId, callerUserId)
+                && !identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
+            // 替别家批借支等于替别家承诺了一笔要从工资里扣回来的钱
+            throw new AccessDeniedException(
+                    "只有单位 #" + orgId + " 的法人代表或平台运维可以批借支");
+        }
         if (amountCents <= 0) {
             throw new IllegalArgumentException("借支金额必须为正数");
         }
@@ -69,7 +94,8 @@ class AdvanceService implements AdvanceApi {
                     outstanding / 100, amountCents / 100, limit / 100));
         }
 
-        Advance saved = advances.save(new Advance(workerUserId, amountCents, reason.trim(), callerUserId));
+        Advance saved = advances.save(
+                new Advance(workerUserId, amountCents, reason.trim(), callerUserId, orgId));
         log.info("借支已批:advance={} worker={} 金额={}分 已欠合计={}分 上限={}分",
                 saved.getId(), workerUserId, amountCents, outstanding + amountCents, limit);
         return saved.getId();
@@ -83,12 +109,19 @@ class AdvanceService implements AdvanceApi {
      *
      * @return 本次从这张结算单里扣掉的总额(分)
      */
-    long deductFromSalary(long workerUserId, long settlementId, long salaryCents) {
+    /**
+     * @param settlementOrgId 这笔结算的出资单位;为 null 时只有平台垫的借支可扣
+     */
+    long deductFromSalary(long workerUserId, long settlementId, long salaryCents,
+                           Long settlementOrgId) {
         if (salaryCents <= 0) {
             return 0;
         }
-        List<Advance> active = advances.findByWorkerUserIdAndStatusOrderByIdAsc(
-                workerUserId, Advance.Status.ACTIVE);
+        // **只扣这家单位批的,加上平台垫的。**不过滤的话,甲公司批的借支
+        // 会从乙公司给同一个工人的付款里扣走 —— 甲的钱没出、乙的工人少拿了,
+        // 而两边都不会报错,只有工人自己发现工资少了才会问
+        List<Advance> active = advances.findDeductible(
+                workerUserId, Advance.Status.ACTIVE, settlementOrgId);
         long remaining = salaryCents;
         long deducted = 0;
 
