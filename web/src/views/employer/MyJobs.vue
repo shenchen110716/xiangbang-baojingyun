@@ -14,6 +14,57 @@ const workAddress = ref(''); const headcount = ref('1')
 
 /** 展开中的岗位 → 它的应聘者。按岗位缓存,免得每次折叠再展开都重拉。 */
 const expanded = ref<number | null>(null)
+
+/**
+ * 岗位画像:技能标签 + 坐标。**撮合就靠它。**
+ *
+ * 2026-08-07 审计发现:这个端点一直没有界面,所以从来没人填过 ——
+ * 撮合器拿到的岗位没有标签也没有坐标,于是静默退化成只按薪资和信用排序,
+ * 而界面上完全看不出来。
+ */
+const skillTags = ref<string[]>([])
+const profileOf = ref<Record<number, any>>({})
+const draftMust = ref<Record<number, string[]>>({})
+const draftLat = ref<Record<number, string>>({})
+const draftLon = ref<Record<number, string>>({})
+
+async function loadSkillTags() {
+  try { skillTags.value = (await api<any[]>('/api/ops/dict/SKILL_TAG')).map(i => i.value) }
+  catch (e: any) { err.value = e.message }
+}
+
+async function loadJobProfile(jobId: number) {
+  try {
+    const p = await api<any>(`/api/profile/jobs/${jobId}`)
+    profileOf.value[jobId] = p
+    draftMust.value[jobId] = p.mustTags || []
+    draftLat.value[jobId] = String(p.lat ?? '')
+    draftLon.value[jobId] = String(p.lon ?? '')
+  } catch {
+    // 404 = 还没填过。**不是错误** —— 大部分岗位一开始都没有画像
+    profileOf.value[jobId] = null
+    draftMust.value[jobId] = draftMust.value[jobId] || []
+  }
+}
+
+function toggleTag(jobId: number, tag: string) {
+  const cur = draftMust.value[jobId] || []
+  draftMust.value[jobId] = cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag]
+}
+
+async function saveJobProfile(jobId: number) {
+  msg.value = ''; err.value = ''; busy.value = `prof-${jobId}`
+  try {
+    await api(`/api/profile/jobs/${jobId}`, { method: 'PUT', body: {
+      mustTags: draftMust.value[jobId] || [],
+      niceTags: [],
+      lat: Number(draftLat.value[jobId] || 0),
+      lon: Number(draftLon.value[jobId] || 0) } })
+    msg.value = `岗位 #${jobId} 的画像已保存,撮合会用上它`
+    await loadJobProfile(jobId)
+  } catch (e: any) { err.value = e.message }
+  finally { busy.value = '' }
+}
 const applicants = ref<Record<number, any[]>>({})
 const busy = ref('')
 
@@ -46,6 +97,7 @@ async function post() {
 async function toggle(job: any) {
   if (expanded.value === job.id) { expanded.value = null; return }
   expanded.value = job.id
+  loadJobProfile(job.id)
   err.value = ''
   try { applicants.value[job.id] = await api(`/api/engagement/job/${job.id}/applicants`) }
   catch (e: any) { err.value = e.message; applicants.value[job.id] = [] }
@@ -62,7 +114,7 @@ async function act(jobId: number, appId: number, what: 'accept' | 'reject' | 'co
   finally { busy.value = '' }
 }
 
-onMounted(load)
+onMounted(() => { load(); loadSkillTags() })
 </script>
 
 <template>
@@ -105,6 +157,32 @@ onMounted(load)
           </tr>
           <tr v-if="expanded === j.id">
             <td colspan="5" style="background:var(--surface-2);padding:12px">
+              <h4 style="margin:0 0 6px">岗位画像</h4>
+              <p class="hint" style="margin-top:0">
+                <b>撮合就靠它。</b>不填的话这个岗位在推荐里只按薪资和信用排序——
+                技能和距离都用不上，而界面上完全看不出来。
+                <span v-if="profileOf[j.id] === null" style="color:var(--bad)">这个岗位还没填过。</span>
+              </p>
+              <div style="margin-bottom:8px">
+                <span v-for="t in skillTags" :key="t"
+                      class="tag" style="cursor:pointer;margin-right:6px"
+                      :class="(draftMust[j.id] || []).includes(t) ? 'ok' : ''"
+                      @click="toggleTag(j.id, t)">{{ t }}</span>
+              </div>
+              <div class="row" style="align-items:flex-end;gap:8px">
+                <div class="field" style="flex:0 0 150px"><label>纬度</label>
+                  <input v-model="draftLat[j.id]" placeholder="如：31.2989" /></div>
+                <div class="field" style="flex:0 0 150px"><label>经度</label>
+                  <input v-model="draftLon[j.id]" placeholder="如：120.5853" /></div>
+                <button class="sm" :disabled="busy === `prof-${j.id}`"
+                        @click="saveJobProfile(j.id)">保存画像</button>
+              </div>
+              <p class="hint">
+                技能标签从平台词表里选，<b>不能自己打字</b>——打出词表里没有的词，
+                后端会拒，而那时你已经填完一整屏了。
+              </p>
+
+              <h4 style="margin:16px 0 6px">应聘者</h4>
               <div v-if="!applicants[j.id]?.length" class="empty" style="padding:8px 0">还没有人报名</div>
               <table v-else>
                 <thead><tr><th style="width:100px">报名单</th><th style="width:110px">应聘者</th>

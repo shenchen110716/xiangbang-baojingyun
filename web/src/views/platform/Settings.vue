@@ -63,7 +63,39 @@ async function save() {
   finally { saving.value = false }
 }
 
-onMounted(load)
+
+/**
+ * 劳务协议模板。**只增不改** —— 已生效版本的正文永不修改,
+ * 否则签过的协议就追溯不到当时的文本了(后端如此设计)。
+ *
+ * 2026-08-07 审计发现:这两个端点一直没有界面,
+ * 也就是说**改劳务协议正文只能发一次版**。它是法律文本,迟早要改。
+ */
+const tpl = ref<any>(null)
+const tplDraft = ref('')
+const tplBusy = ref(false)
+
+async function loadTemplate() {
+  try {
+    tpl.value = await api('/api/ops/templates/LABOR_AGREEMENT')
+    tplDraft.value = tpl.value?.body || ''
+  } catch (e: any) { err.value = e.message }
+}
+
+async function publishTemplate() {
+  if (!tplDraft.value.trim()) { err.value = '正文不能为空'; return }
+  if (tplDraft.value === tpl.value?.body) { err.value = '正文没有变化'; return }
+  msg.value = ''; err.value = ''; tplBusy.value = true
+  try {
+    const r = await api<{ version: number }>('/api/ops/templates', { body: {
+      templateKey: 'LABOR_AGREEMENT', body: tplDraft.value } })
+    msg.value = `已发布第 ${r.version} 版。**此前签过的协议仍然指向它们当时的版本**`
+    await loadTemplate()
+  } catch (e: any) { err.value = e.message }
+  finally { tplBusy.value = false }
+}
+
+onMounted(() => { load(); loadTemplate() })
 </script>
 
 <template>
@@ -136,5 +168,26 @@ onMounted(load)
         </tr>
       </tbody>
     </table>
+  </div>
+
+  <div class="card">
+    <h3>劳务协议模板</h3>
+    <p class="hint">
+      工人签的就是这段文本（占位符由系统按单填充）。
+      <b>发布是「只增不改」</b>——旧版本永远保留，此前签过的协议仍然指向它们当时的版本，
+      否则事后追溯不到当时签的是什么。
+      <span v-if="tpl">当前第 <b>{{ tpl.version }}</b> 版。</span>
+    </p>
+    <div class="field">
+      <label>正文</label>
+      <textarea v-model="tplDraft" rows="12"
+                style="width:100%;font-family:ui-monospace,monospace;font-size:13px"></textarea>
+    </div>
+    <button :disabled="tplBusy || !tplDraft.trim() || tplDraft === tpl?.body"
+            @click="publishTemplate">发布新版本</button>
+    <p class="hint" style="margin-bottom:0">
+      改动前请先看清占位符——删掉一个，往后所有协议里那个位置就是空的，
+      而<b>签的时候没人会发现</b>。
+    </p>
   </div>
 </template>
