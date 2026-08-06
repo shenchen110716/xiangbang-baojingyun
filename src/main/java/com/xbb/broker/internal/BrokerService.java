@@ -301,8 +301,72 @@ class BrokerService implements BrokerApi {
             existing.change(percent, callerUserId);
             stationRates.save(existing);
         }
+        // **同步到真正决定钱怎么分的那张表。**
+        //
+        // 分账时读的只有 commission_scheme(见 FundEventListener),
+        // station_rate 现在只剩展示和历史。不同步的话,运营在
+        // 「平台默认分成比例」上改完、界面提示"已更新",而分账一分钱没变 ——
+        // 差额要等对账才发现,那时钱已经发出去了。
+        //
+        // 这个项目已经栽过一次一模一样的:旧入口写 station_percent、
+        // 新入口写 station_rate、读的时候优先新表。当时的教训是
+        // **"同一个概念只能有一条写入路径"**,这里补上那条路径。
+        syncStationPctToScheme(stationOrgId, cat, percent, reason.trim(), callerUserId);
+
         log.info("分成比例变更:站={} 类目={} {} → {}% 操作人={}",
                 stationOrgId == null ? "平台默认" : stationOrgId, cat, old, percent, callerUserId);
+    }
+
+    /**
+     * 把「服务站那一档」写进分配方案。
+     *
+     * <p>方案还不存在时,**其余五档从平台默认继承**,而不是凭空造一套 ——
+     * 凭空造等于替老板决定了主动佣金给多少,而他改的只是服务站那一档。
+     */
+    private void syncStationPctToScheme(Long stationOrgId, String cat, int stationPct,
+                                        String reason, long callerUserId) {
+        try {
+            doSyncStationPct(stationOrgId, cat, stationPct, reason, callerUserId);
+        } catch (IllegalArgumentException e) {
+            // **这里不能让底层那句话直接冒出去。**它说的是"三者相加超过 100",
+            // 而运营在界面上只填了一个数字,看到那句话不知道该改什么。
+            //
+            // 旧的「服务站比例」允许 0~100 随便填,那是它单独存一张表时的自由 ——
+            // 而分账模型里平台、被动、服务站在同一块剩余里分。
+            // 也就是说**旧入口一直能表达一个兑现不了的值**,只是以前写进去也没人读。
+            throw new IllegalArgumentException(
+                    "服务站设成 " + stationPct + "% 放不下:" + e.getMessage()
+                    + "。要么调低这一档,要么用下面的整套方案把平台/被动一起改", e);
+        }
+    }
+
+    private void doSyncStationPct(Long stationOrgId, String cat, int stationPct,
+                                  String reason, long callerUserId) {
+        CommissionScheme existing = (stationOrgId == null
+                ? schemes.findByStationOrgIdIsNullAndCategory(cat)
+                : schemes.findByStationOrgIdAndCategory(stationOrgId, cat)).orElse(null);
+
+        if (existing != null) {
+            String before = existing.summary();
+            existing.apply(existing.getActivePct(), existing.getPlatformPct(),
+                    existing.getPassivePct(), stationPct,
+                    existing.getPassiveStepPct(), existing.getMinPayoutCents(), callerUserId);
+            schemes.save(existing);
+            schemeChanges.save(new CommissionSchemeChange(stationOrgId, cat, before,
+                    existing.summary(), callerUserId, reason));
+            return;
+        }
+
+        CommissionScheme base = schemes.findByStationOrgIdIsNullAndCategory(cat).orElse(null);
+        CommissionScheme created = base == null
+                // 平台默认也没有:用和迁移里一致的兜底值,只把服务站那一档换成新值
+                ? new CommissionScheme(stationOrgId, cat, 60, 20, 30, stationPct, 30, 100, callerUserId)
+                : new CommissionScheme(stationOrgId, cat, base.getActivePct(), base.getPlatformPct(),
+                        base.getPassivePct(), stationPct, base.getPassiveStepPct(),
+                        base.getMinPayoutCents(), callerUserId);
+        schemes.save(created);
+        schemeChanges.save(new CommissionSchemeChange(stationOrgId, cat, null,
+                created.summary(), callerUserId, reason));
     }
 
     @Override

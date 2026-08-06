@@ -217,24 +217,29 @@ class PlatformStationTest {
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
                 assertThat(brokerApi.listStations(ops.userId())).anyMatch(s -> s.orgId() == orgId));
 
-        // 平台默认:岗位 40、商品 60
+        // 平台默认:岗位 40、商品 45
+        //
+        // **原来这里写的是 55 和 60,那是兑现不了的值。**平台 20 + 被动 30 已占 50,
+        // 服务站再拿 55 就是 105% —— 旧的「服务站比例」单独存一张表时没人拦,
+        // 写进去也没人读;现在它同步到真正生效的方案上,超了会被拦下。
+        // 要给服务站更高的份额,得用整套方案把平台/被动一起调低。
         brokerApi.setStationRate(null, RateCategory.JOB, 40, "平台默认", ops.userId());
-        brokerApi.setStationRate(null, RateCategory.PRODUCT, 60, "商品毛利更高", ops.userId());
-        // 这个站在岗位上单独谈到 55
-        brokerApi.setStationRate(orgId, RateCategory.JOB, 55, "重点站点", ops.userId());
+        brokerApi.setStationRate(null, RateCategory.PRODUCT, 45, "商品毛利更高", ops.userId());
+        // 这个站在岗位上单独谈到 50
+        brokerApi.setStationRate(orgId, RateCategory.JOB, 50, "重点站点", ops.userId());
 
         var stationRates = brokerApi.listStationRates(orgId, ops.userId());
         assertThat(stationRates).singleElement()
                 .satisfies(r -> {
                     assertThat(r.category()).isEqualTo(RateCategory.JOB);
-                    assertThat(r.percent()).isEqualTo(55);
+                    assertThat(r.percent()).isEqualTo(50);
                 });
 
         var defaults = brokerApi.listStationRates(null, ops.userId());
         assertThat(defaults).hasSize(2);
         // **岗位和商品的毛利结构不同,用同一个比例要么服务站在商品上亏、要么平台在岗位上亏**
         assertThat(defaults).extracting(BrokerApi.StationRateView::percent)
-                .containsExactlyInAnyOrder(40, 60);
+                .containsExactlyInAnyOrder(40, 45);
     }
 
     @Test

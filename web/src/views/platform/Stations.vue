@@ -879,10 +879,15 @@ async function revokeOperator(coopId: number, userId: number) {
   </div>
 
   <div class="card">
-    <h3>平台默认分成比例</h3>
+    <h3>快捷改：只改「服务站」那一档</h3>
     <p class="hint">
       对所有没单独设过的服务站生效。<b>岗位、商品、培训的毛利结构不同</b>，
       用同一个比例要么服务站在商品上亏、要么平台在岗位上亏。
+    </p>
+    <p class="hint">
+      <b>它改的就是下面那套方案里的「服务站 %」</b>，只是不用把六档重填一遍。
+      改完下面的表格会跟着变——<b>不跟着变就是出问题了</b>，请告诉工程。
+      要调主动佣金、平台、被动那几档，用下面的整套方案。
     </p>
     <div v-if="!defaultRates.length" class="empty" style="padding:8px 0">还没有设过默认比例</div>
     <table v-else style="margin-bottom:12px">

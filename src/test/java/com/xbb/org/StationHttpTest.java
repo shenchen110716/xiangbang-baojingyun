@@ -98,15 +98,15 @@ class StationHttpTest {
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
                 assertThat(brokerApi.listStations(ops.userId())).anyMatch(s -> s.orgId() == orgId));
         assertThat(send(HttpMethod.PUT, "/api/broker/rates", admin, """
-                {"stationOrgId":%d,"category":"JOB","percent":55,"reason":"重点站点"}"""
+                {"stationOrgId":%d,"category":"JOB","percent":50,"reason":"重点站点"}"""
                 .formatted(orgId)).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-        assertThat(get("/api/broker/rates/" + orgId, admin).getBody()).contains("55");
+        assertThat(get("/api/broker/rates/" + orgId, admin).getBody()).contains("50");
 
         // 平台默认那条要排在 /{orgId} 之前,否则 "defaults" 会被当成路径变量
         assertThat(send(HttpMethod.PUT, "/api/broker/rates", admin,
-                "{\"stationOrgId\":null,\"category\":\"PRODUCT\",\"percent\":60,\"reason\":\"商品毛利更高\"}")
+                "{\"stationOrgId\":null,\"category\":\"PRODUCT\",\"percent\":45,\"reason\":\"商品毛利更高\"}")
                 .getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-        assertThat(get("/api/broker/rates/defaults", admin).getBody()).contains("PRODUCT").contains("60");
+        assertThat(get("/api/broker/rates/defaults", admin).getBody()).contains("PRODUCT").contains("45");
     }
 
     @Test
