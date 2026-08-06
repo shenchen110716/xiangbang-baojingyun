@@ -61,10 +61,23 @@ class OrgService implements OrgApi {
     @Override
     @Transactional("orgTransactionManager")
     public long submit(com.xbb.org.api.OrgType type, String name, String creditCode, long legalRepUserId) {
+        return submitWithAddress(type, name, creditCode, legalRepUserId, null);
+    }
+
+    @Override
+    @Transactional("orgTransactionManager")
+    public long submitWithAddress(com.xbb.org.api.OrgType type, String name, String creditCode,
+                                    long legalRepUserId, String address) {
         if (verifiedUsers.findById(legalRepUserId).isEmpty()) {
             throw new IllegalStateException("法人代表未实名认证");
         }
-        Organization org = orgs.save(new Organization(type, name, creditCode, legalRepUserId));
+        if (creditCode == null || creditCode.isBlank()) {
+            // **空串也算没填。**放过去的话数据库的 CHECK 会拦下,
+            // 但报出来的是约束名,不是人看得懂的话
+            throw new IllegalArgumentException("请填写统一社会信用代码");
+        }
+        Organization org = orgs.save(
+                new Organization(type, name, creditCode.trim(), legalRepUserId, trimToNull(address)));
         // 同 identity:暂无订阅者,但不在一个类里并存两套发事件的机制。
         OrganizationSubmitted submitted = new OrganizationSubmitted(org.getId(), legalRepUserId, Instant.now());
         outbox.save(new OrgOutboxEvent(java.util.UUID.randomUUID().toString(),
@@ -89,12 +102,13 @@ class OrgService implements OrgApi {
             // 服务站是要收佣金的经营主体,没有信用代码就开不了对公账户、走不了代发
             throw new IllegalArgumentException("请填写统一社会信用代码");
         }
-        Organization station = orgs.save(Organization.platformStation(name.trim(), creditCode.trim()));
+        Organization station = orgs.save(Organization.platformStation(name.trim(), creditCode.trim(), null));
         // 直接发"已通过"事件:下游(经纪人域的服务站副本、结算域的组织副本)
         // 只认这一个事件,不该为平台建站再造一条并行的通知路径
         // legalRepUserId 传 0 表示"还没有站长" —— 下游副本据此知道这个站暂时无人管理
         OrganizationApproved approved = new OrganizationApproved(
-                station.getId(), 0L, station.getType(), Instant.now());
+                station.getId(), 0L, station.getType(),
+                station.getName(), station.getAddress(), Instant.now());
         outbox.save(new OrgOutboxEvent(java.util.UUID.randomUUID().toString(),
                 OrganizationApproved.class.getName(), serialize(approved)));
         log.info("平台设立服务站:org={} 名称={} 暂无站长", station.getId(), name);
@@ -134,8 +148,11 @@ class OrgService implements OrgApi {
         orgs.save(station);
 
         // 站长变了,经纪人域的服务站副本要跟着变 —— 它是联合协议授权的依据
+        // **名称与地址也要带上。**用旧的四参构造的话它们是 null,
+        // 副本一更新就把单位名抹掉 —— 换个站长,求职端的岗位卡片全变空白
         OrganizationApproved approved = new OrganizationApproved(
-                orgId, newMasterUserId == null ? 0L : newMasterUserId, station.getType(), Instant.now());
+                orgId, newMasterUserId == null ? 0L : newMasterUserId, station.getType(),
+                station.getName(), station.getAddress(), Instant.now());
         outbox.save(new OrgOutboxEvent(java.util.UUID.randomUUID().toString(),
                 OrganizationApproved.class.getName(), serialize(approved)));
         log.info("站长变更:org={} {} → {} 操作人={} 原因={}", orgId, old, newMasterUserId, callerUserId, reason);
@@ -162,7 +179,8 @@ class OrgService implements OrgApi {
         // 直接拆箱会 NPE,而那是**编译期看不出来、上线才炸**的那种
         Long rep = org.getLegalRepUserId();
         OrganizationApproved approved = new OrganizationApproved(
-                orgId, rep == null ? 0L : rep, org.getType(), Instant.now());
+                orgId, rep == null ? 0L : rep, org.getType(),
+                org.getName(), org.getAddress(), Instant.now());
         outbox.save(new OrgOutboxEvent(java.util.UUID.randomUUID().toString(),
                 OrganizationApproved.class.getName(), serialize(approved)));
     }
@@ -223,8 +241,59 @@ class OrgService implements OrgApi {
         return orgs.findByStatusOrderByIdAsc(Organization.Status.PENDING).stream().map(OrgService::toView).toList();
     }
 
+    @Override
+    @Transactional("orgTransactionManager")
+    public long createIndividualStation(String name, long personUserId, String address, long callerUserId) {
+        return createIndividualOrg(com.xbb.org.api.OrgType.SERVICE_STATION,
+                name, personUserId, address, callerUserId);
+    }
+
+    @Override
+    @Transactional("orgTransactionManager")
+    public long createIndividualOrg(com.xbb.org.api.OrgType type, String name, long personUserId,
+                                    String address, long callerUserId) {
+        requirePlatformOps(callerUserId);
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("请填写名称");
+        }
+        if (type != com.xbb.org.api.OrgType.SERVICE_STATION) {
+            // 数据库上也有这条 CHECK。放在这里是为了报一句人看得懂的话 ——
+            // 到了数据库报的是约束名
+            throw new IllegalArgumentException("只有服务站可以是个人主体");
+        }
+        if (verifiedUsers.findById(personUserId).isEmpty()) {
+            // 个人服务站的主体就是这个人,他要收佣金、要开票,没实名无从追溯
+            throw new IllegalStateException("个人主体未实名认证");
+        }
+        if (orgs.existsIndividualOf(personUserId)) {
+            // 唯一索引兜底在下面。先查一次是为了给出人看得懂的话
+            throw new IllegalStateException("这个人已经有一个个人服务站了");
+        }
+        Organization org;
+        try {
+            org = orgs.save(Organization.individual(type, name.trim(), personUserId, trimToNull(address)));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 并发下两条同时插入,数据库裁决
+            throw new IllegalStateException("这个人已经有一个个人服务站了", e);
+        }
+        OrganizationApproved approved = new OrganizationApproved(
+                org.getId(), personUserId, org.getType(),
+                org.getName(), org.getAddress(), Instant.now());
+        outbox.save(new OrgOutboxEvent(java.util.UUID.randomUUID().toString(),
+                OrganizationApproved.class.getName(), serialize(approved)));
+        log.info("设立个人服务站:org={} 名称={} 主体人={}", org.getId(), name, personUserId);
+        return org.getId();
+    }
+
+    /** 空串和只有空白的字符串一律当成"没填"。留着空串会让"有没有地址"变成两种判断。 */
+    private static String trimToNull(String v) {
+        if (v == null) return null;
+        String t = v.trim();
+        return t.isEmpty() ? null : t;
+    }
+
     private static OrgView toView(Organization o) {
         return new OrgView(o.getId(), o.getType(), o.getName(), o.getCreditCode(),
-                o.getLegalRepUserId(), o.getStatus());
+                o.getLegalRepUserId(), o.getStatus(), o.getSubjectType(), o.getAddress());
     }
 }

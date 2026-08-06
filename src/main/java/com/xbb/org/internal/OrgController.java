@@ -73,6 +73,15 @@ class OrgController {
             @jakarta.validation.constraints.NotBlank(message = "请填写服务站名称") String name,
             @jakarta.validation.constraints.NotBlank(message = "请填写统一社会信用代码") String creditCode) { }
 
+    /**
+     * 个人服务站。**没有 creditCode** —— 个人没有统一社会信用代码。
+     * 必须当场指定是谁:"个人主体"指的就是那个人。
+     */
+    record CreateIndividualStationRequest(
+            @jakarta.validation.constraints.NotBlank(message = "请填写服务站名称") String name,
+            @jakarta.validation.constraints.NotNull(message = "请指定个人主体") Long personUserId,
+            String address) { }
+
     record AssignMasterRequest(
             /** 传 null 表示撤下当前站长,该站暂时无人管理。 */
             Long userId,
@@ -84,6 +93,22 @@ class OrgController {
             @RequestBody @jakarta.validation.Valid CreateStationRequest req,
             @AuthenticationPrincipal AuthenticatedUser caller) {
         long id = orgApi.createStation(req.name(), req.creditCode(), caller.userId());
+        return ResponseEntity.ok(java.util.Map.of("id", id));
+    }
+
+    /**
+     * 设立**个人**服务站(老板 2026-08-06:服务站可以是公司也可以是个人)。
+     *
+     * <p>和公司站分成两个端点而不是一个带可选字段的端点:
+     * 一个端点里"代码可空、人可空"的话,两个都不填也能过,
+     * 建出来一个既不是公司也说不清是谁的站。
+     */
+    @PostMapping("/stations/individual")
+    ResponseEntity<java.util.Map<String, Long>> createIndividualStation(
+            @RequestBody @jakarta.validation.Valid CreateIndividualStationRequest req,
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        long id = orgApi.createIndividualStation(req.name(), req.personUserId(),
+                req.address(), caller.userId());
         return ResponseEntity.ok(java.util.Map.of("id", id));
     }
 

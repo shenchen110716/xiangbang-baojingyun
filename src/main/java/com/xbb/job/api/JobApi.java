@@ -6,8 +6,13 @@ import java.util.Optional;
 
 public interface JobApi {
 
+    /**
+     * @param orgName 用工单位名称。**可能为 null** —— 副本还没到,或旧载荷里没有
+     * @param orgAddress 单位地址,可能为 null
+     */
     record JobView(long id, long orgId, String title, String description, long wageCents,
-                    Job.Status status, int headcount, int filledCount) {
+                    Job.Status status, int headcount, int filledCount,
+                    String orgName, String orgAddress) {
 
         public int remainingSlots() { return headcount - filledCount; }
     }

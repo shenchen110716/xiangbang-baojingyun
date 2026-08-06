@@ -29,6 +29,16 @@ class TestDataUniquenessTest {
     /** 18 位身份证。测试里的都是 110101 + 生日 + 4 位序号这个形态。 */
     private static final Pattern ID_CARD = Pattern.compile("\"(\\d{6}\\d{8}\\d{4})\"");
 
+    /**
+     * 统一社会信用代码。**不要求两侧有引号** —— 走真实 HTTP 的测试把它写在
+     * JSON 字面量里({@code \\"creditCode\\":\\"9111...\\"}),收尾是反斜杠不是引号。
+     *
+     * <p>我就是这么栽的:用带引号的正则扫了一遍,断定某个字母位空闲,
+     * 结果 StationHttpTest 早就在用,建站直接 409。
+     * **核对手段本身出错时,会给出一个自信的错误答案,比不查更危险。**
+     */
+    private static final Pattern CREDIT_CODE = Pattern.compile("(91\\d{11}[a-zA-Z]\\d{2}[A-Z])");
+
     // 这里原先有一份 KNOWN_DUPLICATES 名单,写着「不是豁免,是待办」,
     // 里面挂着 110101199001017777。**清的时候发现那条重复根本不存在** ——
     // 那个号只在 IdentityControllerTest 里真用过一次,第二处"出现"是名单自己。
@@ -53,6 +63,11 @@ class TestDataUniquenessTest {
                     byId.computeIfAbsent(m.group(1), k -> new ArrayList<>())
                             .add(root.relativize(f).toString());
                 }
+                Matcher c = CREDIT_CODE.matcher(src);
+                while (c.find()) {
+                    byId.computeIfAbsent(c.group(1), k -> new ArrayList<>())
+                            .add(root.relativize(f).toString());
+                }
             }
         }
         // 同一个文件里重复用没关系(同一个人),跨文件才是冲突
@@ -65,7 +80,7 @@ class TestDataUniquenessTest {
         });
 
         assertThat(conflicts)
-                .as("身份证号跨测试类重复。测试共用一个数据库容器,第二个用它的测试会拿到"
+                .as("身份证号或统一社会信用代码跨测试类重复。测试共用一个数据库容器,第二个用它的测试会拿到"
                     + "「该身份证已被绑定」—— 报错看不出是测试数据问题,查起来很费时间。"
                     + "换一个没人用过的号段即可")
                 .isEmpty();

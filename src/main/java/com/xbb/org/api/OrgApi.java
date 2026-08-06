@@ -7,10 +7,34 @@ import java.util.Optional;
 public interface OrgApi {
 
     /** @param legalRepUserId 可能为 null —— 平台刚设立、还没指派站长的服务站 */
+    /**
+     * @param creditCode <b>个人主体为 null</b> —— 他没有统一社会信用代码
+     * @param address 可能为 null —— 老数据没有地址
+     */
     record OrgView(long id, com.xbb.org.api.OrgType type, String name, String creditCode,
-                    Long legalRepUserId, Organization.Status status) { }
+                    Long legalRepUserId, Organization.Status status,
+                    SubjectType subjectType, String address) { }
 
     long submit(com.xbb.org.api.OrgType type, String name, String creditCode, long legalRepUserId);
+
+    /** 带地址提交。求职端要显示"在哪上班",没有地址的话卡片上只能是空白。 */
+    long submitWithAddress(com.xbb.org.api.OrgType type, String name, String creditCode,
+                            long legalRepUserId, String address);
+
+    /**
+     * 平台设立**个人**服务站。个人没有统一社会信用代码,所以不收这一项。
+     *
+     * <p>和平台设立公司服务站不同的是:个人主体**必须当场指定是谁** ——
+     * "个人主体"指的就是那个人,没有人的个人服务站不知道在说谁。
+     */
+    long createIndividualStation(String name, long personUserId, String address, long callerUserId);
+
+    /**
+     * 通用的个人主体建立入口。**只有服务站能是个人** ——
+     * 传别的类型会被拒,用工主体是个人的话劳务合同、完税凭证、保证金全都没有落脚点。
+     */
+    long createIndividualOrg(com.xbb.org.api.OrgType type, String name, long personUserId,
+                                String address, long callerUserId);
 
     /**
      * 平台直接设立服务站。**建出来就是已审核、且还没有站长。**

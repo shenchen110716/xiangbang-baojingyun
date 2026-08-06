@@ -21,8 +21,22 @@ public class Organization {
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "credit_code", nullable = false, unique = true)
+    /**
+     * 统一社会信用代码。<b>个人主体为 null</b> —— 他没有这个东西。
+     * 公司必填、个人必须为空,由数据库的 CHECK 保证(见 org V6):
+     * 只写"个人可以为空"的话,个人主体上填一个也能过,
+     * 于是同一个概念有两种表示,取数的地方迟早漏判一种。
+     */
+    @Column(name = "credit_code")
     private String creditCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "subject_type", nullable = false, length = 16)
+    private com.xbb.org.api.SubjectType subjectType = com.xbb.org.api.SubjectType.COMPANY;
+
+    /** 对外展示的地址。求职端岗位卡片要显示"在哪上班",缺它界面只能是空白。 */
+    @Column(length = 200)
+    private String address;
 
     /**
      * 法人代表 / 站长。
@@ -48,10 +62,34 @@ public class Organization {
     protected Organization() { }
 
     public Organization(com.xbb.org.api.OrgType type, String name, String creditCode, long legalRepUserId) {
+        this(type, name, creditCode, legalRepUserId, null);
+    }
+
+    public Organization(com.xbb.org.api.OrgType type, String name, String creditCode,
+                        long legalRepUserId, String address) {
         this.type = type;
         this.name = name;
         this.creditCode = creditCode;
         this.legalRepUserId = legalRepUserId;
+        this.address = address;
+        this.subjectType = com.xbb.org.api.SubjectType.COMPANY;
+    }
+
+    /**
+     * 个人主体。**建出来就是已审核** —— 和平台设立的服务站一样,
+     * 这条路本来就只有平台运维能走,再走一遍审核是多余的。
+     */
+    static Organization individual(com.xbb.org.api.OrgType type, String name,
+                                    long personUserId, String address) {
+        Organization o = new Organization();
+        o.type = type;
+        o.name = name;
+        o.creditCode = null;
+        o.subjectType = com.xbb.org.api.SubjectType.INDIVIDUAL;
+        o.legalRepUserId = personUserId;
+        o.address = address;
+        o.status = Status.APPROVED;
+        return o;
     }
 
     public void approve() {
@@ -72,11 +110,12 @@ public class Organization {
     public Long getLegalRepUserId() { return legalRepUserId; }
 
     /** 平台设立的服务站:建出来就是已审核,且暂无站长。 */
-    static Organization platformStation(String name, String creditCode) {
+    static Organization platformStation(String name, String creditCode, String address) {
         Organization o = new Organization();
         o.type = com.xbb.org.api.OrgType.SERVICE_STATION;
         o.name = name;
         o.creditCode = creditCode;
+        o.address = address;
         o.legalRepUserId = null;
         o.status = Status.APPROVED;
         return o;
@@ -90,4 +129,7 @@ public class Organization {
         this.legalRepUserId = newMasterUserId;
     }
     public Status getStatus() { return status; }
+    public com.xbb.org.api.SubjectType getSubjectType() { return subjectType; }
+    /** @return 可能为 null —— 老数据没有地址 */
+    public String getAddress() { return address; }
 }

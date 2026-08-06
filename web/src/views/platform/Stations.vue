@@ -169,16 +169,28 @@ async function jointAct(orgId: number, id: number, what: 'confirm' | 'cancel' | 
 
 /** 建站与站长指派(平台端统一管理)。 */
 const newName = ref(''); const newCode = ref('')
+/** 公司 or 个人。老板 2026-08-06:服务站两者都可以。 */
+const newSubject = ref<'COMPANY' | 'INDIVIDUAL'>('COMPANY')
+const newPerson = ref(''); const newAddress = ref('')
 const masterOf = ref<Record<number, string>>({})
 const masterReason = ref<Record<number, string>>({})
 
 async function createStation() {
   msg.value = ''; err.value = ''; busy.value = 'create'
   try {
-    const r = await api<{ id: number }>('/api/org/stations', {
-      body: { name: newName.value.trim(), creditCode: newCode.value.trim() } })
-    msg.value = `服务站 #${r.id} 已设立。**还没有站长**，请指派后它才能签联合协议`
-    newName.value = ''; newCode.value = ''
+    const individual = newSubject.value === 'INDIVIDUAL'
+    // 两个端点而不是一个带可选字段的 —— 一个端点里"代码可空、人可空"的话，
+    // 两个都不填也能过，建出来一个既不是公司也说不清是谁的站
+    const r = individual
+      ? await api<{ id: number }>('/api/org/stations/individual', {
+          body: { name: newName.value.trim(), personUserId: Number(newPerson.value),
+                  address: newAddress.value.trim() || null } })
+      : await api<{ id: number }>('/api/org/stations', {
+          body: { name: newName.value.trim(), creditCode: newCode.value.trim() } })
+    msg.value = individual
+      ? `个人服务站 #${r.id} 已设立，主体人是用户 #${newPerson.value}`
+      : `服务站 #${r.id} 已设立。**还没有站长**，请指派后它才能签联合协议`
+    newName.value = ''; newCode.value = ''; newPerson.value = ''; newAddress.value = ''
     await load()
   } catch (e: any) { err.value = e.message }
   finally { busy.value = '' }
@@ -825,14 +837,34 @@ async function revokeOperator(coopId: number, userId: number) {
       <b>建出来时还没有站长</b>——先有点位，再决定派谁去管。
     </p>
     <div class="row">
+      <div class="field" style="flex:0 0 160px"><label>主体类型</label>
+        <select v-model="newSubject">
+          <option value="COMPANY">公司</option>
+          <option value="INDIVIDUAL">个人</option>
+        </select>
+      </div>
       <div class="field"><label>服务站名称</label>
         <input v-model="newName" placeholder="如：郑州高新区服务站" /></div>
-      <div class="field"><label>统一社会信用代码</label>
+
+      <div class="field" v-if="newSubject === 'COMPANY'"><label>统一社会信用代码</label>
         <input v-model="newCode" placeholder="收佣金要开对公账户，必填" /></div>
+
+      <div class="field" v-else><label>个人主体（用户编号）</label>
+        <input v-model="newPerson" placeholder="要实名认证过" /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>地址（选填）</label>
+        <input v-model="newAddress" placeholder="求职端岗位卡片上显示的地址" /></div>
       <button style="align-self:flex-end"
-              :disabled="!newName.trim() || !newCode.trim() || busy === 'create'"
+              :disabled="!newName.trim() || busy === 'create'
+                         || (newSubject === 'COMPANY' ? !newCode.trim() : !newPerson)"
               @click="createStation">设立</button>
     </div>
+    <p class="hint" v-if="newSubject === 'INDIVIDUAL'" style="margin-bottom:0">
+      个人主体<b>没有统一社会信用代码</b>，所以不收这一项。
+      和公司站不同的是，<b>个人站必须当场指定是谁</b>——"个人主体"指的就是那个人，
+      没有人的个人服务站不知道在说谁。<b>一个人只能有一个个人服务站。</b>
+    </p>
   </div>
 
   <div class="card note">

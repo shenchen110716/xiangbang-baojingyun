@@ -103,7 +103,7 @@ class JobService implements JobApi {
     @Override
     @Transactional(transactionManager = "jobTransactionManager", readOnly = true)
     public Optional<JobView> findJob(long jobId) {
-        return jobs.findById(jobId).map(JobService::toView);
+        return jobs.findById(jobId).map(this::toView);
     }
 
     @Override
@@ -116,18 +116,39 @@ class JobService implements JobApi {
         if (orgIds.isEmpty()) {
             return List.of();
         }
-        return jobs.findByOrgIdInOrderByIdDesc(orgIds).stream().map(JobService::toView).toList();
+        return withOrgInfo(jobs.findByOrgIdInOrderByIdDesc(orgIds));
     }
 
     @Override
     @Transactional(transactionManager = "jobTransactionManager", readOnly = true)
     public List<JobView> listOpenJobs(int limit) {
-        return jobs.findByStatusOrderByIdDesc(Job.Status.OPEN)
-                .stream().limit(Math.max(1, Math.min(limit, 100))).map(JobService::toView).toList();
+        return withOrgInfo(jobs.findByStatusOrderByIdDesc(Job.Status.OPEN)
+                .stream().limit(Math.max(1, Math.min(limit, 100))).toList());
     }
 
-    private static JobView toView(Job j) {
+    private JobView toView(Job j) {
+        ApprovedOrg org = approvedOrgs.findById(j.getOrgId()).orElse(null);
+        return toView(j, org);
+    }
+
+    private static JobView toView(Job j, ApprovedOrg org) {
         return new JobView(j.getId(), j.getOrgId(), j.getTitle(), j.getDescription(),
-                j.getWageCents(), j.getStatus(), j.getHeadcount(), j.getFilledCount());
+                j.getWageCents(), j.getStatus(), j.getHeadcount(), j.getFilledCount(),
+                org == null ? null : org.getName(),
+                org == null ? null : org.getAddress());
+    }
+
+    /**
+     * 一次把这批岗位涉及的单位全查回来。
+     * **逐条查的话首页 20 个岗位就是 21 次查询** —— 免费档 0.25 CPU 上很难看。
+     */
+    private List<JobView> withOrgInfo(List<Job> list) {
+        if (list.isEmpty()) {
+            return List.of();
+        }
+        java.util.Map<Long, ApprovedOrg> byId = new java.util.HashMap<>();
+        approvedOrgs.findAllById(list.stream().map(Job::getOrgId).distinct().toList())
+                .forEach(o -> byId.put(o.getOrgId(), o));
+        return list.stream().map(j -> toView(j, byId.get(j.getOrgId()))).toList();
     }
 }
