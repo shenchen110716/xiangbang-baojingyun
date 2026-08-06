@@ -55,6 +55,10 @@ public class SecurityConfig {
                 // MiniprogramJobFeedTest 里逐条守着这条边界。
                 .requestMatchers(HttpMethod.GET, "/api/job/open").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/job/{id:[0-9]+}").permitAll()
+                // 行政区划字典。**公开,理由同上** —— 小程序发单页第一屏就要选地区,
+                // 新用户拿不到 token,挡住的话他连地区都选不了。
+                // 回的是省市名称和国标码,不含任何个人信息
+                .requestMatchers(HttpMethod.GET, "/api/regions").permitAll()
                 // 健康检查要给编排/负载均衡探活用,必须免鉴权。
                 // 只放行 health,**不放行 metrics** —— 那里会暴露内部结构。
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()

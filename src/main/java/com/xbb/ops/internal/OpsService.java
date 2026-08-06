@@ -39,6 +39,8 @@ class OpsService implements OpsApi {
     private final Duration settingTtl;
 
     private final DictionaryItemRepository items;
+    /** 行政区划字典。只读,由迁移种下。 */
+    private final RegionRepository regions;
     private final AgreementTemplateRepository templates;
     private final PlatformSettingRepository settings;
     private final PlatformSettingChangeRepository settingChanges;
@@ -50,9 +52,10 @@ class OpsService implements OpsApi {
 
     OpsService(DictionaryItemRepository items, AgreementTemplateRepository templates,
                PlatformSettingRepository settings, PlatformSettingChangeRepository settingChanges,
-               IdentityApi identityApi, ObjectMapper json,
+               IdentityApi identityApi, RegionRepository regions, ObjectMapper json,
                @org.springframework.beans.factory.annotation.Value(
                        "${xbb.ops.setting-cache-ttl-ms:60000}") long ttlMs) {
+        this.regions = regions;
         this.items = items;
         this.templates = templates;
         this.settings = settings;
@@ -308,5 +311,16 @@ class OpsService implements OpsApi {
         if (!identityApi.hasRole(callerUserId, Role.PLATFORM_OPS)) {
             throw new IllegalStateException("需要平台运维角色");
         }
+    }
+
+    @Override
+    @Transactional(transactionManager = "opsTransactionManager", readOnly = true)
+    public java.util.List<RegionView> listRegions(String parentCode) {
+        var rows = parentCode == null || parentCode.isBlank()
+                ? regions.findByLevelOrderByCodeAsc((short) 1)
+                : regions.findByParentCodeOrderByCodeAsc(parentCode.trim());
+        return rows.stream()
+                .map(r -> new RegionView(r.getCode(), r.getName(), r.getParentCode(), r.getLevel()))
+                .toList();
     }
 }

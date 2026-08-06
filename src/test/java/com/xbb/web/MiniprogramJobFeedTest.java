@@ -196,4 +196,23 @@ class MiniprogramJobFeedTest {
             assertThat(body).contains("\"totalPriceCents\":100000");
         });
     }
+
+    /**
+     * 地区字典。**未登录可读** —— 发单页第一屏就要选地区,
+     * 而新用户拿不到 token,挡住的话他连地区都选不了。
+     */
+    @Test
+    void 地区字典未登录可读_并且能一级级点下去() {
+        String provinces = get("/api/regions", null).getBody();
+        assertThat(get("/api/regions", null).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(provinces).contains("江苏省").contains("320000");
+        // 直辖市也得在省级里 —— 漏了的话北京上海的用户选不出自己
+        assertThat(provinces).contains("北京市").contains("110000");
+
+        String cities = get("/api/regions?parent=320000", null).getBody();
+        assertThat(cities).contains("苏州市").contains("320500");
+        // **别的省的市不该混进来。**混进来的话用户在江苏底下看到杭州,
+        // 选了就套上浙江的佣金比例
+        assertThat(cities).doesNotContain("杭州市");
+    }
 }

@@ -102,7 +102,7 @@ async function runDemotion() {
 
 const CHANGE_TYPE: Record<string, string> = { STATION: '服务站', PARENT: '上级', STATUS: '状态' }
 const inStation = (orgId: number) => brokers.value.filter(b => b.stationOrgId === orgId)
-onMounted(() => { load(); loadDefaults(); loadDefaultStation(); loadDefaultSchemes(); loadRatesByRegion() })
+onMounted(() => { load(); loadDefaults(); loadDefaultStation(); loadDefaultSchemes(); loadRatesByRegion(); loadProvinces() })
 
 /** 联合关系(老系统 M10 §3.4)。展开某个站时才拉,免得一进页面就打一串请求。 */
 /**
@@ -271,6 +271,23 @@ const defaultSchemes = ref<any[]>([])
 
 /** 总价模式的佣金比例(类目 + 地区)。**这是分配方案的上一层。** */
 const rates = ref<any[]>([])
+/** 行政区划。**从后端取,不在前端抄一份** —— 抄了迟早两边不一致。 */
+const provinces = ref<any[]>([])
+const cities = ref<any[]>([])
+const provinceCode = ref('')
+
+async function loadProvinces() {
+  try { provinces.value = await api('/api/regions') } catch (e: any) { err.value = e.message }
+}
+
+async function onProvincePick() {
+  // 换省时把市清掉,否则下拉里还留着上一省的市,选中了就套错比例
+  rateForm.value.regionCode = provinceCode.value
+  cities.value = []
+  if (!provinceCode.value) return
+  try { cities.value = await api(`/api/regions?parent=${provinceCode.value}`) }
+  catch (e: any) { err.value = e.message }
+}
 const rateForm = ref({
   category: 'JOB', regionCode: '', commissionPct: '10',
   dispatchRetainPct: '0', dispatchOrgId: '', reason: '',
@@ -618,8 +635,18 @@ async function revokeOperator(coopId: number, userId: number) {
           <option v-for="c in CATEGORIES" :key="c.v" :value="c.v">{{ c.label }}</option>
         </select>
       </div>
-      <div class="field" style="flex:0 0 180px"><label>地区代码（留空=全国）</label>
-        <input v-model="rateForm.regionCode" placeholder="如：320506" /></div>
+      <div class="field" style="flex:0 0 170px"><label>省份（留空=全国）</label>
+        <select v-model="provinceCode" @change="onProvincePick">
+          <option value="">全国</option>
+          <option v-for="p in provinces" :key="p.code" :value="p.code">{{ p.name }}</option>
+        </select>
+      </div>
+      <div class="field" style="flex:0 0 170px"><label>城市（可不选）</label>
+        <select v-model="rateForm.regionCode" :disabled="!cities.length">
+          <option :value="provinceCode">{{ provinceCode ? '整省' : '全国' }}</option>
+          <option v-for="c in cities" :key="c.code" :value="c.code">{{ c.name }}</option>
+        </select>
+      </div>
       <div class="field" style="flex:0 0 130px"><label>佣金比例 %</label>
         <input v-model="rateForm.commissionPct" /></div>
       <div class="field" style="flex:0 0 130px"><label>派遣留存 %</label>

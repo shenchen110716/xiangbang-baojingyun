@@ -113,4 +113,16 @@ public interface OpsApi {
 
     /** 改动记录。key 为 null 时返回最近 50 条(全部键)。 */
     List<SettingChangeView> settingChanges(String key, long callerUserId);
+
+    /**
+     * 行政区划。<b>只放确有把握的地区</b> —— 没铺全国 300 多个地级市,
+     * 因为错一个码就是那个地区的佣金按别处算,而那是静默的。
+     * 没覆盖的地区按省配比例即可(取数从细到粗回退)。
+     */
+    record RegionView(String code, String name, String parentCode, int level) { }
+
+    /**
+     * @param parentCode 传 null 返回省级;传省级码返回它下面的市
+     */
+    java.util.List<RegionView> listRegions(String parentCode);
 }
