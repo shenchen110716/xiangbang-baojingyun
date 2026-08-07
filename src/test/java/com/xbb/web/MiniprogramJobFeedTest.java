@@ -215,4 +215,67 @@ class MiniprogramJobFeedTest {
         // 选了就套上浙江的佣金比例
         assertThat(cities).doesNotContain("杭州市");
     }
+
+    /**
+     * 字典维护那条链路,**走真实 HTTP**:加一个技能标签 → 它立刻能用在画像上。
+     *
+     * <p>2026-08-07 审计发现这 5 个端点一直没有界面 ——
+     * 也就是说<b>加一个技能标签要发一次版</b>。
+     *
+     * <p>这条守的不是"能加进字典"(那个早就能),而是**加完之后
+     * 词表校验真的认它** —— 中间那段断掉的话,运营在界面上加了标签、
+     * 提示"已加入",而用工方还是选不到它。
+     */
+    @Test
+    void 加一个技能标签_立刻能用在岗位画像上_走真实HTTP() {
+        String opsPhone = com.xbb.identity.TestPlatformOps.Accessor.PHONE;
+        ops.userId();
+        String adminToken = identityApi.loginByPhone(opsPhone, codes.issue(opsPhone)).token();
+
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.APPLICATION_JSON);
+        h.setBearerAuth(adminToken);
+
+        // ① 加一个词表里原本没有的技能
+        ResponseEntity<String> added = rest.exchange(url("/api/ops/dict"), HttpMethod.POST,
+                new HttpEntity<>("""
+                        {"dictType":"SKILL_TAG","key":"钳工","value":"钳工",
+                         "sortOrder":99,"attributes":{}}""", h),
+                String.class);
+        assertThat(added.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // ② 读回来能看到
+        assertThat(get("/api/ops/dict/SKILL_TAG", adminToken).getBody()).contains("钳工");
+
+        // ③ **词表校验认它** —— 这才是要害
+        String phone = "13003000005";
+        long rep = identityApi.loginByPhone(phone, codes.issue(phone)).userId();
+        identityApi.verifyRealName(rep, "钳工厂法人", "110101199001100005");
+        AtomicLong org = new AtomicLong();
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                org.set(orgApi.submit(OrgType.FACTORY, "钳工厂", "9111000000000v03X", rep)));
+        orgApi.approve(org.get(), ops.userId());
+        AtomicLong job = new AtomicLong();
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                job.set(jobApi.postJob(org.get(), "钳工岗", "描述", 3000, rep)));
+
+        String repToken = identityApi.loginByPhone(phone, codes.issue(phone)).token();
+        HttpHeaders rh = new HttpHeaders();
+        rh.setContentType(MediaType.APPLICATION_JSON);
+        rh.setBearerAuth(repToken);
+        // 岗位副本经 outbox 异步到画像域。**不等的话报的是"岗位不存在",
+        // 和"标签不在词表内"长得完全不一样,但都是 400** ——
+        // 第一次跑就栽在这里,以为是词表没认
+        await().atMost(Duration.ofSeconds(25)).untilAsserted(() -> {
+            ResponseEntity<String> profiled = rest.exchange(
+                    url("/api/profile/jobs/" + job.get()), HttpMethod.PUT,
+                    new HttpEntity<>("""
+                            {"mustTags":["钳工"],"niceTags":[],"lat":31.3,"lon":120.6}""", rh),
+                    String.class);
+            assertThat(profiled.getStatusCode())
+                    .as("刚加进词表的标签,画像那边必须认 —— 不认的话运营加了也白加。"
+                        + "实际响应:" + profiled.getBody())
+                    .isEqualTo(HttpStatus.NO_CONTENT);
+        });
+    }
 }

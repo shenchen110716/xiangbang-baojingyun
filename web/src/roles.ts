@@ -51,6 +51,8 @@ export const NAV: Record<RoleKey, { to: string; label: string; badge?: boolean }
   ],
   platform: [
     { to: '/settings', label: '参数设置' },
+    // 2026-08-07 审计:这 5 个端点一直没界面,加一个技能标签要发一次版
+    { to: '/dictionaries', label: '字典维护' },
     { to: '/stations', label: '服务站管理' },
     { to: '/review-orgs', label: '组织审核' },
     { to: '/payouts', label: '资金与代发' },
