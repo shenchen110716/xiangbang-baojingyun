@@ -85,6 +85,7 @@ class EngagementEventListenerTest {
         var settlement = settlements.findByApplicationId(applicationId).orElseThrow();
         assertThat(settlement.getAmountCents()).isEqualTo(2900);
         assertThat(settlement.getWorkerUserId()).isEqualTo(applicant);
-        assertThat(settlement.getStatus()).isEqualTo(Settlement.Status.PENDING);
+        // 这里读的是**实体**,拿的是内部枚举 —— 不是 View 上的 api 枚举
+        assertThat(settlement.getStatus().name()).isEqualTo("PENDING");
     }
 }

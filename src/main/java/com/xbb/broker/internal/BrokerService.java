@@ -205,7 +205,7 @@ class BrokerService implements BrokerApi {
                         || identityApi.hasRole(callerUserId, com.xbb.identity.api.Role.PLATFORM_OPS))
                 .map(c -> new CommissionView(
                 c.getId(), c.getBrokerUserId(), c.getWorkerUserId(), c.getSettlementId(),
-                c.getAmountCents(), c.getStatus()));
+                c.getAmountCents(), com.xbb.broker.api.CommissionStatus.valueOf(c.getStatus().name())));
     }
 
     // ─────────────── 分享与业务员产生 ───────────────

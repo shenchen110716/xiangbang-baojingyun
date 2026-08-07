@@ -375,6 +375,6 @@ class FundService implements FundApi {
 
     private PayoutView toView(Payout p) {
         return new PayoutView(p.getId(), p.getSettlementId(), p.getPayeeUserId(),
-                p.getAmountCents(), p.getStatus(), p.getOrgId());
+                p.getAmountCents(), com.xbb.fund.api.PayoutStatus.valueOf(p.getStatus().name()), p.getOrgId());
     }
 }

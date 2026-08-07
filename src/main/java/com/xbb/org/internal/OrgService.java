@@ -301,6 +301,9 @@ class OrgService implements OrgApi {
 
     private static OrgView toView(Organization o) {
         return new OrgView(o.getId(), o.getType(), o.getName(), o.getCreditCode(),
-                o.getLegalRepUserId(), o.getStatus(), o.getSubjectType(), o.getAddress());
+                o.getLegalRepUserId(),
+                // 内部枚举 → api 枚举。**名字逐字相同**,所以 JSON 不变
+                com.xbb.org.api.OrgStatus.valueOf(o.getStatus().name()),
+                o.getSubjectType(), o.getAddress());
     }
 }

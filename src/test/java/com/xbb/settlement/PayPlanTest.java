@@ -145,8 +145,10 @@ class PayPlanTest {
         assertThatThrownBy(() -> settlementApi.publishPayPlan(j.jobId(), "越权", "HOURLY",
                 2_500, 0, 0, FROM, List.of(), outsider))
                 .hasMessageContaining("法人代表");
-        assertThatThrownBy(() -> settlementApi.listPayPlans(j.jobId(), outsider))
-                .hasMessageContaining("法人代表");
+        // **读接口回空列表,不抛**(铁律 5.1,2026-08-07 统一)。
+        // 写接口(上面那条 publishPayPlan)仍然抛 ——
+        // "你不能做这件事"是要说出来的,而"你看不到"不该说
+        assertThat(settlementApi.listPayPlans(j.jobId(), outsider)).isEmpty();
     }
 
     @Test

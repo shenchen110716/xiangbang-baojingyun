@@ -112,7 +112,7 @@ class AgreementService implements AgreementApi {
                         || identityApi.hasRole(callerUserId, com.xbb.identity.api.Role.PLATFORM_OPS))
                 .map(a -> new AgreementView(
                 a.getId(), a.getApplicationId(), a.getWorkerUserId(), a.getOrgId(),
-                a.getContent(), a.getContentHash(), a.getStatus(), a.getProviderRef(),
+                a.getContent(), a.getContentHash(), com.xbb.agreement.api.AgreementStatus.valueOf(a.getStatus().name()), a.getProviderRef(),
                 a.getTemplateKey(), a.getTemplateVersion()));
     }
 }

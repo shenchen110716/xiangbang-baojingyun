@@ -86,6 +86,7 @@ class SettlementEventListenerTest {
                 .filter(p -> p.getPayeeUserId() == applicant)
                 .findFirst().orElseThrow();
         assertThat(payout.getAmountCents()).isEqualTo(3100);
-        assertThat(payout.getStatus()).isEqualTo(Payout.Status.PENDING);
+        // 实体侧,内部枚举
+        assertThat(payout.getStatus().name()).isEqualTo("PENDING");
     }
 }

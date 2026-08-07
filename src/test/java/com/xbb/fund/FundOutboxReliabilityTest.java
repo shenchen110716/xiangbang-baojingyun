@@ -90,7 +90,7 @@ class FundOutboxReliabilityTest {
 
         fundApi.disburse(payoutId, ops.userId());
 
-        assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
+        assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(com.xbb.fund.api.PayoutStatus.PAID);
         assertThat(outboxRowOf(payoutId).getStatus()).isEqualTo(AbstractOutboxEvent.Status.PENDING);
         assertThat(outboxRowOf(payoutId).getEventType()).isEqualTo(FundsDisbursed.class.getName());
     }
@@ -105,7 +105,7 @@ class FundOutboxReliabilityTest {
         relay.publishPending();
 
         // 钱已经出去了,这是既成事实;不能因为下游炸了就假装没发过
-        assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
+        assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(com.xbb.fund.api.PayoutStatus.PAID);
         FundOutboxEvent row = outboxRowOf(payoutId);
         assertThat(row.getStatus()).isEqualTo(AbstractOutboxEvent.Status.FAILED);
         // **至少一次,不是恰好一次。**broken 是 static,跨 Spring 上下文共享;

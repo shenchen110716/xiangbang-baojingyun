@@ -1,6 +1,5 @@
 package com.xbb.fund.api;
 
-import com.xbb.fund.internal.Payout;
 import java.util.List;
 import java.util.Optional;
 
@@ -12,7 +11,7 @@ public interface FundApi {
      *              机构端要靠它筛出"我要付的款"
      */
     record PayoutView(long id, long settlementId, long payeeUserId, long amountCents,
-                       Payout.Status status, Long orgId) { }
+                       PayoutStatus status, Long orgId) { }
 
     /*
      * 下面三个查询都带 callerUserId。**不是多余的参数** ——

@@ -127,9 +127,11 @@ class AttendanceService implements AttendanceApi {
     @Transactional(transactionManager = "attendanceTransactionManager", readOnly = true)
     public List<WorkdayView> listByApplication(long applicationId, long callerUserId) {
         EngagedWorker ew = requireEngaged(applicationId);
-        // 用工方或工人本人都能看
-        if (ew.getWorkerUserId() != callerUserId) {
-            requireEmployer(ew, callerUserId);
+        // 用工方或工人本人都能看。**无关的人拿到空列表,不是异常**(铁律 5.1):
+        // 抛"只有组织法人代表可以…"等于告诉对方这个编号存在,
+        // 顺着编号一个个试就能摸清哪些是真的
+        if (ew.getWorkerUserId() != callerUserId && !isEmployer(ew, callerUserId)) {
+            return List.of();
         }
         return workdays.findByApplicationIdOrderByWorkDateAsc(applicationId).stream()
                 .map(AttendanceService::toView).toList();
@@ -143,8 +145,11 @@ class AttendanceService implements AttendanceApi {
         if (rows.isEmpty()) {
             return List.of();
         }
-        // 这个岗位下任取一条,用它的履约单校验归属 —— 同一岗位的组织是同一个
-        requireEmployer(requireEngaged(rows.get(0).getApplicationId()), callerUserId);
+        // 这个岗位下任取一条,用它的履约单校验归属 —— 同一岗位的组织是同一个。
+        // 无关的人拿到空列表(铁律 5.1),和"这个岗位没有考勤"的响应一模一样
+        if (!isEmployer(requireEngaged(rows.get(0).getApplicationId()), callerUserId)) {
+            return List.of();
+        }
         return rows.stream().map(AttendanceService::toView).toList();
     }
 
@@ -177,6 +182,16 @@ class AttendanceService implements AttendanceApi {
 
     @Override
     @Transactional(transactionManager = "attendanceTransactionManager", readOnly = true)
+    public boolean mayViewAttendance(long applicationId, long callerUserId) {
+        EngagedWorker ew = engaged.findById(applicationId).orElse(null);
+        if (ew == null) {
+            return false;
+        }
+        return ew.getWorkerUserId() == callerUserId || isEmployer(ew, callerUserId);
+    }
+
+    @Override
+    @Transactional(transactionManager = "attendanceTransactionManager", readOnly = true)
     public ConfirmedSummary confirmedSummary(long applicationId) {
         // 同一次查询里算两个值:分两次查的话,两次之间考勤可能被改,
         // 算出来的工资就对应两个不同时刻的考勤,而且账面上看不出来。
@@ -200,6 +215,19 @@ class AttendanceService implements AttendanceApi {
     }
 
     /** 归属校验:只有岗位所属组织的法人代表能录/改/确认考勤。 */
+    /**
+     * 只判断,不抛。<b>读接口用它</b> —— 读不到该回空列表而不是报错(铁律 5.1)。
+     * 写接口仍用 {@link #requireEmployer}:那时候"你不能做这件事"是要说出来的。
+     */
+    private boolean isEmployer(EngagedWorker ew, long callerUserId) {
+        try {
+            requireEmployer(ew, callerUserId);
+            return true;
+        } catch (IllegalStateException e) {
+            return false;
+        }
+    }
+
     private void requireEmployer(EngagedWorker ew, long callerUserId) {
         ApprovedOrg org = orgs.findById(ew.getOrgId())
                 .orElseThrow(() -> new IllegalStateException("组织未通过审核"));

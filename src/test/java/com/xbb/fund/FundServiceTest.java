@@ -53,7 +53,7 @@ class FundServiceTest {
         fundApi.disburse(payoutId, ops.userId());
 
         var view = fundApi.findById(payoutId, ops.userId()).orElseThrow();
-        assertThat(view.status()).isEqualTo(Payout.Status.PAID);
+        assertThat(view.status()).isEqualTo(com.xbb.fund.api.PayoutStatus.PAID);
     }
 
     @Test
@@ -68,7 +68,7 @@ class FundServiceTest {
         fundApi.disburse(payoutId, ops.userId());
 
         assertThat(fundApi.balanceOf(AccountType.USER_FUNDS)).isEqualTo(balanceAfterFirst);
-        assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(Payout.Status.PAID);
+        assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(com.xbb.fund.api.PayoutStatus.PAID);
     }
 
     @Test

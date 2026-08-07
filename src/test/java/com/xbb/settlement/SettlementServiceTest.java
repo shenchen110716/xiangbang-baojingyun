@@ -90,7 +90,7 @@ class SettlementServiceTest {
         // 用工人本人的视角查 —— findById 现在要求 caller,不然按编号就能翻别人的工资
         long workerId = settlements.findById(settlementId).orElseThrow().getWorkerUserId();
         var view = settlementApi.findById(settlementId, workerId).orElseThrow();
-        assertThat(view.status()).isEqualTo(Settlement.Status.VOIDED);
+        assertThat(view.status()).isEqualTo(com.xbb.settlement.api.SettlementStatus.VOIDED);
         assertThat(view.voidReason()).isEqualTo("岗位取消");
     }
 }

@@ -66,5 +66,19 @@ public interface AttendanceApi {
      */
     record ConfirmedSummary(int minutes, int workDays) { }
 
+    /**
+     * <b>不带 caller —— 它是给结算域算工资用的</b>,不是对外查询。
+     * 对外暴露时必须自己先判断归属(见 {@link #mayViewAttendance})。
+     */
     ConfirmedSummary confirmedSummary(long applicationId);
+
+    /**
+     * 这个人能不能看这份考勤:用工方或工人本人。
+     *
+     * <p>2026-08-07 审计:此前 summary 端点靠 {@code listByApplication} 抛异常来挡人。
+     * 把那个方法改成"无关的人拿空列表"之后,<b>这条旁路就通了</b> ——
+     * 而它的注释里早写着"否则 summary 会变成一个绕过归属的旁路"。
+     * 靠副作用挡人,改另一处就漏。
+     */
+    boolean mayViewAttendance(long applicationId, long callerUserId);
 }

@@ -97,7 +97,7 @@ class SettlementVoidedTest {
 
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status())
-                        .isEqualTo(com.xbb.fund.internal.Payout.Status.CANCELLED));
+                        .isEqualTo(com.xbb.fund.api.PayoutStatus.CANCELLED));
 
         // **不备资也该报"已作废"。**状态检查排在动钱之前,
         // 所以这里根本走不到扣款那一步 —— 原来它在扣完款才拦,

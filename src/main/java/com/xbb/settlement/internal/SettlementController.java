@@ -104,6 +104,13 @@ class SettlementController {
     @GetMapping("/job/{jobId}/pay-plan/active")
     ResponseEntity<SettlementApi.PayPlanView> activePlan(@PathVariable long jobId,
                                                           @AuthenticationPrincipal AuthenticatedUser caller) {
+        // **两种"没有"要分开。**
+        //  不是你的岗位 → 404(铁律 5.1:不可见就当不存在)
+        //  是你的岗位但还没设方案 → 204(那是正常状态,按岗位一口价发)
+        // 都回 404 的话前端会把"还没设方案"当故障显示,真正的故障就淹没在里面
+        if (!settlementApi.mayViewPayPlans(jobId, caller.userId())) {
+            return ResponseEntity.notFound().build();
+        }
         return settlementApi.activePayPlan(jobId, caller.userId())
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());

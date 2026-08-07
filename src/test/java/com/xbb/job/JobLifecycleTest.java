@@ -32,7 +32,7 @@ import static org.awaitility.Awaitility.await;
 /**
  * 岗位名额与生命周期(§4.2"发布、生命周期、名额",§5.4 硬约束"名额未满")。
  *
- * <p>此前 {@code Job.Status.CLOSED} 从没被任何代码设置过,名额字段也不存在,
+ * <p>此前 {@code com.xbb.job.api.JobStatus.CLOSED} 从没被任何代码设置过,名额字段也不存在,
  * 于是招满的岗位会一直被推荐、一直能报名。
  */
 @SpringBootTest
@@ -93,7 +93,7 @@ class JobLifecycleTest {
         engagementApi.acceptApplication(apply(jobId, worker), legalRep);
 
         JobApi.JobView view = jobApi.findJob(jobId).orElseThrow();
-        assertThat(view.status()).isEqualTo(Job.Status.CLOSED);
+        assertThat(view.status()).isEqualTo(com.xbb.job.api.JobStatus.CLOSED);
         assertThat(view.filledCount()).isEqualTo(1);
         assertThat(view.remainingSlots()).isZero();
     }
@@ -114,10 +114,10 @@ class JobLifecycleTest {
         long thirdApp = apply(jobId, third);
 
         engagementApi.acceptApplication(firstApp, legalRep);
-        assertThat(jobApi.findJob(jobId).orElseThrow().status()).isEqualTo(Job.Status.OPEN);
+        assertThat(jobApi.findJob(jobId).orElseThrow().status()).isEqualTo(com.xbb.job.api.JobStatus.OPEN);
 
         engagementApi.acceptApplication(secondApp, legalRep);
-        assertThat(jobApi.findJob(jobId).orElseThrow().status()).isEqualTo(Job.Status.CLOSED);
+        assertThat(jobApi.findJob(jobId).orElseThrow().status()).isEqualTo(com.xbb.job.api.JobStatus.CLOSED);
 
         // 第三个人不能被录进来——同一个坑两个人就是付两份钱
         assertThatThrownBy(() -> engagementApi.acceptApplication(thirdApp, legalRep))
@@ -152,7 +152,7 @@ class JobLifecycleTest {
         assertThatThrownBy(() -> jobApi.closeJob(jobId, outsider))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("只有组织法人代表");
-        assertThat(jobApi.findJob(jobId).orElseThrow().status()).isEqualTo(Job.Status.OPEN);
+        assertThat(jobApi.findJob(jobId).orElseThrow().status()).isEqualTo(com.xbb.job.api.JobStatus.OPEN);
     }
 
     @Test
@@ -165,7 +165,7 @@ class JobLifecycleTest {
         jobApi.closeJob(jobId, legalRep);
         jobApi.closeJob(jobId, legalRep);
 
-        assertThat(jobApi.findJob(jobId).orElseThrow().status()).isEqualTo(Job.Status.CLOSED);
+        assertThat(jobApi.findJob(jobId).orElseThrow().status()).isEqualTo(com.xbb.job.api.JobStatus.CLOSED);
         // 重试/重复点击都会走到这里,但下游不该看到同一个岗位关闭三次。
         // 直接数 outbox 行:事件是在关闭那一刻同事务写进去的,数它比等异步投递确定得多。
         assertThat(outbox.findAll().stream()

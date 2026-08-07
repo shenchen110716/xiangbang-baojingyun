@@ -135,7 +135,8 @@ class FundEventListenerTest {
         assertThat(commission.getTier()).isEqualTo(Commission.Tier.ACTIVE);
         assertThat(commission.getBrokerUserId()).isEqualTo(broker);
         assertThat(commission.getAmountCents()).isEqualTo(3_000);
-        assertThat(commission.getStatus()).isEqualTo(Commission.Status.PENDING);
+        // 这里读的是**实体**,拿的是内部枚举 —— 不是 View 上的 api 枚举
+        assertThat(commission.getStatus().name()).isEqualTo("PENDING");
         // 分出去的绝不能超过基数
         assertThat(all.stream().mapToLong(Commission::getAmountCents).sum())
                 .isLessThanOrEqualTo(5_000);

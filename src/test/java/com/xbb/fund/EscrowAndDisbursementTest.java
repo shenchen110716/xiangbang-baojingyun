@@ -135,7 +135,7 @@ class EscrowAndDisbursementTest {
         // 钱没发出去就不能扣:预扣要冲正回来
         assertThat(fundApi.balanceOf(AccountType.USER_FUNDS)).isEqualTo(before);
         // 发放本身仍是待发放,没有被误标成已发放
-        assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(Payout.Status.PENDING);
+        assertThat(fundApi.findById(payoutId, ops.userId()).orElseThrow().status()).isEqualTo(com.xbb.fund.api.PayoutStatus.PENDING);
     }
 
     @Test

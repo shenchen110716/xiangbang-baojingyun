@@ -167,7 +167,7 @@ class EngagementService implements EngagementApi {
         return applications.findById(applicationId)
                 .filter(a -> maySeeApplication(a, callerUserId))
                 .map(a -> new ApplicationView(
-                        a.getId(), a.getJobId(), a.getApplicantUserId(), a.getStatus()));
+                        a.getId(), a.getJobId(), a.getApplicantUserId(), com.xbb.engagement.api.ApplicationStatus.valueOf(a.getStatus().name())));
     }
 
     /**
@@ -198,18 +198,22 @@ class EngagementService implements EngagementApi {
     public List<ApplicationView> listJobApplicants(long jobId, long callerUserId) {
         // 归属校验和 acceptApplication 走同一条路:岗位 → 组织 → 法人代表。
         // 少了这段,任何登录用户报一个 jobId 就能看到谁在应聘。
-        PostedJob job = postedJobs.findById(jobId)
-                .orElseThrow(() -> new IllegalArgumentException("岗位不存在"));
-        ApprovedOrg org = approvedOrgs.findById(job.getOrgId())
-                .orElseThrow(() -> new IllegalStateException("组织未通过审核"));
-        if (org.getLegalRepUserId() != callerUserId) {
-            throw new IllegalStateException("只有组织法人代表可以查看应聘者");
+        // **无关的人拿到空列表,不是异常**(铁律 5.1)。
+        // 抛"只有组织法人代表可以查看应聘者"等于确认了这个 jobId 存在 ——
+        // 顺着编号一个个试就能摸清哪些岗位是真的
+        PostedJob job = postedJobs.findById(jobId).orElse(null);
+        if (job == null) {
+            return List.of();
+        }
+        ApprovedOrg org = approvedOrgs.findById(job.getOrgId()).orElse(null);
+        if (org == null || org.getLegalRepUserId() != callerUserId) {
+            return List.of();
         }
         return applications.findByJobIdOrderByIdAsc(jobId)
                 .stream().map(EngagementService::toView).toList();
     }
 
     private static ApplicationView toView(Application a) {
-        return new ApplicationView(a.getId(), a.getJobId(), a.getApplicantUserId(), a.getStatus());
+        return new ApplicationView(a.getId(), a.getJobId(), a.getApplicantUserId(), com.xbb.engagement.api.ApplicationStatus.valueOf(a.getStatus().name()));
     }
 }

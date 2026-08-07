@@ -1,6 +1,5 @@
 package com.xbb.org.api;
 
-import com.xbb.org.internal.Organization;
 
 import java.time.Instant;
 

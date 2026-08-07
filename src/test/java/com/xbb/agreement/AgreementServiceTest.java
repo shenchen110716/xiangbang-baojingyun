@@ -82,7 +82,7 @@ class AgreementServiceTest {
                 "15800000002", "110101199001024002", "协议一厂", "91110000000000141X");
 
         AgreementApi.AgreementView view = agreementApi.findByApplicationId(ids[0], ops.userId()).orElseThrow();
-        assertThat(view.status()).isEqualTo(Agreement.Status.PENDING);
+        assertThat(view.status()).isEqualTo(com.xbb.agreement.api.AgreementStatus.PENDING);
         assertThat(view.contentHash()).hasSize(64);
         assertThat(view.workerUserId()).isEqualTo(ids[2]);
         assertThat(view.content()).contains("劳务协议");
@@ -98,7 +98,7 @@ class AgreementServiceTest {
                 agreementApi.sign(ids[0], ids[2], "SMS"));
 
         AgreementApi.AgreementView view = agreementApi.findByApplicationId(ids[0], ops.userId()).orElseThrow();
-        assertThat(view.status()).isEqualTo(Agreement.Status.SIGNED);
+        assertThat(view.status()).isEqualTo(com.xbb.agreement.api.AgreementStatus.SIGNED);
         assertThat(view.providerRef()).startsWith("MOCK-");
     }
 
@@ -195,7 +195,7 @@ class AgreementServiceTest {
                         engagementApi.completeApplication(ids[0], ids[1])));
 
         assertThat(engagementApi.findApplication(ids[0], ops.userId()).orElseThrow().status())
-                .isEqualTo(com.xbb.engagement.internal.Application.Status.COMPLETED);
+                .isEqualTo(com.xbb.engagement.api.ApplicationStatus.COMPLETED);
     }
 
     // ---------- 模板版本化(§6.2) ----------

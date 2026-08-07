@@ -172,7 +172,7 @@ class SettlementService implements SettlementApi {
     private SettlementView toView(Settlement s) {
         return new SettlementView(
                 s.getId(), s.getApplicationId(), s.getJobId(), s.getWorkerUserId(),
-                s.getAmountCents(), s.getStatus(), s.getVoidReason());
+                s.getAmountCents(), com.xbb.settlement.api.SettlementStatus.valueOf(s.getStatus().name()), s.getVoidReason());
     }
 
     @Override
@@ -180,7 +180,7 @@ class SettlementService implements SettlementApi {
     public List<SettlementView> listMySettlements(long workerUserId) {
         return settlements.findByWorkerUserIdOrderByIdDesc(workerUserId).stream()
                 .map(s -> new SettlementView(s.getId(), s.getApplicationId(), s.getJobId(),
-                        s.getWorkerUserId(), s.getAmountCents(), s.getStatus(), s.getVoidReason()))
+                        s.getWorkerUserId(), s.getAmountCents(), com.xbb.settlement.api.SettlementStatus.valueOf(s.getStatus().name()), s.getVoidReason()))
                 .toList();
     }
 
@@ -230,14 +230,22 @@ class SettlementService implements SettlementApi {
     @Override
     @Transactional(transactionManager = "settlementTransactionManager", readOnly = true)
     public List<PayPlanView> listPayPlans(long jobId, long callerUserId) {
-        requireJobOwner(jobId, callerUserId);
+        // 无关的人拿到空结果,不是异常(铁律 5.1) —— 抛"只有法人可以…"
+        // 等于确认了这个岗位存在
+        if (!isJobOwner(jobId, callerUserId)) {
+            return List.of();
+        }
         return payPlans.findByJobIdOrderByVersionDesc(jobId).stream().map(this::toView).toList();
     }
 
     @Override
     @Transactional(transactionManager = "settlementTransactionManager", readOnly = true)
     public Optional<PayPlanView> activePayPlan(long jobId, long callerUserId) {
-        requireJobOwner(jobId, callerUserId);
+        // 无关的人拿到空结果,不是异常(铁律 5.1) —— 抛"只有法人可以…"
+        // 等于确认了这个岗位存在
+        if (!isJobOwner(jobId, callerUserId)) {
+            return Optional.empty();
+        }
         return payPlans.findByJobIdAndStatus(jobId, PayPlan.Status.ACTIVE).map(this::toView);
     }
 
@@ -252,6 +260,22 @@ class SettlementService implements SettlementApi {
     }
 
     /** 归属校验:只有岗位所属组织的法人代表能设方案。 */
+    /** 只判断,不抛。**读接口用它** —— 读不到该回空而不是报错(铁律 5.1)。 */
+    @Override
+    @Transactional(transactionManager = "settlementTransactionManager", readOnly = true)
+    public boolean mayViewPayPlans(long jobId, long callerUserId) {
+        return isJobOwner(jobId, callerUserId);
+    }
+
+    private boolean isJobOwner(long jobId, long callerUserId) {
+        try {
+            requireJobOwner(jobId, callerUserId);
+            return true;
+        } catch (IllegalStateException e) {
+            return false;
+        }
+    }
+
     private void requireJobOwner(long jobId, long callerUserId) {
         SettlementPostedJob job = postedJobs.findById(jobId)
                 .orElseThrow(() -> new IllegalArgumentException("岗位不存在或副本尚未落地: " + jobId));

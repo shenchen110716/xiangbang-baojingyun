@@ -1,13 +1,12 @@
 package com.xbb.agreement.api;
 
-import com.xbb.agreement.internal.Agreement;
 
 import java.util.Optional;
 
 public interface AgreementApi {
 
     record AgreementView(long id, long applicationId, long workerUserId, long orgId,
-                          String content, String contentHash, Agreement.Status status,
+                          String content, String contentHash, AgreementStatus status,
                           String providerRef, String templateKey, Integer templateVersion) { }
 
     /**

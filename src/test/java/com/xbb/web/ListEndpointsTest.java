@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -177,9 +178,14 @@ class ListEndpointsTest {
                 .andExpect(jsonPath("$[?(@.id == " + appId + ")]").exists());
 
         // 不相干的人看不到。少了这条,任何登录用户报个 jobId 就能拿到谁在应聘。
+        //
+        // **2026-08-07 起回 200 [] 而不是 4xx**(铁律 5.1):
+        // 报"只有组织法人代表可以查看应聘者"等于确认了这个 jobId 存在,
+        // 顺着编号一个个试就能摸清哪些岗位是真的。空数组和"这岗位没人报名"长得一样
         mvc.perform(get("/api/engagement/job/" + jobId + "/applicants")
                         .header("Authorization", "Bearer " + stranger.token()))
-                .andExpect(status().is4xxClientError());
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
     }
 
     @Test

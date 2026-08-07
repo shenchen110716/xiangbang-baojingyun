@@ -1,6 +1,5 @@
 package com.xbb.job.api;
 
-import com.xbb.job.internal.Job;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,7 +19,7 @@ public interface JobApi {
      *                    单位改了地址这些岗位还留着旧的,而且分不清哪个是抄来的
      */
     record JobView(long id, Long orgId, String title, String description, long wageCents,
-                    Job.Status status, int headcount, int filledCount,
+                    JobStatus status, int headcount, int filledCount,
                     String orgName, String orgAddress, String workAddress,
                     Long posterUserId, Long totalPriceCents, String regionCode,
                     Long workerCents, Long commissionCents, Long dispatchRetainCents,

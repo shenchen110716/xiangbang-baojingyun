@@ -1,6 +1,5 @@
 package com.xbb.settlement.api;
 
-import com.xbb.settlement.internal.Settlement;
 import java.util.List;
 import java.time.LocalDate;
 import java.util.List;
@@ -9,7 +8,7 @@ import java.util.Optional;
 public interface SettlementApi {
 
     record SettlementView(long id, long applicationId, long jobId, long workerUserId,
-                           long amountCents, Settlement.Status status, String voidReason) { }
+                           long amountCents, SettlementStatus status, String voidReason) { }
 
     void voidSettlement(long settlementId, String reason, long callerUserId);
 
@@ -68,6 +67,16 @@ public interface SettlementApi {
 
     /** 岗位的全部方案版本,新的在前。 */
     List<PayPlanView> listPayPlans(long jobId, long callerUserId);
+
+    /**
+     * 这个人能不能看这个岗位的计薪方案(= 是不是岗位所属组织的法人代表)。
+     *
+     * <p><b>为什么要它。</b>「不是你的岗位」和「是你的岗位但还没设方案」
+     * 必须能分开:前者按铁律 5.1 回 404,后者回 204 ——
+     * 没方案是正常状态(按岗位一口价发),前端把它当故障显示的话,
+     * 真正的故障就淹没在里面了。
+     */
+    boolean mayViewPayPlans(long jobId, long callerUserId);
 
     /** 岗位当前生效的方案。没有则返回空。 */
     Optional<PayPlanView> activePayPlan(long jobId, long callerUserId);

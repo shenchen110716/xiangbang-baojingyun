@@ -143,15 +143,21 @@ class AttendanceHttpTest {
                  "source":"MANUAL","reason":"越权"}""".formatted(s.applicationId())).getStatusCode())
                 .isIn(HttpStatus.FORBIDDEN, HttpStatus.CONFLICT, HttpStatus.BAD_REQUEST);
 
-        // 看明细
-        assertThat(get("/api/attendance/application/" + s.applicationId(), outsider.token()).getStatusCode())
-                .isIn(HttpStatus.FORBIDDEN, HttpStatus.CONFLICT, HttpStatus.BAD_REQUEST);
+        // 看明细。**2026-08-07 起回 200 [] 而不是报错**(铁律 5.1):
+        // 报"只有组织法人代表可以…"等于确认了这个编号存在,
+        // 顺着编号一个个试就能摸清哪些是真的
+        var detail = get("/api/attendance/application/" + s.applicationId(), outsider.token());
+        assertThat(detail.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(detail.getBody()).isEqualTo("[]");
 
         // **汇总也要挡。**它只回两个数字,很容易被当成"不敏感"而漏掉归属校验 ——
         // 但那两个数字是别人的工时
+        // **2026-08-07 起回 404**:不可见就当不存在(铁律 5.1)。
+        // 更要紧的是它现在**显式判断归属**,而不是借道 listByApplication 的异常 ——
+        // 那条旁路在 listByApplication 改成"回空列表"的当天就通了
         assertThat(get("/api/attendance/application/" + s.applicationId() + "/summary", outsider.token())
                 .getStatusCode())
-                .isIn(HttpStatus.FORBIDDEN, HttpStatus.CONFLICT, HttpStatus.BAD_REQUEST);
+                .isEqualTo(HttpStatus.NOT_FOUND);
 
         // 工人自己的列表里不该出现别人的记录
         assertThat(get("/api/attendance/mine?from=2026-01-01&to=2026-12-31", outsider.token()).getBody())

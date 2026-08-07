@@ -133,9 +133,13 @@ class AttendanceController {
     @GetMapping("/application/{applicationId}/summary")
     ResponseEntity<AttendanceApi.ConfirmedSummary> summary(@PathVariable long applicationId,
                                                            @AuthenticationPrincipal AuthenticatedUser caller) {
-        // 归属校验借道 listByApplication:没权限的人在这里就会被挡下,
-        // 否则 summary 会变成一个绕过归属的旁路 —— 数字虽小,也是别人的工时
-        attendanceApi.listByApplication(applicationId, caller.userId());
+        // **显式判断,不再借道 listByApplication 的异常。**
+        // 靠副作用挡人的话,改另一处就漏 —— 2026-08-07 就是这么漏的:
+        // listByApplication 改成"无关的人拿空列表"之后,这里立刻变成旁路。
+        // 看不见就当不存在(铁律 5.1)
+        if (!attendanceApi.mayViewAttendance(applicationId, caller.userId())) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.ok(attendanceApi.confirmedSummary(applicationId));
     }
 

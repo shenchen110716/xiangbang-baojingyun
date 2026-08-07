@@ -211,7 +211,7 @@ class JobService implements JobApi {
 
     private static JobView toView(Job j, ApprovedOrg org) {
         return new JobView(j.getId(), j.getOrgId(), j.getTitle(), j.getDescription(),
-                j.getWageCents(), j.getStatus(), j.getHeadcount(), j.getFilledCount(),
+                j.getWageCents(), com.xbb.job.api.JobStatus.valueOf(j.getStatus().name()), j.getHeadcount(), j.getFilledCount(),
                 org == null ? null : org.getName(),
                 org == null ? null : org.getAddress(),
                 j.getWorkAddress(),
