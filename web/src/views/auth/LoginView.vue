@@ -430,9 +430,12 @@ p {
   .auth-side::before {
     display: none;
   }
-  .side-body,
-  .back-link {
+  .side-body {
     display: none;
+  }
+  .back-link {
+    font-size: 12px;
+    padding: 6px 10px;
   }
   .auth-main {
     padding: 28px 20px 40px;
