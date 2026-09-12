@@ -7,6 +7,7 @@ PositionEnrollSubmission，不直接生成 InsuredPerson：本轮范围明确收
 routers/positions.py 的审核队列，扫码参保-后台任务）通过后才落地。
 """
 import time
+import uuid
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -17,6 +18,7 @@ from ..core.db import db
 from ..core.enroll_tokens import verify_enroll_token
 from ..core.id_number import age_on, birth_date_from_id, id_encrypt, is_valid_id_number
 from ..models import InsurancePlan, PositionEnrollSubmission, WorkPosition
+from ..providers import wechat_pay_provider
 from ..schemas import EnrollSubmitIn
 
 router = APIRouter(prefix="/api/enroll", tags=["enroll"])
@@ -113,3 +115,84 @@ def enroll_submit(position_id: int, mode: str, token: str, data: EnrollSubmitIn,
     session.add(submission)
     session.commit()
     return {"message": "提交成功", "submission_id": submission.id, "payment_mode": mode}
+
+
+@router.post("/{submission_id}/payment-order")
+def create_payment_order(submission_id: int, session: Session = Depends(db)):
+    # 个人缴纳（payment_status='pending'）才能发起支付
+    submission = session.get(PositionEnrollSubmission, submission_id)
+    if not submission:
+        raise HTTPException(404, "提交记录不存在")
+    if submission.payment_mode != "personal":
+        raise HTTPException(400, "只有个人缴纳模式才能发起支付")
+    if submission.payment_status != "pending":
+        raise HTTPException(400, f"当前支付状态{submission.payment_status}无法发起支付")
+
+    position = session.get(WorkPosition, submission.position_id)
+    plan = session.get(InsurancePlan, position.plan_id) if position and position.plan_id else None
+    if not plan:
+        raise HTTPException(400, "岗位未关联保险产品")
+
+    order_no = f"enroll-{submission_id}-{uuid.uuid4().hex[:8]}"
+    description = f"{position.name if position else '岗位'} - {plan.name if plan else '产品'}"
+
+    provider = wechat_pay_provider()
+    result = provider.create_h5_order(
+        amount=plan.price,
+        order_no=order_no,
+        description=description,
+        return_url=f"https://bx.xbbzp.com/enroll-payment-return?submission_id={submission_id}",
+    )
+
+    if not result.ok:
+        raise HTTPException(400, f"创建支付订单失败: {result.message}")
+
+    submission.order_no = order_no
+    session.commit()
+
+    return {
+        "submission_id": submission_id,
+        "order_no": order_no,
+        "mweb_url": result.data.get("mweb_url", ""),
+        "return_url": result.data.get("return_url", ""),
+    }
+
+
+@router.get("/{submission_id}/payment-status")
+def get_payment_status(submission_id: int, session: Session = Depends(db)):
+    submission = session.get(PositionEnrollSubmission, submission_id)
+    if not submission:
+        raise HTTPException(404, "提交记录不存在")
+    return {
+        "submission_id": submission_id,
+        "payment_mode": submission.payment_mode,
+        "payment_status": submission.payment_status,
+        "order_no": submission.order_no,
+        "review_status": submission.review_status,
+    }
+
+
+@router.post("/payment-callback")
+async def wechat_payment_callback(request: Request, session: Session = Depends(db)):
+    # 微信异步通知入口：根据订单号（order_no）找到对应 PositionEnrollSubmission，
+    # 验签后更新 payment_status。
+    raw_body = await request.body()
+
+    provider = wechat_pay_provider()
+    notify_data = provider.verify_notify(dict(request.headers), raw_body)
+
+    if not notify_data:
+        raise HTTPException(401, "验签失败")
+
+    order_no = notify_data.get("out_trade_no", "")
+    status = notify_data.get("status", "")
+
+    submission = session.query(PositionEnrollSubmission).filter_by(order_no=order_no).first()
+    if not submission:
+        return {"code": "SUCCESS"}  # 微信要求成功返回 SUCCESS，否则会继续重试
+
+    if status == "paid":
+        submission.payment_status = "paid"
+        session.commit()
+
+    return {"code": "SUCCESS"}

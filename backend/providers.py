@@ -89,6 +89,12 @@ class WeChatPayProvider(MockProvider):
             "paySign": "mock-pay-sign",
         }, "模拟微信 JSAPI 下单成功")
 
+    def create_h5_order(self, amount: float, order_no: str, description: str, return_url: str = "") -> ProviderResult:
+        return ProviderResult(True, self.name, order_no, {
+            "mweb_url": f"https://wx.tenpay.com/cgi-bin/mmpayweb?prepayid=mock-{order_no}&package=prepay_id%3Dmock-{order_no}",
+            "return_url": return_url or "https://bx.xbbzp.com/enroll-payment-return",
+        }, "模拟微信 H5 下单成功")
+
     def code_to_openid(self, code: str) -> Optional[str]:
         return f"mock-openid-{code}" if code else None
 
@@ -189,6 +195,26 @@ class RealWeChatPayProvider(WeChatPayProvider):
             return order_result
         prepay_id = order_result.data.get("prepay_id", "")
         return ProviderResult(True, self.name, order_no, self._jsapi_client_params(prepay_id), "微信支付下单成功")
+
+    def create_h5_order(self, amount: float, order_no: str, description: str, return_url: str = "") -> ProviderResult:
+        S = self._settings()
+        payload = {
+            "appid": S.get("WECHAT_PAY_APP_ID"), "mchid": S.get("WECHAT_PAY_MCH_ID"),
+            "description": description, "out_trade_no": order_no,
+            "notify_url": S.get("WECHAT_PAY_NOTIFY_URL"),
+            "amount": {"total": round(amount * 100), "currency": "CNY"},
+            "scene_info": {"h5_info": {"type": "Wap"}},
+        }
+        if return_url:
+            payload["scene_info"]["h5_info"]["client_ip"] = "127.0.0.1"
+        order_result = self._post("/v3/pay/transactions/h5", payload)
+        if not order_result.ok:
+            return order_result
+        mweb_url = order_result.data.get("h5_url", "")
+        return ProviderResult(True, self.name, order_no, {
+            "mweb_url": mweb_url,
+            "return_url": return_url or "https://bx.xbbzp.com/enroll-payment-return",
+        }, "微信支付 H5 下单成功")
 
     def code_to_openid(self, code: str) -> Optional[str]:
         S = self._settings()
