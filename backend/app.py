@@ -125,7 +125,7 @@ _FRONTEND_ROUTES = {
 def serve_frontend(path: str):
     if path in _WEB_ROOT_FILES:
         return FileResponse(WEB_DIST / path)
-    if f"/{path}" in _FRONTEND_ROUTES or path.startswith("certificate/"):
+    if f"/{path}" in _FRONTEND_ROUTES or path.startswith("certificate/") or path.startswith("enroll/"):
         return FileResponse(
             WEB_DIST / "index.html",
             media_type="text/html",

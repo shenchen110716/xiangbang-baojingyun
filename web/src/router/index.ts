@@ -10,7 +10,7 @@ const router = createRouter({
   },
 })
 
-const PUBLIC_ROUTE_NAMES = new Set(['login', 'enterprise-apply'])
+const PUBLIC_ROUTE_NAMES = new Set(['login', 'enterprise-apply', 'enroll'])
 
 router.beforeEach((to) => {
   const hasToken = !!localStorage.getItem(TOKEN_KEY)
