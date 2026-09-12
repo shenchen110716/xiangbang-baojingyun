@@ -2,7 +2,7 @@ from ..core.db import Base
 from .user import User
 from .insurer import Insurer, InsurerMonthlySettlement
 from .enterprise import Enterprise, ActualEmployer, UserEmployerScope
-from .position import WorkPosition, PositionVideo
+from .position import WorkPosition, PositionVideo, PositionEnrollSubmission
 from .plan import InsurancePlan, PlanTier
 from .insured import InsuredPerson, Policy, PolicyMember
 from .claim import Claim, ClaimTimeline, ClaimDocument
@@ -32,6 +32,7 @@ __all__ = [
     "UserEmployerScope",
     "WorkPosition",
     "PositionVideo",
+    "PositionEnrollSubmission",
     "InsurancePlan",
     "PlanTier",
     "InsuredPerson",

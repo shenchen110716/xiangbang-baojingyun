@@ -65,6 +65,27 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     position_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(work_positions)")}
     if "actual_employer_id" not in position_columns: s.connection().exec_driver_sql("ALTER TABLE work_positions ADD COLUMN actual_employer_id INTEGER")
     if "created_by" not in position_columns: s.connection().exec_driver_sql("ALTER TABLE work_positions ADD COLUMN created_by INTEGER")
+    if "enable_personal_pay" not in position_columns: s.connection().exec_driver_sql("ALTER TABLE work_positions ADD COLUMN enable_personal_pay BOOLEAN DEFAULT 0")
+    if "enable_employer_pay" not in position_columns: s.connection().exec_driver_sql("ALTER TABLE work_positions ADD COLUMN enable_employer_pay BOOLEAN DEFAULT 0")
+    if "enroll_token_version" not in position_columns: s.connection().exec_driver_sql("ALTER TABLE work_positions ADD COLUMN enroll_token_version INTEGER DEFAULT 0")
+    s.connection().exec_driver_sql(
+        "CREATE TABLE IF NOT EXISTS position_enroll_submissions ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "position_id INTEGER NOT NULL REFERENCES work_positions(id),"
+        "payment_mode VARCHAR(20) NOT NULL,"
+        "name VARCHAR(80) DEFAULT '',"
+        "id_number_cipher TEXT DEFAULT '',"
+        "phone VARCHAR(30) DEFAULT '',"
+        "payment_status VARCHAR(20) DEFAULT 'not_required',"
+        "order_no VARCHAR(60) DEFAULT '',"
+        "review_status VARCHAR(20) DEFAULT 'pending',"
+        "review_note TEXT DEFAULT '',"
+        "reviewed_by INTEGER REFERENCES users(id),"
+        "reviewed_at DATETIME,"
+        "insured_person_id INTEGER REFERENCES insured_people(id),"
+        "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+        ")"
+    )
     claim_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(claims)")}
     for column, definition in [("accident_at","VARCHAR(30) DEFAULT ''"),("accident_place","VARCHAR(200) DEFAULT ''"),("accident_type","VARCHAR(60) DEFAULT '工伤事故'"),("hospital","VARCHAR(160) DEFAULT ''"),("diagnosis","TEXT DEFAULT ''"),("medical_cost","FLOAT DEFAULT 0"),("contact_name","VARCHAR(80) DEFAULT ''"),("contact_phone","VARCHAR(30) DEFAULT ''"),("insurer_report_no","VARCHAR(100) DEFAULT ''"),("current_handler","VARCHAR(80) DEFAULT '平台理赔专员'"),("deadline","VARCHAR(30) DEFAULT ''"),("sla_deadline","VARCHAR(30) DEFAULT ''"),("approved_amount","FLOAT DEFAULT 0"),("paid_at","VARCHAR(30) DEFAULT ''"),("rejection_reason","TEXT DEFAULT ''"),("review_note","TEXT DEFAULT ''"),("risk_level","VARCHAR(20) DEFAULT 'normal'")]:
         if column not in claim_columns: s.connection().exec_driver_sql(f"ALTER TABLE claims ADD COLUMN {column} {definition}")
