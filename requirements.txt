@@ -10,3 +10,4 @@ psycopg[binary]
 alembic
 cryptography
 boto3>=1.34
+qrcode[pil]

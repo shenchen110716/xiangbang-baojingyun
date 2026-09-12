@@ -1,8 +1,11 @@
+import base64
+import io
 import secrets
 import tempfile
 from pathlib import Path
 from typing import Literal, Optional
 
+import qrcode
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import or_, select
@@ -10,8 +13,10 @@ from sqlalchemy.orm import Session
 
 from ..core import storage
 from ..core.audit import audit
+from ..core.config import PUBLIC_BASE_URL
 from ..core.credit_code import is_valid_credit_code
 from ..core.db import db
+from ..core.enroll_tokens import make_enroll_token
 from ..core.file_tokens import make_download_token, verify_download_token
 from ..core.rbac import require_role
 from ..core.security import current_user
@@ -293,7 +298,7 @@ def add_position(data: PositionIn, user: User = Depends(current_user), session: 
     assert_employer_access(session,user,employer.id)
     if employer.status!='active': raise HTTPException(400,"该工作单位已暂停，不能新增岗位")
     plan_id = _enterprise_position_plan_id(session, target_enterprise, data.plan_id) if user.role == 'enterprise' else data.plan_id
-    item=WorkPosition(enterprise_id=target_enterprise,actual_employer_id=employer.id,actual_employer=employer.name,name=data.name,occupation_class='待定' if user.role=='enterprise' else data.occupation_class,plan_id=plan_id,status='pending',created_by=user.id)
+    item=WorkPosition(enterprise_id=target_enterprise,actual_employer_id=employer.id,actual_employer=employer.name,name=data.name,occupation_class='待定' if user.role=='enterprise' else data.occupation_class,plan_id=plan_id,status='pending',created_by=user.id,enable_personal_pay=data.enable_personal_pay,enable_employer_pay=data.enable_employer_pay)
     session.add(item);session.commit();session.refresh(item);audit(session,user,"create","position",str(item.id));return serialize(item)
 
 @router.patch("/positions/{item_id}")
@@ -309,6 +314,7 @@ def update_position(item_id:int,data:PositionIn,user:User=Depends(current_user),
     if not employer or employer.enterprise_id!=item.enterprise_id: raise HTTPException(400,"请选择本企业添加的有效实际工作单位")
     assert_employer_access(session,user,employer.id)
     item.actual_employer_id=employer.id;item.actual_employer=employer.name;item.name=data.name
+    item.enable_personal_pay=data.enable_personal_pay;item.enable_employer_pay=data.enable_employer_pay
     if user.role=='enterprise':
         # 职业类别始终由保司审核视频后确定，企业端不改；但意向产品是企业自己
         # 选的，审核通过前应该能一直改——不能像以前那样一律清空成 None，那样
@@ -328,3 +334,35 @@ def delete_position(item_id:int,user:User=Depends(current_user),session:Session=
     for video in session.scalars(select(PositionVideo).where(PositionVideo.position_id==item_id)):
         session.delete(video)
     session.delete(item);session.commit();audit(session,user,"delete","position",str(item_id));return {"ok":True}
+
+def _enroll_link(item: WorkPosition, mode: str) -> str:
+    token = make_enroll_token(item.id, mode, item.enroll_token_version)
+    return f"{PUBLIC_BASE_URL}/enroll/{item.id}/{mode}/{token}"
+
+def _qr_base64(url: str) -> str:
+    img = qrcode.make(url)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+@router.get("/positions/{item_id}/enroll-qr")
+def position_enroll_qr(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
+    item=session.get(WorkPosition,item_id)
+    if not item: raise HTTPException(404,"岗位不存在")
+    _position_employer_access(session,user,item)
+    result={}
+    for mode,enabled in (("personal",item.enable_personal_pay),("employer",item.enable_employer_pay)):
+        if not enabled: result[mode]={"enabled":False,"url":None,"qr_base64":None}; continue
+        url=_enroll_link(item,mode)
+        result[mode]={"enabled":True,"url":url,"qr_base64":_qr_base64(url)}
+    return result
+
+@router.post("/positions/{item_id}/enroll-qr/regenerate")
+def regenerate_position_enroll_qr(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
+    # 老二维码贴出去可能收不回来了：不删数据，只把版本号加一，旧签名对不上就自动失效。
+    item=session.get(WorkPosition,item_id)
+    if not item: raise HTTPException(404,"岗位不存在")
+    _position_employer_access(session,user,item)
+    item.enroll_token_version+=1
+    session.commit();audit(session,user,"regenerate","position_enroll_qr",str(item.id))
+    return position_enroll_qr(item_id,user,session)

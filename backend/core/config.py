@@ -4,6 +4,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
+# 扫码参保二维码要嵌一个绝对 URL（二维码没有"当前站点"这个概念，必须是完整地址）。
+# 默认指向已经在用的生产域名，其他环境按需用环境变量覆盖。
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://bx.xbbzp.com").rstrip("/")
+
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{ROOT / 'data.db'}")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
