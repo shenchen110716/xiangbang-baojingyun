@@ -298,7 +298,7 @@ def add_position(data: PositionIn, user: User = Depends(current_user), session: 
     assert_employer_access(session,user,employer.id)
     if employer.status!='active': raise HTTPException(400,"该工作单位已暂停，不能新增岗位")
     plan_id = _enterprise_position_plan_id(session, target_enterprise, data.plan_id) if user.role == 'enterprise' else data.plan_id
-    item=WorkPosition(enterprise_id=target_enterprise,actual_employer_id=employer.id,actual_employer=employer.name,name=data.name,occupation_class='待定' if user.role=='enterprise' else data.occupation_class,plan_id=plan_id,status='pending',created_by=user.id,enable_personal_pay=data.enable_personal_pay,enable_employer_pay=data.enable_employer_pay)
+    item=WorkPosition(enterprise_id=target_enterprise,actual_employer_id=employer.id,actual_employer=employer.name,name=data.name,occupation_class='待定' if user.role=='enterprise' else data.occupation_class,plan_id=plan_id,status='pending',created_by=user.id,enable_personal_pay=bool(data.enable_personal_pay),enable_employer_pay=bool(data.enable_employer_pay))
     session.add(item);session.commit();session.refresh(item);audit(session,user,"create","position",str(item.id));return serialize(item)
 
 @router.patch("/positions/{item_id}")
@@ -314,7 +314,8 @@ def update_position(item_id:int,data:PositionIn,user:User=Depends(current_user),
     if not employer or employer.enterprise_id!=item.enterprise_id: raise HTTPException(400,"请选择本企业添加的有效实际工作单位")
     assert_employer_access(session,user,employer.id)
     item.actual_employer_id=employer.id;item.actual_employer=employer.name;item.name=data.name
-    item.enable_personal_pay=data.enable_personal_pay;item.enable_employer_pay=data.enable_employer_pay
+    if data.enable_personal_pay is not None: item.enable_personal_pay=data.enable_personal_pay
+    if data.enable_employer_pay is not None: item.enable_employer_pay=data.enable_employer_pay
     if user.role=='enterprise':
         # 职业类别始终由保司审核视频后确定，企业端不改；但意向产品是企业自己
         # 选的，审核通过前应该能一直改——不能像以前那样一律清空成 None，那样

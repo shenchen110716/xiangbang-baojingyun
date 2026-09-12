@@ -1,6 +1,6 @@
 const app = getApp();
 Page({
-  data: { id: 0, form: { actual_employer: '', actual_employer_id: null, name: '', plan_id: null }, employers: [], employerIndex: 0, plans: [], planIndex: 0, videos: [], item: null, saving: false, uploading: false, loading: true },
+  data: { id: 0, form: { actual_employer: '', actual_employer_id: null, name: '', plan_id: null, enable_personal_pay: false, enable_employer_pay: false }, employers: [], employerIndex: 0, plans: [], planIndex: 0, videos: [], item: null, saving: false, uploading: false, loading: true, qr: null, qrLoading: false },
   onLoad(options) { this.setData({ id: Number(options.id || 0) }); this.load(); },
   load() {
     Promise.all([app.request('/actual-employers'), app.request('/plans', { silent: true }), this.data.id ? app.request('/positions') : Promise.resolve([]), this.data.id ? app.request(`/positions/${this.data.id}/videos`) : Promise.resolve([])])
@@ -15,10 +15,11 @@ Page({
         if (this.data.id && !item) { this.setData({ loading: false }); wx.showToast({ title: '该岗位不存在或无权查看', icon: 'none' }); wx.navigateBack(); return; }
         const employerIndex = Math.max(0, activeEmployers.findIndex((row) => item && row.id === item.actual_employer_id));
         const planIndex = Math.max(0, planOptions.findIndex((row) => item && row.id === item.plan_id));
-        const form = item ? { actual_employer: item.actual_employer_name || item.actual_employer, actual_employer_id: item.actual_employer_id, name: item.name, plan_id: item.plan_id || null } : { actual_employer: (activeEmployers[0] && activeEmployers[0].name) || '', actual_employer_id: (activeEmployers[0] && activeEmployers[0].id) || null, name: '', plan_id: null };
+        const form = item ? { actual_employer: item.actual_employer_name || item.actual_employer, actual_employer_id: item.actual_employer_id, name: item.name, plan_id: item.plan_id || null, enable_personal_pay: !!item.enable_personal_pay, enable_employer_pay: !!item.enable_employer_pay } : { actual_employer: (activeEmployers[0] && activeEmployers[0].name) || '', actual_employer_id: (activeEmployers[0] && activeEmployers[0].id) || null, name: '', plan_id: null, enable_personal_pay: false, enable_employer_pay: false };
         const itemWithLabel = item ? { ...item, status_label: app.statusText(item.status) } : null;
         const videosWithLabel = (videos || []).map((v) => ({ ...v, status_label: app.statusText(v.status) }));
         this.setData({ employers: activeEmployers, plans: planOptions, item: itemWithLabel, videos: videosWithLabel, employerIndex, planIndex, form, loading: false });
+        if (item && item.status === 'approved' && (form.enable_personal_pay || form.enable_employer_pay)) this.loadQr();
       })
       .catch(() => {
         this.setData({ loading: false });
@@ -26,6 +27,49 @@ Page({
       });
   },
   input(e) { this.setData({ [`form.${e.currentTarget.dataset.key}`]: e.detail.value }); },
+  toggle(e) { this.setData({ [`form.${e.currentTarget.dataset.key}`]: e.detail.value }); },
+  loadQr() {
+    if (!this.data.id) return;
+    this.setData({ qrLoading: true });
+    app.request(`/positions/${this.data.id}/enroll-qr`, { silent: true })
+      .then((qr) => this.setData({ qr, qrLoading: false }))
+      .catch(() => this.setData({ qrLoading: false }));
+  },
+  regenerateQr() {
+    wx.showModal({
+      title: '重新生成二维码',
+      content: '旧二维码将立即失效，已贴出去的码需要重新张贴。确定继续？',
+      success: (res) => {
+        if (!res.confirm) return;
+        this.setData({ qrLoading: true });
+        app.request(`/positions/${this.data.id}/enroll-qr/regenerate`, { method: 'POST' })
+          .then((qr) => { this.setData({ qr, qrLoading: false }); wx.showToast({ title: '已生成新码' }); })
+          .catch(() => this.setData({ qrLoading: false }));
+      }
+    });
+  },
+  saveQr(e) {
+    const mode = e.currentTarget.dataset.mode;
+    const entry = this.data.qr && this.data.qr[mode];
+    if (!entry || !entry.qr_base64) return;
+    const filePath = `${wx.env.USER_DATA_PATH}/enroll-${this.data.id}-${mode}.png`;
+    const fs = wx.getFileSystemManager();
+    fs.writeFile({
+      filePath, data: entry.qr_base64, encoding: 'base64',
+      success: () => {
+        wx.saveImageToPhotosAlbum({
+          filePath,
+          success: () => wx.showToast({ title: '已保存到相册' }),
+          fail: (error) => {
+            const message = (error && error.errMsg) || '';
+            if (message.includes('cancel')) return;
+            wx.showToast({ title: message.includes('auth') ? '请在设置中允许保存到相册' : '保存失败，请重试', icon: 'none' });
+          }
+        });
+      },
+      fail: () => wx.showToast({ title: '保存失败，请重试', icon: 'none' })
+    });
+  },
   employerChange(e) { const employerIndex = Number(e.detail.value), employer = this.data.employers[employerIndex]; this.setData({ employerIndex, 'form.actual_employer_id': employer.id, 'form.actual_employer': employer.name }); },
   planChange(e) { const planIndex = Number(e.detail.value), plan = this.data.plans[planIndex]; this.setData({ planIndex, 'form.plan_id': plan.id }); },
   save() { const form = this.data.form; if (!form.name.trim() || !form.actual_employer_id) { wx.showToast({ title: '请填写岗位并选择实际工作单位', icon: 'none' }); return; } const creating = !this.data.id; this.setData({ saving: true }); const request = app.request(creating ? '/positions' : `/positions/${this.data.id}`, { method: creating ? 'POST' : 'PATCH', data: form }); request.then((item) => { if (creating) { this.setData({ id: item.id, saving: false }, () => { wx.showToast({ title: '请继续上传岗位视频', icon: 'none' }); this.load(); this.uploadVideo(); }); } else { wx.showToast({ title: '已保存' }); this.setData({ saving: false }); this.load(); } }).catch(() => this.setData({ saving: false })); },
