@@ -49,6 +49,7 @@ from .routers.reports import router as reports_router
 from .routers.insured import router as insured_router
 from .routers.enrollment import router as enrollment_router
 from .routers.enroll import router as enroll_router
+from .routers.enroll_review import router as enroll_review_router
 from .routers.messages import router as messages_router
 from .routers.notifications import router as notifications_router
 from .routers.claims import router as claims_router
@@ -81,6 +82,7 @@ app.include_router(reports_router)
 app.include_router(insured_router)
 app.include_router(enrollment_router)
 app.include_router(enroll_router)
+app.include_router(enroll_review_router)
 app.include_router(messages_router)
 app.include_router(notifications_router)
 app.include_router(claims_router)

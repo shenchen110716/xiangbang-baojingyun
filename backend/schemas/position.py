@@ -14,3 +14,4 @@ class PositionReviewIn(BaseModel): occupation_class: Optional[Literal["1-3类","
 # 扫码参保：免登录公开提交。website 是蜜罐字段，跟 EnterpriseApplyIn 同一个思路——
 # 正常人看不到这个字段，机器人乱填表单时经常会带上。
 class EnrollSubmitIn(BaseModel): name: str = Field(min_length=1,max_length=80); id_number: str = Field(min_length=6,max_length=40); phone: str = Field(default="",max_length=30); website: str = Field(default="",max_length=200)
+class EnrollReviewIn(BaseModel): status: Literal["approved","rejected"]; review_note: str = ""

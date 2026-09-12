@@ -5,7 +5,7 @@ from .agent import AgentIn, CommissionIn, CommissionUpdate
 from .position import (
     PositionIn, ActualEmployerIn, ActualEmployerUpdate,
     PositionVideoIn, PositionVideoReviewIn, PositionReviewIn,
-    EnrollSubmitIn,
+    EnrollSubmitIn, EnrollReviewIn,
 )
 from .plan import PlanTierIn, PlanIn, PlanUpdate
 from .insured import PersonIn, PersonUpdate, BulkPersonRow, BulkPersonIn, InsurerFlagIn
