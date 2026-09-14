@@ -89,10 +89,9 @@ class WeChatPayProvider(MockProvider):
             "paySign": "mock-pay-sign",
         }, "模拟微信 JSAPI 下单成功")
 
-    def create_h5_order(self, amount: float, order_no: str, description: str, return_url: str = "") -> ProviderResult:
+    def create_h5_order(self, amount: float, order_no: str, description: str, client_ip: str = "", notify_url: str = "") -> ProviderResult:
         return ProviderResult(True, self.name, order_no, {
             "mweb_url": f"https://wx.tenpay.com/cgi-bin/mmpayweb?prepayid=mock-{order_no}&package=prepay_id%3Dmock-{order_no}",
-            "return_url": return_url or "https://bx.xbbzp.com/enroll-payment-return",
         }, "模拟微信 H5 下单成功")
 
     def code_to_openid(self, code: str) -> Optional[str]:
@@ -196,24 +195,23 @@ class RealWeChatPayProvider(WeChatPayProvider):
         prepay_id = order_result.data.get("prepay_id", "")
         return ProviderResult(True, self.name, order_no, self._jsapi_client_params(prepay_id), "微信支付下单成功")
 
-    def create_h5_order(self, amount: float, order_no: str, description: str, return_url: str = "") -> ProviderResult:
+    def create_h5_order(self, amount: float, order_no: str, description: str, client_ip: str = "", notify_url: str = "") -> ProviderResult:
+        # notify_url 由调用方指定（扫码参保回调和充值回调是两个不同端点，
+        # 不能共用全局 WECHAT_PAY_NOTIFY_URL——那个指向充值回调，参保单会查不到）。
+        # payer_client_ip 是微信 v3 H5 支付必填项，必须是付款用户的真实 IP。
         S = self._settings()
         payload = {
             "appid": S.get("WECHAT_PAY_APP_ID"), "mchid": S.get("WECHAT_PAY_MCH_ID"),
             "description": description, "out_trade_no": order_no,
-            "notify_url": S.get("WECHAT_PAY_NOTIFY_URL"),
+            "notify_url": notify_url or S.get("WECHAT_PAY_NOTIFY_URL"),
             "amount": {"total": round(amount * 100), "currency": "CNY"},
-            "scene_info": {"h5_info": {"type": "Wap"}},
+            "scene_info": {"payer_client_ip": client_ip or "127.0.0.1", "h5_info": {"type": "Wap"}},
         }
-        if return_url:
-            payload["scene_info"]["h5_info"]["client_ip"] = "127.0.0.1"
         order_result = self._post("/v3/pay/transactions/h5", payload)
         if not order_result.ok:
             return order_result
-        mweb_url = order_result.data.get("h5_url", "")
         return ProviderResult(True, self.name, order_no, {
-            "mweb_url": mweb_url,
-            "return_url": return_url or "https://bx.xbbzp.com/enroll-payment-return",
+            "mweb_url": order_result.data.get("h5_url", ""),
         }, "微信支付 H5 下单成功")
 
     def code_to_openid(self, code: str) -> Optional[str]:

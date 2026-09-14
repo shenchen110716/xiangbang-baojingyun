@@ -82,8 +82,15 @@ def run():
             session.commit()
             session.refresh(submission)
 
-            # 1. 创建支付订单
-            result = create_payment_order(submission.id, session)
+            class _FakeClient:
+                host = "1.2.3.4"
+
+            class _FakeOrderRequest:
+                headers = {}
+                client = _FakeClient()
+
+            # 1. 创建支付订单（带请求对象：真实模式要取付款人IP）
+            result = create_payment_order(submission.id, _FakeOrderRequest(), session)
             assert "mweb_url" in result, "mweb_url 应该在返回值中"
             assert "order_no" in result, "order_no 应该在返回值中"
             order_no = result["order_no"]
@@ -143,6 +150,14 @@ def run():
             assert submission.payment_status == "paid"
             assert submission.order_no == order_no
             assert submission.review_status == "pending"  # 审核状态不变
+
+            # 6. 重复通知（微信网关重试）→ 幂等，状态不变不报错
+            callback_again = asyncio.run(
+                wechat_payment_callback(MockRequest(headers, raw_body), session)
+            )
+            assert callback_again["code"] == "SUCCESS"
+            session.refresh(submission)
+            assert submission.payment_status == "paid"
 
         print("enroll payment test: PASS")
 

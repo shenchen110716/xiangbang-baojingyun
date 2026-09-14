@@ -11,9 +11,11 @@ import uuid
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.business_time import business_today
+from ..core.config import PUBLIC_BASE_URL
 from ..core.db import db
 from ..core.enroll_tokens import verify_enroll_token
 from ..core.id_number import age_on, birth_date_from_id, id_encrypt, is_valid_id_number
@@ -118,7 +120,7 @@ def enroll_submit(position_id: int, mode: str, token: str, data: EnrollSubmitIn,
 
 
 @router.post("/{submission_id}/payment-order")
-def create_payment_order(submission_id: int, session: Session = Depends(db)):
+def create_payment_order(submission_id: int, request: Request, session: Session = Depends(db)):
     # 个人缴纳（payment_status='pending'）才能发起支付
     submission = session.get(PositionEnrollSubmission, submission_id)
     if not submission:
@@ -141,7 +143,10 @@ def create_payment_order(submission_id: int, session: Session = Depends(db)):
         amount=plan.price,
         order_no=order_no,
         description=description,
-        return_url=f"https://bx.xbbzp.com/enroll-payment-return?submission_id={submission_id}",
+        # 微信 v3 H5 必填付款人真实 IP；回调走参保自己的端点，
+        # 不能用全局 WECHAT_PAY_NOTIFY_URL（那个指向充值回调）。
+        client_ip=_client_ip(request),
+        notify_url=f"{PUBLIC_BASE_URL}/api/enroll/payment-callback",
     )
 
     if not result.ok:
@@ -154,7 +159,6 @@ def create_payment_order(submission_id: int, session: Session = Depends(db)):
         "submission_id": submission_id,
         "order_no": order_no,
         "mweb_url": result.data.get("mweb_url", ""),
-        "return_url": result.data.get("return_url", ""),
     }
 
 
@@ -187,12 +191,21 @@ async def wechat_payment_callback(request: Request, session: Session = Depends(d
     order_no = notify_data.get("out_trade_no", "")
     status = notify_data.get("status", "")
 
-    submission = session.query(PositionEnrollSubmission).filter_by(order_no=order_no).first()
+    # with_for_update：跟 payments.py 的充值回调同一个考虑，锁行防微信网关
+    # 并发重试重复处理；已 paid 的直接幂等返回。
+    submission = session.scalar(
+        select(PositionEnrollSubmission)
+        .where(PositionEnrollSubmission.order_no == order_no)
+        .with_for_update()
+    )
     if not submission:
         return {"code": "SUCCESS"}  # 微信要求成功返回 SUCCESS，否则会继续重试
+    if submission.payment_status == "paid":
+        session.commit()
+        return {"code": "SUCCESS"}
 
     if status == "paid":
         submission.payment_status = "paid"
-        session.commit()
+    session.commit()
 
     return {"code": "SUCCESS"}
