@@ -25,6 +25,10 @@ class InsurancePlan(Base):
     billing_mode: Mapped[str] = mapped_column(String(20), default="monthly")
     effective_mode: Mapped[str] = mapped_column(String(20), default="next_day")
     status: Mapped[str] = mapped_column(String(30), default="active")
+    # 方案图片（保障彩页）：跟 Invoice/Policy 的 document_url/document_name 同一形状，
+    # 存 storage key 不静态挂载，查看/下载一律走短时签名 URL。
+    image_url: Mapped[str] = mapped_column(Text, default="")
+    image_name: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

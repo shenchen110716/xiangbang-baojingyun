@@ -47,7 +47,11 @@ def pricing_snapshot(plan:InsurancePlan,relation:Optional[AgentCommission]=None,
     }
 
 def plan_dict(plan:InsurancePlan,relation:Optional[AgentCommission]=None) -> dict:
-    return {**serialize(plan),**pricing_snapshot(plan,relation)}
+    d = {**serialize(plan),**pricing_snapshot(plan,relation)}
+    # 内部存储 key 不出 API；前端只需要"有没有图"来决定是否展示查看入口，
+    # 真正的访问走 /plans/{id}/image-link 换短时签名 URL。
+    d["has_image"] = bool(d.pop("image_url", ""))
+    return d
 
 # Internal cost/margin figures: insurer settlement price, commission, and
 # platform profit. Enterprise-role callers (miniprogram end users, company

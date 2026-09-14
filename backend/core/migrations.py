@@ -55,6 +55,8 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     if "billing_mode" not in plan_columns: s.connection().exec_driver_sql("ALTER TABLE insurance_plans ADD COLUMN billing_mode VARCHAR(20) DEFAULT 'monthly'")
     if "effective_mode" not in plan_columns: s.connection().exec_driver_sql("ALTER TABLE insurance_plans ADD COLUMN effective_mode VARCHAR(20) DEFAULT 'next_day'")
     if "insurer_email" not in plan_columns: s.connection().exec_driver_sql("ALTER TABLE insurance_plans ADD COLUMN insurer_email VARCHAR(160) DEFAULT ''")
+    if "image_url" not in plan_columns: s.connection().exec_driver_sql("ALTER TABLE insurance_plans ADD COLUMN image_url TEXT DEFAULT ''")
+    if "image_name" not in plan_columns: s.connection().exec_driver_sql("ALTER TABLE insurance_plans ADD COLUMN image_name VARCHAR(200) DEFAULT ''")
     if "profit_amount" not in plan_columns:
         s.connection().exec_driver_sql("ALTER TABLE insurance_plans ADD COLUMN profit_amount FLOAT DEFAULT 0")
         s.connection().exec_driver_sql("UPDATE insurance_plans SET profit_amount=price*commission_rate")

@@ -1,11 +1,16 @@
+import secrets
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core import storage
 from ..core.audit import audit
 from ..core.db import db
+from ..core.file_tokens import make_download_token, verify_download_token
 from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import AgentCommission, InsurancePlan, PlanTier, Policy, User
@@ -84,4 +89,73 @@ def delete_plan(item_id: int, user: User = Depends(current_user), session: Sessi
     if not item: raise HTTPException(404, "方案不存在")
     used = session.scalar(select(Policy.id).where(Policy.plan_id == item_id).limit(1))
     if used: raise HTTPException(409, "该方案已有参保人员或保单使用，不能删除；请先暂停方案")
+    if item.image_url: storage.delete(item.image_url)
     session.delete(item); session.commit(); audit(session, user, "delete", "plan", str(item_id)); return {"ok": True, "deleted_id": item_id}
+
+
+# ---- 方案图片（保障彩页）----
+# 上传仅平台；查看/下载走「登录换短时签名URL → 凭签名取文件」两跳，
+# 跟发票/保单文件同一套姿势（SYSTEM-DESIGN §11.1，不静态挂载）。
+
+_PLAN_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+_PLAN_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+_PLAN_IMAGE_MEDIA = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
+
+
+@router.post("/plans/{item_id}/image", dependencies=[Depends(require_role("admin", detail="仅总后台可上传方案图片"))])
+async def upload_plan_image(item_id: int, file: UploadFile = File(...), user: User = Depends(current_user), session: Session = Depends(db)):
+    item = session.get(InsurancePlan, item_id)
+    if not item: raise HTTPException(404, "方案不存在")
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in _PLAN_IMAGE_EXTENSIONS: raise HTTPException(400, "仅支持 png/jpg/webp 图片")
+    content = await file.read()
+    if len(content) > _PLAN_IMAGE_MAX_BYTES: raise HTTPException(400, "图片不能超过 10MB")
+    if not content: raise HTTPException(400, "文件为空")
+    old = item.image_url
+    item.image_url = storage.save_bytes(f"plans/{item_id}/{secrets.token_hex(8)}{suffix}", content)
+    item.image_name = file.filename or f"plan-{item_id}{suffix}"
+    session.commit()
+    if old: storage.delete(old)
+    audit(session, user, "upload", "plan_image", str(item_id))
+    return plan_dict(item)
+
+
+@router.delete("/plans/{item_id}/image", dependencies=[Depends(require_role("admin", detail="仅总后台可删除方案图片"))])
+def delete_plan_image(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):
+    item = session.get(InsurancePlan, item_id)
+    if not item: raise HTTPException(404, "方案不存在")
+    if item.image_url: storage.delete(item.image_url)
+    item.image_url = ""; item.image_name = ""
+    session.commit(); audit(session, user, "delete", "plan_image", str(item_id))
+    return plan_dict(item)
+
+
+@router.get("/plans/{item_id}/image-link")
+def plan_image_link(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):
+    item = session.get(InsurancePlan, item_id)
+    if not item or not item.image_url: raise HTTPException(404, "方案图片不存在")
+    if user.role == "enterprise":
+        if not user.enterprise_id: raise HTTPException(403, "无权查看该方案图片")
+        allowed = enterprise_selectable_plan_ids(session, user.enterprise_id)
+        if item_id not in (allowed or []): raise HTTPException(403, "无权查看该方案图片")
+    token, expires = make_download_token(f"plan-image:{item_id}")
+    return {
+        "url": f"/api/plans/{item_id}/image/download?token={token}&expires={expires}",
+        "image_name": item.image_name,
+        "expires": expires,
+    }
+
+
+@router.get("/plans/{item_id}/image/download")
+def download_plan_image(item_id: int, token: str, expires: int, download: int = 0, session: Session = Depends(db)):
+    if not verify_download_token(f"plan-image:{item_id}", expires, token): raise HTTPException(403, "链接无效或已过期")
+    item = session.get(InsurancePlan, item_id)
+    if not item or not item.image_url: raise HTTPException(404, "方案图片不存在")
+    resolved = storage.resolve(item.image_url, filename=item.image_name or None)
+    if not resolved: raise HTTPException(404, "文件不存在")
+    kind, ref = resolved
+    if kind == "redirect": return RedirectResponse(ref)
+    media_type = _PLAN_IMAGE_MEDIA.get(Path(str(ref)).suffix.lower(), "application/octet-stream")
+    # 默认 inline 在线查看；download=1 时带文件名走附件下载
+    if download: return FileResponse(ref, media_type=media_type, filename=item.image_name or None)
+    return FileResponse(ref, media_type=media_type)
