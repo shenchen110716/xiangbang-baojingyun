@@ -1,4 +1,6 @@
-const DEFAULT_API_BASE = 'https://xiangbang-baojingyun.onrender.com/api';
+// 生产后端在自建 VPS 的 bx.xbbzp.com（Render 部署早已废弃无人维护，
+// 且没有扫码参保等新功能、连的也不是生产库）。
+const DEFAULT_API_BASE = 'https://bx.xbbzp.com/api';
 
 App({
   globalData: {
