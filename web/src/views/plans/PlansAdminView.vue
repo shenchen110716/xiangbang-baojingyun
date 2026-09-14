@@ -126,18 +126,48 @@ const form = reactive({
   price: 0, commission_rate: 0.18, profit_amount: 0, payment_mode: '企业直投',
   billing_mode: 'monthly' as 'monthly' | 'daily', effective_mode: 'next_day' as 'next_day' | 'immediate',
 })
+// 方案图片：新增时表单里先暂存文件，方案保存成功拿到 id 后紧接着传；
+// 编辑时选了文件也是随「保存修改」一起传，行为一致。
+const imageFile = ref<File | null>(null)
+const editingHasImage = ref(false)
+const imageInput = ref<HTMLInputElement | null>(null)
+function onImageChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0] || null
+  if (file && file.size > 10 * 1024 * 1024) { ElMessage.error('图片不能超过 10MB'); (e.target as HTMLInputElement).value = ''; return }
+  imageFile.value = file
+}
 function resetForm() {
   editingId.value = null
+  imageFile.value = null
+  editingHasImage.value = false
+  if (imageInput.value) imageInput.value.value = ''
   Object.assign(form, { insurer: '', insurer_email: '', name: '', occupation_classes: '1-4类', coverage: '', price: 0, commission_rate: 0.18, profit_amount: 0, payment_mode: '企业直投', billing_mode: 'monthly', effective_mode: 'next_day' })
 }
 function editPlan(item: InsurancePlan) {
   editingId.value = item.id
+  imageFile.value = null
+  editingHasImage.value = item.has_image
+  if (imageInput.value) imageInput.value.value = ''
   Object.assign(form, {
     insurer: item.insurer, insurer_email: item.insurer_email, name: item.name, occupation_classes: item.occupation_classes,
     coverage: item.coverage, price: item.price, commission_rate: item.commission_rate, profit_amount: item.profit_amount,
     payment_mode: item.payment_mode, billing_mode: item.billing_mode, effective_mode: item.effective_mode,
   })
   window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+async function removeImage() {
+  if (!editingId.value) return
+  try {
+    await ElMessageBox.confirm('删除后投保单位和HR端将看不到方案图片。确定删除？', '删除方案图片', { type: 'warning' })
+  } catch { return }
+  try {
+    await plansApi.deletePlanImage(editingId.value)
+    editingHasImage.value = false
+    ElMessage.success('方案图片已删除')
+    load()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
 }
 const saving = ref(false)
 async function submitForm() {
@@ -146,8 +176,17 @@ async function submitForm() {
   if (payload.effective_mode === 'immediate') payload.billing_mode = 'daily'
   saving.value = true
   try {
-    if (editingId.value) await plansApi.updatePlan(editingId.value, payload)
-    else await plansApi.createPlan(payload)
+    let planId = editingId.value
+    if (planId) await plansApi.updatePlan(planId, payload)
+    else planId = (await plansApi.createPlan(payload)).id
+    if (imageFile.value && planId) {
+      try {
+        await plansApi.uploadPlanImage(planId, imageFile.value)
+      } catch (e) {
+        // 方案本体已保存成功，图片失败单独提示，不要让用户误以为方案没存上
+        ElMessage.warning(`方案已保存，但图片上传失败：${(e as Error).message}，可重新编辑上传`)
+      }
+    }
     ElMessage.success(editingId.value ? '方案已更新' : '保险方案已创建')
     resetForm()
     load()
@@ -248,6 +287,16 @@ async function submitTier() {
             <el-option label="按月计费" value="monthly" />
             <el-option label="按天计费" value="daily" />
           </el-select>
+        </el-form-item>
+        <el-form-item class="wide" label="方案图片（保障彩页，png/jpg/webp ≤10MB，投保单位和HR端可查看下载）">
+          <div class="image-row">
+            <input ref="imageInput" type="file" accept="image/png,image/jpeg,image/webp" @change="onImageChange" />
+            <template v-if="editingId && editingHasImage">
+              <el-button link type="primary" size="small" @click="plansApi.openPlanImage(editingId!)">查看当前图片</el-button>
+              <el-button link type="danger" size="small" @click="removeImage">删除图片</el-button>
+            </template>
+            <small v-else-if="editingId" class="muted">当前方案未上传图片</small>
+          </div>
         </el-form-item>
         <el-form-item class="wide">
           <el-button type="primary" :loading="saving" @click="submitForm">{{ editingId ? '保存修改' : '保存方案' }}</el-button>
@@ -420,6 +469,12 @@ async function submitTier() {
 }
 .filter-row {
   padding: 0 20px 14px;
+}
+.image-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .muted {
   color: var(--el-text-color-placeholder);

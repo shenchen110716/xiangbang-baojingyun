@@ -126,6 +126,8 @@ export interface InsurancePlan extends PricingSnapshot {
   billing_mode: 'monthly' | 'daily'
   effective_mode: 'next_day' | 'immediate'
   status: 'active' | 'paused'
+  has_image: boolean
+  image_name: string
   created_at: string
 }
 

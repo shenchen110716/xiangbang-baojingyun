@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as positionsApi from '@/api/positions'
-import { listPlans } from '@/api/plans'
+import { listPlans, openPlanImage } from '@/api/plans'
 import { createInsured } from '@/api/insured'
 import type { ActualEmployer, InsurancePlan, PositionVideo, WorkPosition } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
@@ -73,6 +73,7 @@ const activeEmployers = computed(() => employers.value.filter((x) => x.status ==
 const formVisible = ref(false)
 const editingId = ref<number | null>(null)
 const form = reactive({ actual_employer_id: null as number | null, name: '', plan_id: null as number | null })
+const selectedPlanHasImage = computed(() => !!form.plan_id && !!plans.value.find((p) => p.id === form.plan_id)?.has_image)
 const videoFile = ref<File | null>(null)
 const uploading = ref(false)
 
@@ -320,6 +321,10 @@ function finishQuickInsure() {
           <el-select v-model="form.plan_id" clearable placeholder="如已有意向可提前选择，也可留空由平台/保司审核时分配" style="width: 100%">
             <el-option v-for="p in plans" :key="p.id" :label="`${p.insurer} · ${p.name}`" :value="p.id" />
           </el-select>
+          <div v-if="selectedPlanHasImage" style="margin-top: 6px">
+            <el-button link type="primary" size="small" @click="openPlanImage(form.plan_id!)">查看方案图片</el-button>
+            <el-button link type="primary" size="small" @click="openPlanImage(form.plan_id!, true)">下载</el-button>
+          </div>
         </el-form-item>
         <el-form-item label="岗位视频" :required="!editingId">
           <input type="file" accept="video/mp4,video/quicktime,.m4v" @change="onFileChange" />
