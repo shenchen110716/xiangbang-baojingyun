@@ -192,17 +192,33 @@ Page({
     if (badIndex !== -1) { wx.showToast({ title: `第 ${badIndex + 1} 行姓名/身份证号有问题，请先修正`, icon: 'none' }); return; }
     this.setData({ batchSubmitting: true });
     const enterpriseId = this.data.form.enterprise_id, positionId = this.data.form.position_id;
-    let successCount = 0, failCount = 0;
+    let successCount = 0;
+    const failures = [];
     const submitNext = (index) => {
       if (index >= items.length) {
-        this.setData({ batchSubmitting: false, batchItems: [], locked: true, addedCount: this.data.addedCount + successCount });
-        wx.showToast({ title: `批量添加完成：成功 ${successCount} 人${failCount ? '，失败 ' + failCount + ' 人' : ''}`, icon: 'none', duration: 3000 });
+        // 失败的行保留在列表里（成功的移除），用户修正后可直接重交；
+        // 失败原因必须展示出来——之前只报"失败 N 人"不给原因，用户遇到
+        // 使用费余额锁定这类业务拦截时完全无从下手（2026-09-20 线上反馈）。
+        const remaining = failures.map((f) => items[f.index]);
+        this.setData({ batchSubmitting: false, batchItems: remaining, locked: true, addedCount: this.data.addedCount + successCount });
+        if (!failures.length) {
+          wx.showToast({ title: `批量添加完成：成功 ${successCount} 人`, icon: 'none', duration: 3000 });
+          return;
+        }
+        const lines = failures.slice(0, 5).map((f) => `${f.name || '第' + (f.index + 1) + '行'}：${f.message}`);
+        if (failures.length > 5) lines.push(`…共 ${failures.length} 人失败`);
+        wx.showModal({
+          title: `成功 ${successCount} 人，失败 ${failures.length} 人`,
+          content: lines.join('\n'),
+          showCancel: false,
+          confirmText: '知道了'
+        });
         return;
       }
       const item = items[index];
       app.request('/insured', { method: 'POST', silent: true, data: { name: item.name.trim(), id_number: item.id_number.trim(), phone: '', enterprise_id: enterpriseId, position_id: positionId } })
         .then(() => { successCount += 1; submitNext(index + 1); })
-        .catch(() => { failCount += 1; submitNext(index + 1); });
+        .catch((error) => { failures.push({ index, name: item.name.trim(), message: (error && error.message) || '添加失败' }); submitNext(index + 1); });
     };
     submitNext(0);
   },
