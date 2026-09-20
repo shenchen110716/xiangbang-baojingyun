@@ -32,6 +32,8 @@ export function insuredStatusLabel(person: { status: string; effective_at?: stri
     // 参保员工的 pending 对外统一显示“待生效”（保经云问题 7.15 第 4、7 条）。
     pending: { text: '待生效', type: 'warning' },
     stopped: { text: '已停保', type: 'danger' },
+    // 两步参保：只收了名单还没参保的人（不计费、无保障），批量参保后转 pending
+    draft: { text: '未参保', type: 'info' },
   }
   return map[person.status] || { text: person.status, type: 'info' }
 }

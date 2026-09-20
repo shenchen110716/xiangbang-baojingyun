@@ -8,7 +8,7 @@ from .position import (
     EnrollSubmitIn, EnrollReviewIn,
 )
 from .plan import PlanTierIn, PlanIn, PlanUpdate
-from .insured import PersonIn, PersonUpdate, BulkPersonRow, BulkPersonIn, InsurerFlagIn
+from .insured import PersonIn, PersonUpdate, BulkPersonRow, BulkPersonIn, InsurerFlagIn, BatchEnrollIn
 from .claim import (
     ClaimIn, ClaimUpdate, ClaimStatusIn, ClaimDocumentIn, ClaimDocumentReviewIn,
 )

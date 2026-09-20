@@ -199,7 +199,7 @@ App({
   },
 
   statusText(value) {
-    return ({ pending: '待审核', active: '在保', stopped: '已停保', paused: '已暂停', approved: '已通过', rejected: '已驳回', supplement: '待补材料', reported: '已报案', collecting: '材料收集中', submitted: '已提交保司', insurer_review: '保司审核中', paid: '已赔付', closed: '已结案' })[value] || value || '未知';
+    return ({ pending: '待审核', active: '在保', stopped: '已停保', draft: '未参保', paused: '已暂停', approved: '已通过', rejected: '已驳回', supplement: '待补材料', reported: '已报案', collecting: '材料收集中', submitted: '已提交保司', insurer_review: '保司审核中', paid: '已赔付', closed: '已结案' })[value] || value || '未知';
   },
 
   // 次日生效方案的生效/停保时间总是落在自然日边界上，只显示日期；

@@ -20,6 +20,12 @@ export function setInsuredStatus(id: number, status: 'pending' | 'active' | 'sto
   return client.patch<InsuredPerson>(`/insured/${id}/status`, null, { params: { status } }).then((r) => r.data)
 }
 
+export function batchEnrollInsured(ids: number[]) {
+  return client
+    .post<{ success: number; failed: number; results: Array<{ id: number; ok: boolean; error: string }> }>('/insured/batch-enroll', { ids })
+    .then((r) => r.data)
+}
+
 export function bulkAddInsured(data: { enterprise_id: number; position_id: number; rows: Array<{ name: string; id_number: string; phone?: string }> }) {
   return client.post('/insured/bulk', data).then((r) => r.data)
 }

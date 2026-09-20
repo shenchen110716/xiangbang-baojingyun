@@ -38,6 +38,10 @@ Page({
     batchScanning: false,
     batchSubmitting: false,
     batchKeySeq: 0,
+    // 两步参保：未参保（draft）人数与id列表，>0 时批量tab显示一键参保入口
+    draftCount: 0,
+    draftIds: [],
+    enrollingDrafts: false,
     // 生效/停保时间收进可展开的"更多选项"，onLoad 里按新增/编辑重新设默认值。
     moreOptionsExpanded: false
   },
@@ -73,6 +77,7 @@ Page({
     // 提交时的校验兜底。
     const minTerminatedDate = new Date(); minTerminatedDate.setDate(minTerminatedDate.getDate() + 1);
     this.setData({ id, minTerminatedDate: minTerminatedDate.toISOString().slice(0, 10) });
+    if (!id) this.refreshDraftCount();
     Promise.all([app.request('/enterprises'), app.request('/positions'), app.request('/plans'), id ? app.request('/insured') : Promise.resolve([])])
       .then(([enterprises, allPositions, plans, people]) => {
         const approved = allPositions.filter((item) => item.status === 'approved');
@@ -192,35 +197,89 @@ Page({
     if (badIndex !== -1) { wx.showToast({ title: `第 ${badIndex + 1} 行姓名/身份证号有问题，请先修正`, icon: 'none' }); return; }
     this.setData({ batchSubmitting: true });
     const enterpriseId = this.data.form.enterprise_id, positionId = this.data.form.position_id;
-    let successCount = 0;
-    const failures = [];
+    // 两步参保（2026-09-20 用户反馈）：第一步 enroll:false 只收名单（不判
+    // 使用费余额，姓名身份证有问题才会失败）；第二步 batch-enroll 批量参保，
+    // 余额不足只影响这一步——名单已保存为"未参保"，充值后可一键参保。
+    const addedIds = [];
+    const addFailures = [];
     const submitNext = (index) => {
-      if (index >= items.length) {
-        // 失败的行保留在列表里（成功的移除），用户修正后可直接重交；
-        // 失败原因必须展示出来——之前只报"失败 N 人"不给原因，用户遇到
-        // 使用费余额锁定这类业务拦截时完全无从下手（2026-09-20 线上反馈）。
-        const remaining = failures.map((f) => items[f.index]);
-        this.setData({ batchSubmitting: false, batchItems: remaining, locked: true, addedCount: this.data.addedCount + successCount });
-        if (!failures.length) {
-          wx.showToast({ title: `批量添加完成：成功 ${successCount} 人`, icon: 'none', duration: 3000 });
-          return;
-        }
-        const lines = failures.slice(0, 5).map((f) => `${f.name || '第' + (f.index + 1) + '行'}：${f.message}`);
-        if (failures.length > 5) lines.push(`…共 ${failures.length} 人失败`);
-        wx.showModal({
-          title: `成功 ${successCount} 人，失败 ${failures.length} 人`,
-          content: lines.join('\n'),
-          showCancel: false,
-          confirmText: '知道了'
-        });
-        return;
-      }
+      if (index >= items.length) { this.enrollAdded(items, addedIds, addFailures); return; }
       const item = items[index];
-      app.request('/insured', { method: 'POST', silent: true, data: { name: item.name.trim(), id_number: item.id_number.trim(), phone: '', enterprise_id: enterpriseId, position_id: positionId } })
-        .then(() => { successCount += 1; submitNext(index + 1); })
-        .catch((error) => { failures.push({ index, name: item.name.trim(), message: (error && error.message) || '添加失败' }); submitNext(index + 1); });
+      app.request('/insured', { method: 'POST', silent: true, data: { name: item.name.trim(), id_number: item.id_number.trim(), phone: '', enterprise_id: enterpriseId, position_id: positionId, enroll: false } })
+        .then((person) => { addedIds.push(person.id); submitNext(index + 1); })
+        .catch((error) => { addFailures.push({ index, name: item.name.trim(), message: (error && error.message) || '添加失败' }); submitNext(index + 1); });
     };
     submitNext(0);
+  },
+  enrollAdded(items, addedIds, addFailures) {
+    const finish = (enrolled, enrollFailures) => {
+      // 添加失败的行保留在列表里可修正重交；添加成功的（无论参保成没成功）移除
+      const remaining = addFailures.map((f) => items[f.index]);
+      this.setData({ batchSubmitting: false, batchItems: remaining, locked: true, addedCount: this.data.addedCount + addedIds.length });
+      const lines = [];
+      addFailures.slice(0, 4).forEach((f) => lines.push(`${f.name || '第' + (f.index + 1) + '行'}：${f.message}`));
+      enrollFailures.slice(0, 4).forEach((f) => lines.push(f));
+      if (!lines.length) {
+        wx.showToast({ title: `已添加并参保 ${enrolled} 人`, icon: 'none', duration: 3000 });
+        return;
+      }
+      wx.showModal({
+        title: `添加 ${addedIds.length} 人，参保成功 ${enrolled} 人`,
+        content: lines.join('\n'),
+        showCancel: false,
+        confirmText: '知道了'
+      });
+    };
+    if (!addedIds.length) { finish(0, []); return; }
+    app.request('/insured/batch-enroll', { method: 'POST', silent: true, data: { ids: addedIds } })
+      .then((result) => {
+        const failed = (result.results || []).filter((r) => !r.ok);
+        const messages = [];
+        if (failed.length) {
+          const balanceBlocked = failed.some((r) => (r.error || '').includes('余额不足'));
+          if (balanceBlocked) messages.push(`${failed.length} 人名单已保存（未参保）：使用费余额不足，请先充值，之后可在本页一键参保`);
+          else failed.slice(0, 4).forEach((r) => messages.push(`参保失败：${r.error}`));
+        }
+        finish(result.success || 0, messages);
+        this.refreshDraftCount();
+      })
+      .catch((error) => {
+        finish(0, [`${addedIds.length} 人名单已保存（未参保），参保失败：${(error && error.message) || '网络异常'}，可稍后在本页一键参保`]);
+        this.refreshDraftCount();
+      });
+  },
+  // 未参保（draft）人数：进页面和每次批量操作后刷新，>0 时展示一键参保入口
+  refreshDraftCount() {
+    app.request('/insured', { silent: true })
+      .then((people) => {
+        const drafts = (people || []).filter((p) => p.status === 'draft');
+        this.setData({ draftCount: drafts.length, draftIds: drafts.map((p) => p.id) });
+      })
+      .catch(() => {});
+  },
+  enrollDrafts() {
+    if (this.data.enrollingDrafts || !this.data.draftIds.length) return;
+    this.setData({ enrollingDrafts: true });
+    app.request('/insured/batch-enroll', { method: 'POST', silent: true, data: { ids: this.data.draftIds } })
+      .then((result) => {
+        this.setData({ enrollingDrafts: false });
+        const failed = (result.results || []).filter((r) => !r.ok);
+        if (!failed.length) wx.showToast({ title: `已参保 ${result.success} 人`, icon: 'none', duration: 2600 });
+        else {
+          const balanceBlocked = failed.some((r) => (r.error || '').includes('余额不足'));
+          wx.showModal({
+            title: `参保成功 ${result.success} 人，失败 ${failed.length} 人`,
+            content: balanceBlocked ? '使用费余额不足，请先充值后再一键参保，名单不会丢失。' : failed.slice(0, 5).map((r) => r.error).join('\n'),
+            showCancel: false, confirmText: '知道了'
+          });
+        }
+        this.refreshDraftCount();
+        this.setData({ addedCount: this.data.addedCount });
+      })
+      .catch((error) => {
+        this.setData({ enrollingDrafts: false });
+        wx.showToast({ title: (error && error.message) || '参保失败，请重试', icon: 'none' });
+      });
   },
   dateChange(e) { this.setData({ [`form.${e.currentTarget.dataset.key}`]: e.detail.value }); },
   timeChange(e) { this.setData({ [e.currentTarget.dataset.key]: e.detail.value }); },

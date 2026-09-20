@@ -22,6 +22,12 @@
     </view>
 
     <view wx:if="{{!id && addMode==='photo'}}" style="margin-top:16rpx">
+      <view wx:if="{{draftCount}}" class="card-plain" style="background:#fff7ed;margin-bottom:16rpx">
+        <view class="row between">
+          <view><view class="strong">有 {{draftCount}} 人已添加、尚未参保</view><view class="small">名单已保存；使用费余额充足时可一键参保</view></view>
+          <button class="secondary" style="margin:0" loading="{{enrollingDrafts}}" disabled="{{enrollingDrafts}}" bindtap="enrollDrafts">一键参保</button>
+        </view>
+      </view>
       <button class="secondary ocr-btn" bindtap="batchScan" loading="{{batchScanning}}" disabled="{{batchScanning}}">📷 拍身份证照片（最多9张）</button>
       <view class="ocr-hint">拍摄或选择身份证正面照，自动填充姓名与身份证号，请核对后再提交</view>
       <view wx:if="{{batchItems.length}}" class="card-plain" style="background:#f4f7ff;margin-top:16rpx">

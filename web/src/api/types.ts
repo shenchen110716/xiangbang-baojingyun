@@ -160,7 +160,7 @@ export interface InsuredPerson extends Partial<PricingSnapshot> {
   policy_status?: string
   effective_mode?: 'immediate' | 'next_day' | ''
   billing_mode?: 'daily' | 'monthly' | ''
-  status: 'pending' | 'active' | 'stopped'
+  status: 'draft' | 'pending' | 'active' | 'stopped'
   policy_id: number | null
   created_at: string
   effective_at?: string | null

@@ -8,7 +8,7 @@ Page({
     status: '',
     positionId: 0,
     positionName: '',
-    statuses: [{ value: '', label: '全部' }, { value: 'pending', label: '待生效' }, { value: 'active', label: '在保' }, { value: 'stopped', label: '已停保' }],
+    statuses: [{ value: '', label: '全部' }, { value: 'draft', label: '未参保' }, { value: 'pending', label: '待生效' }, { value: 'active', label: '在保' }, { value: 'stopped', label: '已停保' }],
     statusChips: [],
     loading: false,
     // 批量停保：点悬浮"－"按钮进入勾选模式，和网页端 WorkersView 的"批量停保"

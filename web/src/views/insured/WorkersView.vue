@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listInsured, setInsuredStatus, updateInsured } from '@/api/insured'
+import { batchEnrollInsured, listInsured, setInsuredStatus, updateInsured } from '@/api/insured'
 import type { InsuredPerson } from '@/api/types'
 import { formatCoverageDate, formatDateTime, insuredStatusLabel } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
@@ -66,6 +66,27 @@ const totalCount = computed(() => list.value.length)
 const activeCount = computed(() => list.value.filter((x) => x.status === 'active' && !isPendingEffective(x)).length)
 const pendingCount = computed(() => list.value.filter((x) => x.status === 'pending' || isPendingEffective(x)).length)
 const stoppedCount = computed(() => list.value.filter((x) => x.status === 'stopped').length)
+// 两步参保：只收了名单还没参保的人（draft），一键批量参保（此时才判使用费余额）
+const draftPeople = computed(() => list.value.filter((x) => x.status === 'draft'))
+const enrollingDrafts = ref(false)
+async function enrollDrafts() {
+  if (!draftPeople.value.length) return
+  try {
+    await ElMessageBox.confirm(`将 ${draftPeople.value.length} 名未参保员工批量参保？参保后开始计费。`, '批量参保', { type: 'warning', confirmButtonText: '参保', cancelButtonText: '取消' })
+  } catch { return }
+  enrollingDrafts.value = true
+  try {
+    const result = await batchEnrollInsured(draftPeople.value.map((x) => x.id))
+    const failed = result.results.filter((r) => !r.ok)
+    if (!failed.length) ElMessage.success(`已参保 ${result.success} 人`)
+    else ElMessageBox.alert(failed.slice(0, 8).map((r) => r.error).join('\n'), `参保成功 ${result.success} 人，失败 ${failed.length} 人`, { confirmButtonText: '知道了' })
+    await load()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    enrollingDrafts.value = false
+  }
+}
 
 // ---- detail / edit dialogs ----
 const detailVisible = ref(false)
@@ -270,6 +291,7 @@ function exportCsv() {
 
     <PageCard title="参保员工列表" :count="filtered.length" hint="添加时间为手工新增保存或批量导入完成时系统自动记录的时间，与生效时间相互独立">
       <template #actions>
+        <el-button v-if="draftPeople.length" type="warning" :loading="enrollingDrafts" @click="enrollDrafts">批量参保未参保（{{ draftPeople.length }}）</el-button>
         <el-button @click="exportCsv">导出员工</el-button>
         <el-button type="primary" @click="openEditor(null)">＋ 新增参保员工</el-button>
       </template>
@@ -282,6 +304,7 @@ function exportCsv() {
             <el-option label="实际单位" value="actual_employer_name" />
           </el-select>
           <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 130px">
+            <el-option label="未参保" value="draft" />
             <el-option label="待生效" value="pending" />
             <el-option label="在保" value="active" />
             <el-option label="已停保" value="stopped" />

@@ -47,7 +47,7 @@ def _assert_id_number_matches_name(session: Session, id_number: str, name: str, 
 from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
-from ..schemas import BulkPersonIn, InsurerFlagIn, PersonIn, PersonUpdate
+from ..schemas import BatchEnrollIn, BulkPersonIn, InsurerFlagIn, PersonIn, PersonUpdate
 from ..services import activate_person_policy, allowed_employer_ids, assert_employer_access, correct_person_policy_dates, effective_person_status, is_enterprise_owner, plan_price_for_class, pricing_snapshot, require_usage_funded, serialize, strip_internal_pricing, terminate_person_policy
 from ..services.insurer_scope import assert_plan_belongs_to_insurer
 from ..services.spreadsheet import MAX_IMPORT_FILE_BYTES, read_import_rows
@@ -148,7 +148,7 @@ def insured_export(ids: str = Query(..., description="逗号分隔的参保员�
     elif user.role!='admin': raise HTTPException(403,'无权导出参保员工')
     book=openpyxl.Workbook();sheet=book.active;sheet.title='参保员工'
     sheet.append(['姓名','身份证号','手机号','状态','投保单位','实际用工单位','岗位','保险公司','保险方案','生效时间','停保时间'])
-    status_label={'pending':'待生效','active':'在保','stopped':'已停保'}
+    status_label={'pending':'待生效','active':'在保','stopped':'已停保','draft':'未参保'}
     for x in session.scalars(stmt):
         item=_person_payload(session,x)
         # 和小程序 employees.js 的 isPendingEffective() 同一条判断：已通过
@@ -175,7 +175,9 @@ def add_person(data: PersonIn, user: User = Depends(current_user), session: Sess
     enterprise = session.get(Enterprise, data.enterprise_id)
     if not enterprise: raise HTTPException(404, "企业不存在")
     if user.role=="enterprise" and user.enterprise_id!=data.enterprise_id: raise HTTPException(403,"无权操作该单位")
-    require_usage_funded(session, enterprise, user)
+    # 使用费门禁只拦"参保"这个动作；enroll=False 只是把人收进名单（未参保、
+    # 不产生任何费用），不该被余额挡住——门禁挪到 batch-enroll 那一步再过。
+    if data.enroll: require_usage_funded(session, enterprise, user)
     if not is_valid_id_number(data.id_number): raise HTTPException(400,'身份证号格式不正确')
     _assert_min_age(data.id_number)
     # 同一单位内允许同一人同时参加不同险种加大保额，不按 enterprise_id 排他；
@@ -183,7 +185,7 @@ def add_person(data: PersonIn, user: User = Depends(current_user), session: Sess
     _assert_id_number_matches_name(session, data.id_number, data.name)
     effective_at = _parse_business_time(data.effective_at, "生效")
     terminated_at = _parse_business_time(data.terminated_at, "停保")
-    payload=data.model_dump(exclude={"effective_at", "terminated_at"})
+    payload=data.model_dump(exclude={"effective_at", "terminated_at", "enroll"})
     if data.position_id:
         position=session.get(WorkPosition,data.position_id)
         if not position or position.enterprise_id!=data.enterprise_id or position.status!='approved': raise HTTPException(400,"只能选择本单位已审核通过的有效岗位")
@@ -193,6 +195,13 @@ def add_person(data: PersonIn, user: User = Depends(current_user), session: Sess
         payload['occupation']=position.name; payload['occupation_class']=position.occupation_class
     elif user.role=='enterprise' and not is_enterprise_owner(user):
         raise HTTPException(403,'项目负责人新增员工必须选择授权范围内的岗位')
+    if not data.enroll:
+        # 只收名单：status='draft' 未参保，不建保障期、不记参保操作（及时率
+        # 从"参保"那一刻起算才公平），后续 batch-enroll 时才走这些。
+        payload['status']='draft'
+        item = InsuredPerson(**payload); session.add(item); session.commit(); session.refresh(item)
+        audit(session, user, "create", "insured_person", str(item.id), "draft")
+        return _person_payload(session, item)
     item = InsuredPerson(**payload); session.add(item); session.flush()
     member = correct_person_policy_dates(session, item, effective_at, terminated_at)
     if member is not None: item.status = "stopped" if member.terminated_at is not None else "active"
@@ -200,6 +209,50 @@ def add_person(data: PersonIn, user: User = Depends(current_user), session: Sess
     if member is not None and member.terminated_at is not None:
         record_operation(session, user=user, person=item, operation_type="termination")
     session.commit(); session.refresh(item); audit(session, user, "create", "insured_person", str(item.id)); return _person_payload(session, item)
+
+
+@router.post("/insured/batch-enroll")
+def batch_enroll(data: BatchEnrollIn, user: User = Depends(current_user), session: Session = Depends(db)):
+    """把 draft（未参保）人员批量转为正式参保。使用费门禁在这里过——
+    添加名单不拦，真要参保（开始产生费用）才判断余额。"""
+    results = []
+    success = 0
+    gated_enterprises: dict[int, bool] = {}
+    for person_id in data.ids:
+        person = session.get(InsuredPerson, person_id)
+        if not person:
+            results.append({"id": person_id, "ok": False, "error": "人员不存在"}); continue
+        if user.role == "enterprise" and person.enterprise_id != user.enterprise_id:
+            results.append({"id": person_id, "ok": False, "error": "无权操作该人员"}); continue
+        if user.role not in ("admin", "enterprise"):
+            raise HTTPException(403, "无权批量参保")
+        if person.status != "draft":
+            results.append({"id": person_id, "ok": False, "error": "该人员不是未参保状态"}); continue
+        if person.enterprise_id not in gated_enterprises:
+            enterprise = session.get(Enterprise, person.enterprise_id)
+            try:
+                require_usage_funded(session, enterprise, user)
+                gated_enterprises[person.enterprise_id] = True
+            except HTTPException:
+                gated_enterprises[person.enterprise_id] = False
+        if not gated_enterprises[person.enterprise_id]:
+            results.append({"id": person_id, "ok": False, "error": "使用费余额不足，请先充值后再参保"}); continue
+        if person.position_id:
+            position = session.get(WorkPosition, person.position_id)
+            if not position or position.status != 'approved':
+                results.append({"id": person_id, "ok": False, "error": "关联岗位不存在或未审核通过"}); continue
+            if position.actual_employer_id is not None:
+                try: assert_employer_access(session, user, position.actual_employer_id)
+                except HTTPException as exc:
+                    results.append({"id": person_id, "ok": False, "error": exc.detail}); continue
+        # 与常规添加（不带日期）完全同一套参保语义：pending 待生效 + 参保操作记录
+        person.status = "pending"
+        record_operation(session, user=user, person=person, operation_type="enrollment")
+        session.commit()
+        audit(session, user, "enroll", "insured_person", str(person.id), "batch")
+        results.append({"id": person_id, "ok": True, "error": ""})
+        success += 1
+    return {"success": success, "failed": len(results) - success, "results": results}
 
 @router.patch("/insured/{item_id}")
 def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),session:Session=Depends(db)):
