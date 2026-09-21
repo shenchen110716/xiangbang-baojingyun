@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { batchEnrollInsured, listInsured, setInsuredStatus, updateInsured } from '@/api/insured'
+import { batchEnrollInsured, deleteInsured, listInsured, setInsuredStatus, updateInsured } from '@/api/insured'
 import type { InsuredPerson } from '@/api/types'
 import { formatCoverageDate, formatDateTime, insuredStatusLabel } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
@@ -69,6 +69,18 @@ const stoppedCount = computed(() => list.value.filter((x) => x.status === 'stopp
 // 两步参保：只收了名单还没参保的人（draft），一键批量参保（此时才判使用费余额）
 const draftPeople = computed(() => list.value.filter((x) => x.status === 'draft'))
 const enrollingDrafts = ref(false)
+async function removeDraft(row: InsuredPerson) {
+  try {
+    await ElMessageBox.confirm(`确定删除「${row.name}」吗？该人员尚未参保，删除后名单不可恢复。`, '删除人员', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
+  } catch { return }
+  try {
+    await deleteInsured(row.id)
+    ElMessage.success('已删除')
+    await load()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
 async function enrollDrafts() {
   if (!draftPeople.value.length) return
   try {
@@ -372,6 +384,7 @@ function exportCsv() {
             <el-button v-else type="success" class="primary-action-btn" @click="changeStatus(row, 'active')">参保</el-button>
             <el-button link type="primary" @click="openDetail(row)">查看</el-button>
             <el-button link type="primary" @click="openEditor(row)">编辑</el-button>
+            <el-button v-if="row.status === 'draft'" link type="danger" @click="removeDraft(row)">删除</el-button>
             <el-button v-if="row.effective_at" link type="primary" @click="openCertificate(row)">参保证明</el-button>
           </template>
         </el-table-column>

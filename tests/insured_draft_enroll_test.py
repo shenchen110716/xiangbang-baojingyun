@@ -99,6 +99,22 @@ def run():
             assert "不是未参保状态" in result3["results"][0]["error"]
             assert "不存在" in result3["results"][1]["error"]
 
+            # 7. 删除：draft 可删；已参保（pending）拒绝并引导停保
+            from backend.routers.insured import delete_person
+            # 独立证号（GB 11643 现算验证过）——不能复用李四的号，同号异名会被
+            # 数据质量校验拦。
+            draft3 = add_person(PersonIn(enterprise_id=enterprise.id, name="王五删", id_number="110101198807061239",
+                                          position_id=position.id, enroll=False), admin, session)
+            deleted = delete_person(draft3["id"], admin, session)
+            assert deleted["ok"] is True
+            assert session.get(InsuredPerson, draft3["id"]) is None
+
+            try:
+                delete_person(draft1["id"], admin, session)  # draft1 已在第5步参保为 pending
+                raise AssertionError("已参保人员不应能删除")
+            except HTTPException as e:
+                assert e.status_code == 400 and "停保" in e.detail
+
         print("insured draft enroll test: PASS")
 
 

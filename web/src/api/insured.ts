@@ -20,6 +20,10 @@ export function setInsuredStatus(id: number, status: 'pending' | 'active' | 'sto
   return client.patch<InsuredPerson>(`/insured/${id}/status`, null, { params: { status } }).then((r) => r.data)
 }
 
+export function deleteInsured(id: number) {
+  return client.delete<{ ok: boolean; deleted_id: number }>(`/insured/${id}`).then((r) => r.data)
+}
+
 export function batchEnrollInsured(ids: number[]) {
   return client
     .post<{ success: number; failed: number; results: Array<{ id: number; ok: boolean; error: string }> }>('/insured/batch-enroll', { ids })

@@ -26,6 +26,9 @@
         <view wx:if="{{item.plan_name}}" style="margin-top:10rpx;color:#5b6479;font-size:25rpx;font-weight:500">{{item.insurer}} · {{item.plan_name}}</view>
         <view wx:if="{{item.effective_at_display}}" style="margin-top:10rpx;color:#5b6479;font-size:25rpx;font-weight:500">参保时间：{{item.effective_at_display}}</view>
         <view wx:if="{{item.terminated_at_display}}" style="margin-top:10rpx;color:#dc2626;font-size:25rpx;font-weight:600">停保时间：{{item.terminated_at_display}}</view>
+        <view wx:if="{{item.status_display==='draft'&&!selectMode}}" class="row" style="margin-top:12rpx;justify-content:flex-end">
+          <text class="link-btn" style="color:#dc2626" data-id="{{item.id}}" data-name="{{item.name}}" catchtap="removeDraft">删除</text>
+        </view>
       </view>
     </view>
   </view>

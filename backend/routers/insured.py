@@ -46,7 +46,7 @@ def _assert_id_number_matches_name(session: Session, id_number: str, name: str, 
 
 from ..core.rbac import require_role
 from ..core.security import current_user
-from ..models import ActualEmployer, AgentCommission, Enterprise, InsurancePlan, InsuredPerson, Policy, PolicyMember, User, WorkPosition
+from ..models import ActualEmployer, AgentCommission, Claim, Enterprise, InsurancePlan, InsuredPerson, ParticipationOperation, Policy, PolicyMember, User, WorkPosition
 from ..schemas import BatchEnrollIn, BulkPersonIn, InsurerFlagIn, PersonIn, PersonUpdate
 from ..services import activate_person_policy, allowed_employer_ids, assert_employer_access, correct_person_policy_dates, effective_person_status, is_enterprise_owner, plan_price_for_class, pricing_snapshot, require_usage_funded, serialize, strip_internal_pricing, terminate_person_policy
 from ..services.insurer_scope import assert_plan_belongs_to_insurer
@@ -253,6 +253,41 @@ def batch_enroll(data: BatchEnrollIn, user: User = Depends(current_user), sessio
         results.append({"id": person_id, "ok": True, "error": ""})
         success += 1
     return {"success": success, "failed": len(results) - success, "results": results}
+
+@router.delete("/insured/{item_id}")
+def delete_person(item_id: int, user: User = Depends(current_user), session: Session = Depends(db)):
+    """删除人员——只允许删「未参保」（draft）的名单记录。
+
+    参保过的人（含待生效/在保/已停保）挂着保障期、计费人天、参停保
+    及时率操作和理赔记录，物理删除会破坏账务与合规链路，一律拒绝并
+    引导走停保。draft 按两步参保的构造不产生这些关联，但仍逐一校验
+    兜底（防止历史数据或旁路写入的意外）。"""
+    item = session.get(InsuredPerson, item_id)
+    if not item: raise HTTPException(404, "人员不存在")
+    if user.role == "enterprise":
+        if item.enterprise_id != user.enterprise_id: raise HTTPException(403, "无权操作该人员")
+        if item.position_id:
+            position = session.get(WorkPosition, item.position_id)
+            if position and position.actual_employer_id is not None:
+                assert_employer_access(session, user, position.actual_employer_id)
+            elif not is_enterprise_owner(user):
+                raise HTTPException(403, "岗位未关联实际工作单位，项目负责人无权操作")
+        elif not is_enterprise_owner(user):
+            raise HTTPException(403, "项目负责人只能操作授权岗位下的人员")
+    elif user.role != "admin":
+        raise HTTPException(403, "无权删除人员")
+    if item.status != "draft":
+        raise HTTPException(400, "只有「未参保」人员可以删除；已参保人员请使用停保")
+    if session.scalar(select(PolicyMember.id).where(PolicyMember.person_id == item_id).limit(1)):
+        raise HTTPException(409, "该人员存在保障期记录，不能删除")
+    if session.scalar(select(ParticipationOperation.id).where(ParticipationOperation.person_id == item_id).limit(1)):
+        raise HTTPException(409, "该人员存在参停保操作记录，不能删除")
+    if session.scalar(select(Claim.id).where(Claim.person_id == item_id).limit(1)):
+        raise HTTPException(409, "该人员存在理赔记录，不能删除")
+    session.delete(item); session.commit()
+    audit(session, user, "delete", "insured_person", str(item_id), "draft")
+    return {"ok": True, "deleted_id": item_id}
+
 
 @router.patch("/insured/{item_id}")
 def update_person(item_id:int,data:PersonUpdate,user:User=Depends(current_user),session:Session=Depends(db)):

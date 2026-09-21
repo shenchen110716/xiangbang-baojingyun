@@ -118,6 +118,22 @@ Page({
     if (!this.requireLogin()) return;
     wx.navigateTo({ url: `/pages/employee-detail/employee-detail?id=${e.currentTarget.dataset.id}` });
   },
+  // 删除未参保（draft）人员。catchtap 阻止冒泡到 rowTap，避免误进详情。
+  // 只有 draft 出这个入口；后端同样只放行 draft，已参保一律引导停保。
+  removeDraft(e) {
+    const id = Number(e.currentTarget.dataset.id), name = e.currentTarget.dataset.name || '';
+    wx.showModal({
+      title: '删除人员',
+      content: `确定删除「${name}」吗？该人员尚未参保，删除后名单不可恢复。`,
+      confirmColor: '#dc2626',
+      success: (res) => {
+        if (!res.confirm) return;
+        app.request(`/insured/${id}`, { method: 'DELETE' })
+          .then(() => { wx.showToast({ title: '已删除' }); this.load(); })
+          .catch(() => {});
+      }
+    });
+  },
   rowTap(e) {
     if (this.data.selectMode) { this.toggleSelect(e); return; }
     this.detail(e);
