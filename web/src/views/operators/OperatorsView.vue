@@ -243,7 +243,10 @@ async function revokeScope(scope: EmployerScope) {
         </el-table-column>
         <el-table-column prop="username" label="登录账号" width="130" />
         <el-table-column prop="enterprise_name" label="所属单位" min-width="140">
-          <template #default="{ row }">{{ row.enterprise_name || '—' }}</template>
+          <template #default="{ row }">
+            <div>{{ row.enterprise_name || '—' }}</div>
+            <small v-if="row.enterprise_id" class="muted">ID: {{ row.enterprise_id }}</small>
+          </template>
         </el-table-column>
         <el-table-column prop="phone" label="手机号" width="120">
           <template #default="{ row }">{{ row.phone || '—' }}</template>
