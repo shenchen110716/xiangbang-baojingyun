@@ -35,6 +35,8 @@ export interface Enterprise {
   usage_fee_daily: number
   alert_days: number
   created_at: string
+  /** 最近一次审核（通过/驳回）时间，来自审计日志；从未审核过为 null */
+  approved_at?: string | null
 }
 
 export interface ActualEmployer {

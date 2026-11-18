@@ -3,7 +3,7 @@ from collections import defaultdict
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -11,7 +11,7 @@ from ..core.audit import audit
 from ..core.db import db
 from ..core.rbac import require_role
 from ..core.security import current_user, pwd
-from ..models import AgentCommission, Enterprise, InsurancePlan, InsuredPerson, LedgerEntry, Policy, User, WorkPosition
+from ..models import AgentCommission, AuditLog, Enterprise, InsurancePlan, InsuredPerson, LedgerEntry, Policy, User, WorkPosition
 from ..schemas import AgentIn, EnterpriseApplyIn, EnterpriseIn, EnterpriseUpdate, RechargeIn
 from ..services import amount, ledger_dict, post_ledger_entry, premium_account_view, premium_accounts_for_enterprise, pricing_snapshot, reconcile_enterprise_ledger, serialize, strip_internal_pricing, usage_account_view
 
@@ -74,11 +74,18 @@ def enterprises(q: str = "", status_filter: Optional[str] = Query(None, alias="s
     if user.role == "enterprise" and user.enterprise_id: stmt = stmt.where(Enterprise.id == user.enterprise_id)
     if q: stmt = stmt.where(or_(Enterprise.name.contains(q), Enterprise.contact.contains(q)))
     if status_filter: stmt = stmt.where(Enterprise.status == status_filter)
+    # 审批时间没有落在 enterprises 表上，从审计日志取每家企业最近一次审核
+    # （approved/rejected）的时间，避免为纯展示字段加一列迁移。
+    approval_times = dict(session.execute(
+        select(AuditLog.object_id, func.max(AuditLog.created_at))
+        .where(AuditLog.action == "status_change", AuditLog.object_type == "enterprise", AuditLog.detail.in_(("approved", "rejected")))
+        .group_by(AuditLog.object_id)
+    ).all())
     result=[]
     for x in session.scalars(stmt):
         linked = session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id == x.id).order_by(AgentCommission.id.asc())) if not x.agent_id else None
         agent_id = x.agent_id or (linked.agent_id if linked else None)
-        item=serialize(x); agent=session.get(User,agent_id) if agent_id else None; item["agent_id"]=agent_id; item["agent_name"]=agent.name if agent else "未分配"; pviews=premium_account_view(session, x); item["premium_balance_total"]=amount(sum(v["available"] for v in pviews)); item["premium_recharged"]=amount(sum(v["recharged"] for v in pviews)); item["premium_consumed"]=amount(sum(v["consumed"] for v in pviews)); uview=usage_account_view(session,x); item["usage_recharged"]=uview["recharged"]; item["usage_consumed"]=uview["consumed"]; item["usage_available"]=uview["available"]; result.append(item)
+        item=serialize(x); agent=session.get(User,agent_id) if agent_id else None; item["agent_id"]=agent_id; item["agent_name"]=agent.name if agent else "未分配"; pviews=premium_account_view(session, x); item["premium_balance_total"]=amount(sum(v["available"] for v in pviews)); item["premium_recharged"]=amount(sum(v["recharged"] for v in pviews)); item["premium_consumed"]=amount(sum(v["consumed"] for v in pviews)); uview=usage_account_view(session,x); item["usage_recharged"]=uview["recharged"]; item["usage_consumed"]=uview["consumed"]; item["usage_available"]=uview["available"]; item["approved_at"]=approval_times.get(str(x.id)); result.append(item)
     return result
 
 @router.post("/enterprises", dependencies=[Depends(require_role("admin", detail="仅总后台可新增投保单位"))])
