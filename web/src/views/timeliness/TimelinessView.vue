@@ -278,43 +278,54 @@ async function doConfirm() {
       </el-form-item>
     </el-form>
 
+    <!-- 只合并标识类列（单位/岗位、人员、时间对、状态+版本、责任原因+责任人），
+         延迟/保障缺口是独立统计指标，保持各自一列不混排。 -->
     <el-table v-loading="loading" :data="paged" size="small" stripe>
-      <el-table-column v-if="isAdmin" prop="enterprise_name" label="投保单位" width="140" />
-      <el-table-column label="工作单位 / 岗位" width="180">
+      <el-table-column label="单位 / 岗位" min-width="180">
         <template #default="{ row }">
           <div>{{ row.actual_employer_name || '—' }}</div>
-          <small class="muted">{{ row.position_name || '—' }}</small>
+          <div class="muted">{{ row.position_name || '—' }}</div>
+          <!-- 投保单位折进本列下行而不是单独一列，避免 admin 视角多出一列条件列 -->
+          <div v-if="isAdmin" class="muted">投保 {{ row.enterprise_name || '—' }}</div>
         </template>
       </el-table-column>
-      <el-table-column prop="person_name" label="姓名" width="90" />
-      <el-table-column prop="id_number_masked" label="身份证号" width="150" />
-      <el-table-column prop="actual_business_at" label="真实业务时间" width="170" />
-      <el-table-column label="类型" width="80">
-        <template #default="{ row }">{{ row.operation_type === 'enrollment' ? '参保' : '停保' }}</template>
+      <el-table-column label="人员" width="150">
+        <template #default="{ row }">
+          <div>{{ row.person_name }}</div>
+          <div class="muted">{{ row.id_number_masked }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column label="类型 / 业务时间" width="170">
+        <template #default="{ row }">
+          <div>{{ row.operation_type === 'enrollment' ? '参保' : '停保' }}</div>
+          <div class="muted">{{ row.actual_business_at }}</div>
+        </template>
       </el-table-column>
       <el-table-column label="及时状态" width="110">
         <template #default="{ row }">
           <el-tag :type="STATUS_TYPE[row.timeliness_status] || 'info'" size="small">
             {{ STATUS_LABEL[row.timeliness_status] || row.timeliness_status }}
           </el-tag>
+          <div class="muted">规则 v{{ row.product_rule_version }}</div>
         </template>
       </el-table-column>
-      <el-table-column prop="expected_coverage_at" label="应保障时间" width="170" />
-      <el-table-column prop="actual_coverage_at" label="实际保障时间" width="170" />
+      <el-table-column label="应 / 实际保障时间" width="180">
+        <template #default="{ row }">
+          <div>应 {{ row.expected_coverage_at || '—' }}</div>
+          <div class="muted">实际 {{ row.actual_coverage_at || '—' }}</div>
+        </template>
+      </el-table-column>
       <el-table-column label="延迟" width="90">
         <template #default="{ row }">{{ days(row.delay_seconds) }} 天</template>
       </el-table-column>
       <el-table-column label="保障缺口" width="100">
         <template #default="{ row }">{{ days(row.coverage_gap_seconds) }} 天</template>
       </el-table-column>
-      <el-table-column label="责任原因" min-width="140">
-        <template #default="{ row }">{{ REASON_LABEL[row.responsibility_reason] || row.responsibility_reason }}</template>
-      </el-table-column>
-      <el-table-column label="责任人" width="90">
-        <template #default="{ row }">{{ row.responsible_user_name || '—' }}</template>
-      </el-table-column>
-      <el-table-column label="规则版本" width="90">
-        <template #default="{ row }">v{{ row.product_rule_version }}</template>
+      <el-table-column label="责任原因 / 责任人" min-width="150">
+        <template #default="{ row }">
+          <div>{{ REASON_LABEL[row.responsibility_reason] || row.responsibility_reason }}</div>
+          <div class="muted">{{ row.responsible_user_name || '—' }}</div>
+        </template>
       </el-table-column>
       <template #empty>暂无及时率结果，请先导入真实用工事实并重算</template>
     </el-table>
@@ -400,5 +411,6 @@ async function doConfirm() {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 </style>

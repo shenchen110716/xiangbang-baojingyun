@@ -149,21 +149,29 @@ async function handleInvoiceUpload(item: Invoice, file: File) {
         <el-button type="primary" @click="openInvoiceCreate">＋ 申请发票</el-button>
       </template>
       <el-table :data="pagedAccounts" size="small">
-        <el-table-column label="投保单位" min-width="150">
+        <!-- 账户名折进单位名下行：同一单位的保费/使用费两行靠小字区分，省一列 -->
+        <el-table-column label="投保单位/账户" min-width="180">
           <template #default="{ row }">
             <div>{{ row.enterprise_name }}</div>
-            <small class="muted">ID: {{ row.id }}</small>
+            <div class="muted">ID: {{ row.id }} · {{ row.account }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="account" label="账户" width="140" />
         <el-table-column label="可用余额" width="150"><template #default="{ row }"><div>{{ money(row.available ?? row.balance) }}</div><small class="muted">充值 {{ money(row.recharged ?? row.balance) }} · {{ row.account === '平台使用费账户' ? '已用' : '销售保费' }} {{ money(row.account === '平台使用费账户' ? row.total_accrued : (row.premium_consumed ?? 0)) }}</small></template></el-table-column>
         <el-table-column label="计费单价 / 今日" width="155">
           <template #default="{ row }"><template v-if="row.account === '平台使用费账户'"><div>{{ money(row.daily_rate) }} / 人 / 天</div><small class="muted">{{ row.active_people }} 人 · {{ money(row.estimated_daily) }}</small></template><span v-else>—</span></template>
         </el-table-column>
-        <el-table-column label="本月有效人天" width="115"><template #default="{ row }">{{ row.account === '平台使用费账户' ? `${row.month_person_days} 人天` : '—' }}</template></el-table-column>
-        <el-table-column label="本月累计" width="110"><template #default="{ row }">{{ row.account === '平台使用费账户' ? money(row.month_accrued) : '—' }}</template></el-table-column>
+        <!-- 本月累计 = 单价 × 本月有效人天，人天是它的构成明细，折进下行而不是单独占列 -->
+        <el-table-column label="本月累计" width="120">
+          <template #default="{ row }">
+            <template v-if="row.account === '平台使用费账户'">
+              <div>{{ money(row.month_accrued) }}</div>
+              <div class="muted">{{ row.month_person_days }} 人天</div>
+            </template>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="历史累计" width="110"><template #default="{ row }">{{ row.account === '平台使用费账户' ? money(row.total_accrued) : '—' }}</template></el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openLedger(row)">账本明细</el-button>
           </template>
@@ -174,7 +182,6 @@ async function handleInvoiceUpload(item: Invoice, file: File) {
 
     <PageCard title="发票申请" :count="invoices.length" hint="企业提交、平台审核并登记开票状态">
       <el-table :data="pagedInvoices" size="small">
-        <el-table-column label="申请时间" width="150"><template #default="{ row }">{{ formatDateTime(row.created_at) }}</template></el-table-column>
         <el-table-column label="投保单位" min-width="130">
           <template #default="{ row }">
             <div>{{ row.enterprise_name }}</div>
@@ -187,37 +194,48 @@ async function handleInvoiceUpload(item: Invoice, file: File) {
             <small class="muted">{{ row.tax_no || '未填税号' }}</small>
           </template>
         </el-table-column>
-        <el-table-column label="票类" width="110">
-          <template #default="{ row }">{{ row.invoice_type }}</template>
+        <el-table-column label="账户金额/票类" width="150">
+          <template #default="{ row }">
+            <div>{{ row.account === 'premium' ? '保费' : '使用费' }} · {{ money(row.amount) }}</div>
+            <div class="muted">{{ row.invoice_type }}</div>
+          </template>
         </el-table-column>
-        <el-table-column label="账户 / 金额" width="140">
-          <template #default="{ row }">{{ row.account === 'premium' ? '保费' : '使用费' }} · {{ money(row.amount) }}</template>
-        </el-table-column>
-        <el-table-column label="接收邮箱" min-width="140">
-          <template #default="{ row }">{{ row.email || '未填' }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column label="状态/申请时间" width="150">
           <template #default="{ row }">
             <el-tag size="small" :type="row.status === 'issued' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'">{{ INVOICE_STATUS_TEXT[row.status] }}</el-tag>
+            <div class="muted">申请 {{ formatDateTime(row.created_at) }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="发票文件" min-width="130">
+        <!-- 发票文件和接收邮箱都是"票开出来交付到哪"的信息，合成一列 -->
+        <el-table-column label="发票文件/接收邮箱" min-width="150">
           <template #default="{ row }">
-            <a v-if="row.document_download_url" :href="row.document_download_url" target="_blank">{{ row.document_name || '下载' }}</a>
-            <span v-else class="muted">未上传</span>
+            <div>
+              <a v-if="row.document_download_url" :href="row.document_download_url" target="_blank">{{ row.document_name || '下载' }}</a>
+              <span v-else class="muted">未上传</span>
+            </div>
+            <div class="muted">{{ row.email || '未填邮箱' }}</div>
           </template>
         </el-table-column>
-        <el-table-column v-if="auth.isAdmin()" label="操作" width="260" fixed="right">
+        <el-table-column v-if="auth.isAdmin()" label="操作" width="215" fixed="right">
           <template #default="{ row }">
             <template v-if="row.status !== 'issued'">
               <el-button link type="primary" size="small" @click="setInvoiceStatus(row, 'approved')">审核</el-button>
               <el-button link type="success" size="small" @click="setInvoiceStatus(row, 'issued')">已开票</el-button>
-              <el-button link type="danger" size="small" @click="setInvoiceStatus(row, 'rejected')">驳回</el-button>
             </template>
-            <el-upload :show-file-list="false" :auto-upload="false" accept=".pdf,.jpg,.jpeg,.png"
+            <el-upload class="upload-inline" :show-file-list="false" :auto-upload="false" accept=".pdf,.jpg,.jpeg,.png"
                        @change="(f: { raw: File }) => handleInvoiceUpload(row, f.raw)">
               <el-button link type="primary" size="small">{{ row.document_download_url ? '重新上传' : '上传发票' }}</el-button>
             </el-upload>
+            <!-- 驳回低频且危险，收进显式「更多」，避免四个按钮挤爆操作列 -->
+            <el-dropdown v-if="row.status !== 'issued'" class="op-more" trigger="click">
+              <el-button link type="primary" size="small">更多<el-icon class="el-icon--right"><arrow-down /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <!-- dropdown 菜单被 teleport 到 body，scoped 样式够不着，红色只能内联 -->
+                  <el-dropdown-item @click="setInvoiceStatus(row, 'rejected')"><span style="color: var(--el-color-danger)">驳回</span></el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -236,14 +254,19 @@ async function handleInvoiceUpload(item: Invoice, file: File) {
             <b class="diff-warning">缓存 {{ money(r.cached_balance) }} / 流水 {{ money(r.ledger_balance) }} / 差额 {{ money(r.diff) }}</b>
           </div>
         </div>
+        <!-- 640px 弹窗塞 6 列太挤：方向标签跟金额同行（方向本来就是金额的正负号），
+             业务类型折进账户下行 -->
         <el-table :data="ledgerData?.entries ?? []" size="small" style="margin-top: 12px">
-          <el-table-column label="时间" width="140"><template #default="{ row }">{{ formatDateTime(row.occurred_at) }}</template></el-table-column>
-          <el-table-column label="账户" width="90"><template #default="{ row }">{{ row.account === 'premium' ? '保费' : '服务费' }}</template></el-table-column>
-          <el-table-column label="方向" width="70">
-            <template #default="{ row }"><el-tag size="small" :type="row.direction === 'credit' ? 'success' : 'danger'">{{ row.direction === 'credit' ? '入账' : '出账' }}</el-tag></template>
+          <el-table-column label="时间" width="150"><template #default="{ row }">{{ formatDateTime(row.occurred_at) }}</template></el-table-column>
+          <el-table-column label="账户/业务类型" min-width="120">
+            <template #default="{ row }">
+              <div>{{ row.account === 'premium' ? '保费' : '服务费' }}</div>
+              <div class="muted">{{ row.business_type }}</div>
+            </template>
           </el-table-column>
-          <el-table-column label="金额" width="100"><template #default="{ row }">{{ money(row.amount) }}</template></el-table-column>
-          <el-table-column prop="business_type" label="业务类型" width="100" />
+          <el-table-column label="方向/金额" width="150">
+            <template #default="{ row }"><el-tag size="small" :type="row.direction === 'credit' ? 'success' : 'danger'">{{ row.direction === 'credit' ? '入账' : '出账' }}</el-tag> {{ money(row.amount) }}</template>
+          </el-table-column>
           <el-table-column prop="operator" label="操作人" width="90" />
         </el-table>
       </template>
@@ -309,6 +332,17 @@ async function handleInvoiceUpload(item: Invoice, file: File) {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
+}
+.op-more {
+  margin-left: 12px;
+  vertical-align: middle;
+}
+/* el-upload 根节点是块级元素，不内联会把后面的「更多」挤到下一行 */
+.upload-inline {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 12px;
 }
 .ledger-title {
   font-size: 13px;

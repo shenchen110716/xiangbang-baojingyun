@@ -235,24 +235,19 @@ async function revokeScope(scope: EmployerScope) {
         <el-button v-if="canManage" type="primary" @click="openCreate">＋ 新增账号</el-button>
       </template>
       <el-table :data="paged" size="small">
-        <el-table-column label="姓名" width="140">
+        <!-- 姓名/登录账号/角色/手机合为一列：都是同一账号的身份信息，分四列反而要横向扫着看 -->
+        <el-table-column label="姓名/账号" min-width="160">
           <template #default="{ row }">
-            <b>{{ row.name }}</b>
-            <small v-if="row.id === auth.user?.id" class="muted"> 当前登录</small>
+            <div><b>{{ row.name }}</b><small v-if="row.id === auth.user?.id" class="muted"> 当前登录</small></div>
+            <div class="muted">{{ row.username }} · {{ row.enterprise_role === 'owner' || row.is_owner ? '企业主管' : '项目负责人' }}</div>
+            <div v-if="row.phone" class="muted">{{ row.phone }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="username" label="登录账号" width="130" />
         <el-table-column prop="enterprise_name" label="所属单位" min-width="140">
           <template #default="{ row }">
             <div>{{ row.enterprise_name || '—' }}</div>
             <small v-if="row.enterprise_id" class="muted">ID: {{ row.enterprise_id }}</small>
           </template>
-        </el-table-column>
-        <el-table-column prop="phone" label="手机号" width="120">
-          <template #default="{ row }">{{ row.phone || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="账号类型" width="100">
-          <template #default="{ row }">{{ row.enterprise_role === 'owner' || row.is_owner ? '企业主管' : '项目负责人' }}</template>
         </el-table-column>
         <el-table-column label="授权实际工作单位" min-width="220">
           <template #default="{ row }">
@@ -268,13 +263,25 @@ async function revokeScope(scope: EmployerScope) {
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="row.active ? 'success' : 'info'">{{ row.active ? '正常' : '已停用' }}</el-tag></template>
         </el-table-column>
-        <el-table-column v-if="canManage" label="操作" width="240" fixed="right">
+        <!-- 操作列收纳：授权/编辑高频直显，重置密码、启停、删除低频收进显式「更多」
+             菜单（同投保单位列表的收纳模式），绝不允许因列宽不足被裁掉。 -->
+        <el-table-column v-if="canManage" label="操作" width="190" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.enterprise_role === 'project_manager'" link type="primary" size="small" @click="openScopeDialog(row)">授权单位</el-button>
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="primary" size="small" @click="resetPassword(row)">重置密码</el-button>
-            <el-button v-if="!row.is_owner" link :type="row.active ? 'danger' : 'success'" size="small" @click="toggleActive(row)">{{ row.active ? '停用' : '启用' }}</el-button>
-            <el-button v-if="!row.has_data && row.id !== auth.user?.id" link type="danger" size="small" @click="removeOperator(row)">删除</el-button>
+            <el-dropdown class="op-more" trigger="click">
+              <el-button link type="primary" size="small">更多<el-icon class="el-icon--right"><arrow-down /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="resetPassword(row)">重置密码</el-dropdown-item>
+                  <!-- dropdown 菜单被 teleport 到 body，scoped 样式够不着，颜色只能内联 -->
+                  <el-dropdown-item v-if="!row.is_owner" @click="toggleActive(row)">
+                    <span :style="row.active ? 'color: var(--el-color-danger)' : 'color: var(--el-color-success)'">{{ row.active ? '停用' : '启用' }}</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="!row.has_data && row.id !== auth.user?.id" divided @click="removeOperator(row)"><span style="color: var(--el-color-danger)">删除</span></el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -369,6 +376,11 @@ async function revokeScope(scope: EmployerScope) {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
+}
+.op-more {
+  margin-left: 12px;
+  vertical-align: middle;
 }
 .dialog-hint {
   font-size: 12px;

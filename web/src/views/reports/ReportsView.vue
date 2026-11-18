@@ -168,8 +168,10 @@ async function exportPremiumDetails() {
         <el-table-column label="被保险人" min-width="150">
           <template #default="{ row }"><div>{{ row.person_name }}</div><small class="muted">{{ row.id_number }}</small></template>
         </el-table-column>
-        <el-table-column v-if="!auth.isEnterprise()" prop="enterprise_name" label="投保单位" min-width="180" />
-        <el-table-column v-if="!auth.isEnterprise()" prop="agent_name" label="业务员" min-width="110"><template #default="{ row }">{{ row.agent_name || '未分配' }}</template></el-table-column>
+        <!-- 报表只合并标识列：投保单位+对接业务员合一列，金额/天数等指标列一律不动 -->
+        <el-table-column v-if="!auth.isEnterprise()" label="投保单位/业务员" min-width="180">
+          <template #default="{ row }"><div>{{ row.enterprise_name }}</div><small class="muted">业务员 {{ row.agent_name || '未分配' }}</small></template>
+        </el-table-column>
         <el-table-column label="实际用工单位 / 岗位" min-width="180">
           <template #default="{ row }"><div>{{ row.actual_employer_name || '—' }}</div><small class="muted">{{ row.position_name }} · {{ row.occupation_class }}</small></template>
         </el-table-column>
@@ -233,9 +235,12 @@ async function exportPremiumDetails() {
   justify-content: space-between;
   gap: 12px;
 }
-.premium-summary span,
-.muted {
+.premium-summary span {
   color: var(--el-text-color-secondary);
+}
+.muted {
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 .premium-summary b {
   color: var(--el-color-primary);

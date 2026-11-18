@@ -103,11 +103,12 @@ function openWorkbench(item: Claim) {
         <el-table-column label="金额" width="110">
           <template #default="{ row }">{{ money(row.approved_amount || row.amount) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }"><el-tag size="small" :type="statusType[row.status] as any">{{ CLAIM_STATUS_TEXT[row.status] }}</el-tag></template>
-        </el-table-column>
-        <el-table-column label="风险" width="90">
-          <template #default="{ row }"><el-tag size="small" :type="riskType[row.calculated_risk] as any">{{ CLAIM_RISK_TEXT[row.calculated_risk] || row.calculated_risk }}</el-tag></template>
+        <!-- 状态与风险都是案件的评估标签，合成一列上下两行，减一列横向空间 -->
+        <el-table-column label="状态/风险" width="110">
+          <template #default="{ row }">
+            <el-tag size="small" :type="statusType[row.status] as any">{{ CLAIM_STATUS_TEXT[row.status] }}</el-tag>
+            <div class="tag-line"><el-tag size="small" :type="riskType[row.calculated_risk] as any">{{ CLAIM_RISK_TEXT[row.calculated_risk] || row.calculated_risk }}</el-tag></div>
+          </template>
         </el-table-column>
         <el-table-column label="操作" width="90" fixed="right">
           <template #default="{ row }">
@@ -138,5 +139,9 @@ function openWorkbench(item: Claim) {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
+}
+.tag-line {
+  margin-top: 2px;
 }
 </style>

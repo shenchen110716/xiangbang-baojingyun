@@ -114,10 +114,16 @@ async function removeItem(item: AgentCommission) {
             <small class="muted">{{ row.mode === 'rebate' ? `${(row.rate * 100).toFixed(1)}%` : '直接输入价格' }}</small>
           </template>
         </el-table-column>
-        <el-table-column label="保险原价" width="100"><template #default="{ row }">{{ money(row.insurance_base_price) }}</template></el-table-column>
-        <el-table-column label="保司结算底价" width="110"><template #default="{ row }">{{ money(row.policy_floor_price) }}</template></el-table-column>
-        <el-table-column label="销售最低价" width="110"><template #default="{ row }">{{ money(row.minimum_sale_price) }}</template></el-table-column>
-        <el-table-column label="实际销售价" width="100"><template #default="{ row }">{{ money(row.sale_price) }}</template></el-table-column>
+        <!-- 原价/底价/最低价是同一条价格链上的参考口径，折进实际销售价下行；
+             佣金类累计指标是独立结算数字，仍各自成列，不与价格混排 -->
+        <el-table-column label="实际销售价" width="130">
+          <template #default="{ row }">
+            <div>{{ money(row.sale_price) }}</div>
+            <div class="muted">原价 {{ money(row.insurance_base_price) }}</div>
+            <div class="muted">底价 {{ money(row.policy_floor_price) }}</div>
+            <div class="muted">最低 {{ money(row.minimum_sale_price) }}</div>
+          </template>
+        </el-table-column>
         <el-table-column label="累计总返佣" width="125"><template #default="{ row }"><div>{{ money(row.accrued_total_commission) }}</div><small class="muted">单价 {{ money(row.total_commission_amount) }}</small></template></el-table-column>
         <el-table-column label="累计业务员佣金" width="135"><template #default="{ row }"><div>{{ money(row.accrued_agent_commission) }}</div><small class="muted">单价 {{ money(row.agent_commission_amount) }}</small></template></el-table-column>
         <el-table-column label="状态" width="90">
@@ -169,5 +175,6 @@ async function removeItem(item: AgentCommission) {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 </style>

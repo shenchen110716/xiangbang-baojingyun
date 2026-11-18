@@ -336,8 +336,12 @@ function logout() {
         <el-tab-pane label="岗位核保" name="positions">
           <PageCard title="待审核岗位" :count="pendingPositionsTotal" hint="包含已分派到本保司产品线下、以及尚未被任何一方认领的待审核岗位——谁先审核谁认领">
             <el-table :data="pendingPositionsPaged" size="small">
-              <el-table-column prop="name" label="岗位名称" min-width="140" />
-              <el-table-column prop="actual_employer_name" label="实际用工单位" min-width="160" />
+              <el-table-column label="岗位名称" min-width="180">
+                <template #default="{ row }">
+                  <div>{{ row.name }}</div>
+                  <div class="muted">{{ row.actual_employer_name || '—' }}</div>
+                </template>
+              </el-table-column>
               <el-table-column prop="occupation_class" label="职业类别" width="100" />
               <el-table-column label="岗位视频" width="100">
                 <template #default="{ row }">
@@ -359,8 +363,12 @@ function logout() {
 
           <PageCard title="已审核岗位" :count="approvedPositionsTotal" hint="仅显示已分派到本保司产品线下、已核保通过的岗位">
             <el-table :data="approvedPositionsPaged" size="small">
-              <el-table-column prop="name" label="岗位名称" min-width="140" />
-              <el-table-column prop="actual_employer_name" label="实际用工单位" min-width="160" />
+              <el-table-column label="岗位名称" min-width="180">
+                <template #default="{ row }">
+                  <div>{{ row.name }}</div>
+                  <div class="muted">{{ row.actual_employer_name || '—' }}</div>
+                </template>
+              </el-table-column>
               <el-table-column prop="occupation_class" label="职业类别" width="100" />
               <el-table-column label="岗位视频" width="100">
                 <template #default="{ row }">
@@ -384,17 +392,25 @@ function logout() {
               <el-input v-model="insuredSearch" placeholder="按姓名/身份证号搜索" clearable style="width: 220px" />
             </template>
             <el-table :data="insuredPaged" size="small">
-              <el-table-column prop="name" label="姓名" width="100" />
-              <el-table-column label="身份证号" min-width="180">
-                <template #default="{ row }">{{ maskId(row.id_number) }}</template>
-              </el-table-column>
-              <el-table-column label="参保时间" width="100"><template #default="{ row }">{{ row.effective_at ? row.effective_at.slice(0, 10) : '—' }}</template></el-table-column>
-              <el-table-column label="停保时间" width="100"><template #default="{ row }">{{ row.terminated_at ? row.terminated_at.slice(0, 10) : '—' }}</template></el-table-column>
-              <el-table-column label="状态" width="90"><template #default="{ row }">{{ statusLabel(row.status) }}</template></el-table-column>
-              <el-table-column label="异常标注" min-width="160">
+              <el-table-column label="被保险人" min-width="170">
                 <template #default="{ row }">
-                  <el-tag v-if="row.insurer_flag_reason" type="danger" size="small">{{ row.insurer_flag_reason }}</el-tag>
-                  <span v-else class="muted">无</span>
+                  <div>{{ row.name }}</div>
+                  <div class="muted">{{ maskId(row.id_number) }}</div>
+                </template>
+              </el-table-column>
+              <el-table-column label="参保/停保时间" width="150">
+                <template #default="{ row }">
+                  <div>参保 {{ row.effective_at ? row.effective_at.slice(0, 10) : '—' }}</div>
+                  <div class="muted">停保 {{ row.terminated_at ? row.terminated_at.slice(0, 10) : '—' }}</div>
+                </template>
+              </el-table-column>
+              <el-table-column label="状态/异常标注" min-width="160">
+                <template #default="{ row }">
+                  <div>{{ statusLabel(row.status) }}</div>
+                  <!-- 标注原因可能很长，tag 内单行省略，完整内容靠 title 悬浮 -->
+                  <div v-if="row.insurer_flag_reason" class="flag-line" :title="row.insurer_flag_reason">
+                    <el-tag type="danger" size="small">{{ row.insurer_flag_reason }}</el-tag>
+                  </div>
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="100">
@@ -462,10 +478,12 @@ function logout() {
               <el-table-column prop="month" label="月份" width="120" />
               <el-table-column label="当月保费合计" width="140"><template #default="{ row }">{{ row.total_premium }}</template></el-table-column>
               <el-table-column label="在保人数" width="100"><template #default="{ row }">{{ row.insured_count }}</template></el-table-column>
-              <el-table-column label="是否已结算" width="110">
-                <template #default="{ row }"><el-tag size="small" :type="row.settled ? 'success' : 'info'">{{ row.settled ? '已结算' : '未结算' }}</el-tag></template>
+              <el-table-column label="结算状态" width="170">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="row.settled ? 'success' : 'info'">{{ row.settled ? '已结算' : '未结算' }}</el-tag>
+                  <div class="muted">{{ row.settled_at ? row.settled_at.replace('T', ' ').slice(0, 19) : '—' }}</div>
+                </template>
               </el-table-column>
-              <el-table-column label="结算时间" width="160"><template #default="{ row }">{{ row.settled_at ? row.settled_at.replace('T', ' ').slice(0, 19) : '—' }}</template></el-table-column>
               <el-table-column label="操作" width="100">
                 <template #default="{ row }"><el-button link type="primary" size="small" @click="openMonthlyDetail(row)">查看明细</el-button></template>
               </el-table-column>
@@ -477,8 +495,12 @@ function logout() {
           <PageCard title="保单结算明细" :count="settlementRowsTotal">
             <el-table :data="settlementRowsPaged" size="small">
               <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
-              <el-table-column prop="plan_name" label="产品方案" min-width="140" />
-              <el-table-column prop="policy_no" label="保单号" min-width="140" />
+              <el-table-column label="产品方案/保单号" min-width="160">
+                <template #default="{ row }">
+                  <div>{{ row.plan_name }}</div>
+                  <div class="muted">{{ row.policy_no || '—' }}</div>
+                </template>
+              </el-table-column>
               <el-table-column label="累计参保人数" width="100"><template #default="{ row }">{{ row.insured_count }}</template></el-table-column>
               <el-table-column label="结算价（单价）" width="120"><template #default="{ row }">{{ row.policy_floor_price ?? '—' }}</template></el-table-column>
               <el-table-column label="累计保费" width="100"><template #default="{ row }">{{ row.premium }}</template></el-table-column>
@@ -493,25 +515,28 @@ function logout() {
           <PageCard title="名下投保单位发票申请" :count="invoicesTotal">
             <el-table :data="invoicesPaged" size="small">
               <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
-              <el-table-column label="发票抬头 / 税号" min-width="160">
+              <el-table-column label="发票抬头 / 税号" min-width="180">
                 <template #default="{ row }">
                   <div>{{ row.title }}</div>
-                  <small class="muted">{{ row.tax_no || '未填税号' }}</small>
+                  <div class="muted">{{ row.tax_no || '未填税号' }}</div>
+                  <!-- 接收邮箱跟着抬头走：都是开票收件信息，单独一列太浪费 -->
+                  <div class="muted">{{ row.email || '未填邮箱' }}</div>
                 </template>
               </el-table-column>
-              <el-table-column label="票类" width="110"><template #default="{ row }">{{ row.invoice_type }}</template></el-table-column>
-              <el-table-column prop="account" label="费用类型" width="100">
-                <template #default="{ row }">{{ row.account === 'premium' ? '保费' : '使用费' }}</template>
+              <el-table-column label="票类/费用类型" width="130">
+                <template #default="{ row }">
+                  <div>{{ row.invoice_type }}</div>
+                  <div class="muted">{{ row.account === 'premium' ? '保费' : '使用费' }}</div>
+                </template>
               </el-table-column>
               <el-table-column label="金额" width="100"><template #default="{ row }">{{ row.amount }}</template></el-table-column>
-              <el-table-column label="接收邮箱" min-width="140"><template #default="{ row }">{{ row.email || '未填' }}</template></el-table-column>
-              <el-table-column label="状态" width="90">
-                <template #default="{ row }">{{ INVOICE_STATUS_TEXT[row.status] || row.status }}</template>
-              </el-table-column>
-              <el-table-column label="发票文件" min-width="150">
+              <el-table-column label="状态/发票文件" min-width="150">
                 <template #default="{ row }">
-                  <a v-if="row.document_download_url" :href="row.document_download_url" target="_blank">{{ row.document_name || '下载' }}</a>
-                  <span v-else class="muted">未上传</span>
+                  <div>{{ INVOICE_STATUS_TEXT[row.status] || row.status }}</div>
+                  <div class="muted">
+                    <a v-if="row.document_download_url" :href="row.document_download_url" target="_blank">{{ row.document_name || '下载' }}</a>
+                    <span v-else>未上传</span>
+                  </div>
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="120">
@@ -657,12 +682,24 @@ function logout() {
 
     <el-dialog v-model="monthlyDetailVisible" :title="`${monthlyDetailMonth} 保费明细`" width="760px">
       <el-table v-loading="monthlyDetailLoading" :data="monthlyDetailPaged" size="small">
-        <el-table-column prop="person_name" label="姓名" width="90" />
-        <el-table-column label="身份证号" min-width="170"><template #default="{ row }">{{ maskId(row.id_number) }}</template></el-table-column>
-        <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
-        <el-table-column prop="policy_no" label="保单号" min-width="130" />
-        <el-table-column label="参保时间" width="100"><template #default="{ row }">{{ row.effective_at }}</template></el-table-column>
-        <el-table-column label="停保时间" width="100"><template #default="{ row }">{{ row.terminated_at || '在保' }}</template></el-table-column>
+        <el-table-column label="被保险人" min-width="160">
+          <template #default="{ row }">
+            <div>{{ row.person_name }}</div>
+            <div class="muted">{{ maskId(row.id_number) }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="投保单位/保单号" min-width="150">
+          <template #default="{ row }">
+            <div>{{ row.enterprise_name }}</div>
+            <div class="muted">{{ row.policy_no || '—' }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="参保/停保时间" width="150">
+          <template #default="{ row }">
+            <div>参保 {{ row.effective_at }}</div>
+            <div class="muted">停保 {{ row.terminated_at || '在保' }}</div>
+          </template>
+        </el-table-column>
         <el-table-column label="参保天数" width="90"><template #default="{ row }">{{ row.billable_days }}</template></el-table-column>
         <el-table-column label="合计保费" width="100"><template #default="{ row }">{{ row.amount }}</template></el-table-column>
       </el-table>
@@ -740,6 +777,19 @@ function logout() {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
+}
+.flag-line {
+  margin-top: 2px;
+}
+/* 标注原因可能很长，tag 内容单行省略，完整文案靠 title 悬浮提示 */
+.flag-line :deep(.el-tag) {
+  max-width: 100%;
+}
+.flag-line :deep(.el-tag__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .dialog-subject {
   margin: 0 0 12px;

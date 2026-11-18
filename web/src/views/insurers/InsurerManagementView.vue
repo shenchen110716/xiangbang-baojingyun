@@ -203,8 +203,13 @@ async function submitMerge() {
       </template>
       <el-table :data="list" size="small">
         <el-table-column prop="name" label="名称" min-width="160" />
-        <el-table-column prop="contact" label="联系人" width="120" />
-        <el-table-column prop="phone" label="联系电话" width="140" />
+        <!-- 联系人+电话合成一列：主行联系人，小字行电话 -->
+        <el-table-column label="联系人" width="150">
+          <template #default="{ row }">
+            <div>{{ row.contact || '—' }}</div>
+            <div class="muted">{{ row.phone || '—' }}</div>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '启用' : '暂停' }}</el-tag></template>
         </el-table-column>
@@ -269,11 +274,12 @@ async function submitMerge() {
           <template #default="{ row }">{{ row.total_premium.toFixed(2) }}</template>
         </el-table-column>
         <el-table-column prop="insured_count" label="参保人数" width="90" />
-        <el-table-column label="是否已结算" width="100">
-          <template #default="{ row }"><el-tag size="small" :type="row.settled ? 'success' : 'info'">{{ row.settled ? '已结算' : '未结算' }}</el-tag></template>
-        </el-table-column>
-        <el-table-column label="结算时间" min-width="140">
-          <template #default="{ row }">{{ row.settled_at ? row.settled_at.replace('T', ' ').slice(0, 19) : '-' }}</template>
+        <!-- 结算状态标签+结算时间合成一列：时间折进标签下的小字行 -->
+        <el-table-column label="结算状态" min-width="160">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.settled ? 'success' : 'info'">{{ row.settled ? '已结算' : '未结算' }}</el-tag>
+            <div v-if="row.settled_at" class="muted">{{ row.settled_at.replace('T', ' ').slice(0, 19) }}</div>
+          </template>
         </el-table-column>
         <el-table-column label="操作" width="100">
           <template #default="{ row }">
@@ -319,5 +325,6 @@ async function submitMerge() {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 </style>

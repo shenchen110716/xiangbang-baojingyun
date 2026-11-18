@@ -308,13 +308,14 @@ async function submitTier() {
     <PageCard title="已录入方案" :count="filtered.length" hint="保司结算底价 = 保险原价 ×（1-总返佣比例）">
       <div class="filter-row"><FilterBar v-model:search="search" /></div>
       <el-table :data="paged" size="small">
-        <el-table-column label="保险公司" min-width="140">
+        <!-- 保司+方案合成一列：方案名是主信息，保司/邮箱折进小字行；
+             保险原价/底价/利润/最低价/返佣是各自独立的金额指标，不合并 -->
+        <el-table-column label="方案名称/保险公司" min-width="200">
           <template #default="{ row }">
-            <div>{{ row.insurer }}</div>
-            <small class="muted">{{ row.insurer_email || '未设置保司邮箱' }}</small>
+            <div>{{ row.name }}</div>
+            <div class="muted">{{ row.insurer }} · {{ row.insurer_email || '未设置保司邮箱' }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="方案名称" min-width="140" />
         <el-table-column label="保险原价" width="100"><template #default="{ row }">{{ money(row.insurance_base_price) }}</template></el-table-column>
         <el-table-column label="保司结算底价" width="110"><template #default="{ row }">{{ money(row.policy_floor_price) }}</template></el-table-column>
         <el-table-column label="平台利润" width="100"><template #default="{ row }">{{ money(row.profit_amount) }}</template></el-table-column>
@@ -326,13 +327,23 @@ async function submitTier() {
           </template>
         </el-table-column>
         <el-table-column label="状态" width="80"><template #default="{ row }"><el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '启用' : '已暂停' }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <!-- 高频直显 + 低频收进显式「更多」菜单（同投保单位列表的收纳模式），
+             绝不允许因列宽不足被裁掉 -->
+        <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openDetail(row)">查看</el-button>
             <el-button link type="primary" size="small" @click="editPlan(row)">修改</el-button>
             <el-button link type="primary" size="small" @click="openTiers(row)">类别价格</el-button>
-            <el-button link type="primary" size="small" @click="toggleStatus(row)">{{ row.status === 'active' ? '暂停' : '恢复' }}</el-button>
-            <el-button link type="danger" size="small" @click="removePlan(row)">删除</el-button>
+            <el-dropdown class="op-more" trigger="click">
+              <el-button link type="primary" size="small">更多<el-icon class="el-icon--right"><arrow-down /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="toggleStatus(row)">{{ row.status === 'active' ? '暂停' : '恢复' }}</el-dropdown-item>
+                  <!-- dropdown 菜单被 teleport 到 body，scoped 样式够不着，红色只能内联 -->
+                  <el-dropdown-item divided @click="removePlan(row)"><span style="color: var(--el-color-danger)">删除</span></el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -344,11 +355,14 @@ async function submitTier() {
         <el-button type="primary" @click="openAccountCreate">＋ 新增收款账户</el-button>
       </template>
       <el-table :data="insurerAccounts" size="small">
-        <el-table-column prop="label" label="账户备注名" min-width="140" />
-        <el-table-column label="开户行/账号" min-width="200">
-          <template #default="{ row }">{{ row.bank_name }} · {{ row.account_no }}</template>
+        <!-- 备注名/开户行/账号/户名都是账户身份信息，合成一列；备注名可空，空时用户名顶上 -->
+        <el-table-column label="收款账户" min-width="240">
+          <template #default="{ row }">
+            <div>{{ row.label || row.account_holder }}</div>
+            <div class="muted">{{ row.bank_name }} · {{ row.account_no }}</div>
+            <div v-if="row.label" class="muted">户名 {{ row.account_holder }}</div>
+          </template>
         </el-table-column>
-        <el-table-column prop="account_holder" label="账户名称" min-width="140" />
         <el-table-column label="绑定保司" min-width="200">
           <template #default="{ row }">
             <el-tag v-for="name in row.insurers" :key="name" size="small" style="margin-right: 6px">{{ name }}</el-tag>
@@ -478,6 +492,11 @@ async function submitTier() {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
+}
+.op-more {
+  margin-left: 12px;
+  vertical-align: middle;
 }
 .tier-hint {
   font-size: 12px;

@@ -46,6 +46,12 @@ const statusLabel: Record<PendingTermination['status'], string> = {
   confirmed: '已停保',
   dismissed: '已自动撤销（已充值）',
 }
+// 纯展示映射：状态由纯文本改为标签后需要配色，不涉及业务逻辑
+const statusTagType: Record<PendingTermination['status'], 'warning' | 'info' | 'success'> = {
+  pending: 'warning',
+  confirmed: 'info',
+  dismissed: 'success',
+}
 </script>
 
 <template>
@@ -63,17 +69,25 @@ const statusLabel: Record<PendingTermination['status'], string> = {
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="enterprise_name" label="企业" min-width="150" />
-        <el-table-column prop="account_label" label="保费账户" min-width="140" />
-        <el-table-column prop="affected_insurers" label="受影响保司" min-width="160" />
-        <el-table-column label="受影响人数" width="100">
-          <template #default="{ row }">{{ row.status === 'pending' ? row.current_affected_count : row.affected_count }}</template>
+        <el-table-column label="企业 / 保费账户" min-width="170">
+          <template #default="{ row }">
+            <div>{{ row.enterprise_name }}</div>
+            <div class="muted">{{ row.account_label }}</div>
+          </template>
         </el-table-column>
-        <el-table-column label="状态" width="180">
-          <template #default="{ row }">{{ statusLabel[row.status as PendingTermination['status']] }}</template>
+        <el-table-column label="受影响保司 / 人数" min-width="180">
+          <template #default="{ row }">
+            <div>{{ row.affected_insurers }}</div>
+            <div class="muted">受影响 {{ row.status === 'pending' ? row.current_affected_count : row.affected_count }} 人</div>
+          </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="生成时间" width="180" />
-        <el-table-column label="操作" width="120">
+        <el-table-column label="状态 / 生成时间" width="190">
+          <template #default="{ row }">
+            <el-tag size="small" :type="statusTagType[row.status as PendingTermination['status']]">{{ statusLabel[row.status as PendingTermination['status']] }}</el-tag>
+            <div class="muted">生成 {{ row.created_at }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="110">
           <template #default="{ row }">
             <el-button v-if="row.status === 'pending'" link type="danger" size="small" @click="confirm(row)">确认停保</el-button>
           </template>
@@ -98,6 +112,7 @@ const statusLabel: Record<PendingTermination['status'], string> = {
 }
 
 .muted {
-  color: var(--el-text-color-secondary);
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 </style>

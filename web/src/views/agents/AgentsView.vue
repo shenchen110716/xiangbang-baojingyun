@@ -97,9 +97,14 @@ function onCommissionSaved() {
 
     <PageCard title="业务员列表" :count="list.length" hint="仅总后台可操作">
       <el-table :data="paged" size="small">
-        <el-table-column prop="name" label="姓名" width="100" />
-        <el-table-column prop="username" label="账号" width="120" />
-        <el-table-column prop="phone" label="手机" width="120" />
+        <!-- 姓名/账号/手机合为一列；对接企业、对接产品是两个独立的数字指标，不合并 -->
+        <el-table-column label="姓名/账号" min-width="150">
+          <template #default="{ row }">
+            <div>{{ row.name }}</div>
+            <div class="muted">{{ row.username }}</div>
+            <div v-if="row.phone" class="muted">{{ row.phone }}</div>
+          </template>
+        </el-table-column>
         <el-table-column prop="enterprise_count" label="对接企业" width="90" />
         <el-table-column prop="product_count" label="对接产品" width="90" />
         <el-table-column label="累计佣金" width="110"><template #default="{ row }">{{ money(row.total_commission) }}</template></el-table-column>
@@ -149,5 +154,9 @@ function onCommissionSaved() {
 }
 .agent-form :deep(.wide) {
   grid-column: 1 / -1;
+}
+.muted {
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 </style>
