@@ -40,6 +40,7 @@ export const routes: Array<RouteRecordRaw & { meta: NavMeta }> = [
   { path: '/report', name: 'report', component: () => import('@/views/reports/ReportsView.vue'), meta: { title: '报表中心', group: '财务' } },
   { path: '/pending-terminations', name: 'pendingTerminations', component: () => import('@/views/pending-terminations/PendingTerminationsView.vue'), meta: { title: '待处理停保', group: '保障与结算', adminOnly: true } },
   { path: '/promotion', name: 'promotion', component: () => import('@/views/promotion/PromotionView.vue'), meta: { title: '推广与佣金', group: '保障与结算', adminOnly: true } },
+  { path: '/open-api', name: 'openApi', component: () => import('@/views/openapi/OpenApiDocsView.vue'), meta: { title: '开放平台', group: '其他', adminOnly: true } },
   { path: '/message', name: 'message', component: () => import('@/views/messages/MessagesView.vue'), meta: { title: '消息中心', group: '其他', badge: true } },
   { path: '/settings', name: 'settings', component: () => import('@/views/settings/SettingsView.vue'), meta: { title: '账户设置', group: '其他' } },
   { path: '/system-settings', name: 'systemSettings', component: () => import('@/views/settings/SystemSettingsView.vue'), meta: { title: '系统设置', group: '其他', adminOnly: true } },

@@ -116,7 +116,7 @@ _FRONTEND_ROUTES = {
     "/", "/home", "/screen", "/team", "/dispatch", "/workers", "/work-relations",
     "/agents", "/insurance", "/policy", "/claims", "/insurers", "/insurer-management", "/exports",
     "/report", "/billing", "/recharge", "/pending-terminations", "/promotion",
-    "/operators", "/message", "/settings", "/login", "/agent-portal",
+    "/operators", "/message", "/settings", "/login", "/agent-portal", "/open-api",
     "/timeliness", "/system-settings", "/insurer-portal", "/enterprise-apply",
     "/enroll-review",
 }
