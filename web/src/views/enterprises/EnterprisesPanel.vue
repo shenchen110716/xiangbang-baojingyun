@@ -7,7 +7,7 @@ import * as agentsApi from '@/api/agents'
 import { getDashboard } from '@/api/dashboard'
 import { recognizeBusinessLicense } from '@/api/ocr'
 import type { Enterprise, Agent } from '@/api/types'
-import { money } from '@/utils/format'
+import { money, formatDateTime } from '@/utils/format'
 import PageCard from '@/components/PageCard.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import DetailModal from '@/components/DetailModal.vue'
@@ -184,7 +184,12 @@ async function approveEnterprise(item: Enterprise) {
           </template>
         </el-table-column>
         <el-table-column prop="kind" label="类型" width="100" />
-        <el-table-column prop="contact" label="联系人" width="110" />
+        <el-table-column label="联系人" width="130">
+          <template #default="{ row }">
+            <div>{{ row.contact || '—' }}</div>
+            <small class="muted">{{ row.phone || '—' }}</small>
+          </template>
+        </el-table-column>
         <el-table-column prop="agent_name" label="负责业务员" width="110">
           <template #default="{ row }">{{ row.agent_name || '未指定' }}</template>
         </el-table-column>
@@ -198,6 +203,12 @@ async function approveEnterprise(item: Enterprise) {
           <template #default="{ row }">
             <div>{{ money(row.usage_available ?? row.usage_balance) }}</div>
             <small class="muted">充值 {{ money(row.usage_recharged ?? row.usage_balance) }} · 已用 {{ money(row.usage_consumed ?? 0) }}</small>
+          </template>
+        </el-table-column>
+        <el-table-column label="申请/审批时间" width="180">
+          <template #default="{ row }">
+            <div>{{ formatDateTime(row.created_at) }}</div>
+            <small class="muted">审批 {{ row.approved_at ? formatDateTime(row.approved_at) : '—' }}</small>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="90">
