@@ -57,13 +57,14 @@ function openDetail(item: InsurancePlan) {
       </template>
       <div class="filter-row"><FilterBar v-model:search="search" /></div>
       <el-table :data="paged" size="small">
-        <el-table-column label="保险公司" min-width="150">
+        <!-- 保司+产品合成一列：产品名是主信息，保司/邮箱折进小字行；
+             原价/返佣/底价/利润/最低价是各自独立的金额指标，不合并 -->
+        <el-table-column label="产品方案/保险公司" min-width="200">
           <template #default="{ row }">
-            <div>{{ row.insurer }}</div>
-            <small class="muted">{{ row.insurer_email || '未设置邮箱' }}</small>
+            <div>{{ row.name }}</div>
+            <div class="muted">{{ row.insurer }} · {{ row.insurer_email || '未设置邮箱' }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="产品方案" min-width="140" />
         <el-table-column label="保险原价" width="100">
           <template #default="{ row }">{{ money(row.insurance_base_price) }}</template>
         </el-table-column>
@@ -130,5 +131,6 @@ function openDetail(item: InsurancePlan) {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 </style>

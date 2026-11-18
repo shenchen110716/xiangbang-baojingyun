@@ -223,27 +223,27 @@ async function rejectRequest(row: RechargeRequest) {
           </template>
           <el-table :data="paged" size="small">
             <el-table-column v-if="auth.isAdmin()" prop="enterprise_name" label="投保单位" min-width="140" />
-            <el-table-column label="账户类型" width="100">
-              <template #default="{ row }">{{ row.account_type === 'premium' ? '保费' : '系统服务费' }}</template>
-            </el-table-column>
-            <el-table-column prop="insurer" label="保司" min-width="120">
-              <template #default="{ row }">{{ row.insurer || '—' }}</template>
-            </el-table-column>
-            <el-table-column label="金额" width="110">
-              <template #default="{ row }">{{ money(row.amount) }}</template>
-            </el-table-column>
-            <el-table-column label="回单" width="90">
+            <!-- 保司只在保费账户有值，折进账户类型下行，省一列 -->
+            <el-table-column label="账户/保司" min-width="110">
               <template #default="{ row }">
-                <a v-if="row.receipt_download_url" :href="row.receipt_download_url" target="_blank" rel="noopener">查看</a>
+                <div>{{ row.account_type === 'premium' ? '保费' : '系统服务费' }}</div>
+                <div class="muted">{{ row.insurer || '—' }}</div>
               </template>
             </el-table-column>
-            <el-table-column label="状态" width="100">
+            <el-table-column label="金额/回单" width="120">
+              <template #default="{ row }">
+                <div>{{ money(row.amount) }}</div>
+                <div class="muted">
+                  <a v-if="row.receipt_download_url" :href="row.receipt_download_url" target="_blank" rel="noopener">查看回单</a>
+                  <span v-else>无回单</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态/驳回原因" min-width="150">
               <template #default="{ row }">
                 <el-tag :type="STATUS_TYPE[row.status]" size="small">{{ STATUS_TEXT[row.status] }}</el-tag>
+                <div v-if="row.reject_reason" class="muted note-line" :title="row.reject_reason">{{ row.reject_reason }}</div>
               </template>
-            </el-table-column>
-            <el-table-column label="驳回原因" min-width="160">
-              <template #default="{ row }">{{ row.reject_reason || '—' }}</template>
             </el-table-column>
             <el-table-column label="提交时间" width="160">
               <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
@@ -264,24 +264,25 @@ async function rejectRequest(row: RechargeRequest) {
       <el-tab-pane v-if="auth.isAdmin()" label="微信支付记录" name="wechat">
         <PageCard title="微信支付记录" :count="wechatRecords.length">
           <el-table v-loading="wechatRecordsLoading" :data="wechatRecords" size="small">
-            <el-table-column prop="order_no" label="订单号" min-width="200" />
-            <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
-            <el-table-column label="金额" width="110">
-              <template #default="{ row }">{{ money(row.amount) }}</template>
-            </el-table-column>
-            <el-table-column label="渠道" width="100">
-              <template #default="{ row }">{{ row.channel === 'jsapi' ? '小程序' : '扫码' }}</template>
-            </el-table-column>
-            <el-table-column label="状态" width="100">
+            <!-- 平台订单号和微信交易号是同一笔支付的两个凭证号，合成一列 -->
+            <el-table-column label="订单号/微信交易号" min-width="210">
               <template #default="{ row }">
-                <el-tag :type="PAY_STATUS_TYPE[row.status]" size="small">{{ PAY_STATUS_TEXT[row.status] }}</el-tag>
+                <div>{{ row.order_no }}</div>
+                <div class="muted">交易号 {{ row.provider_trade_no || '—' }}</div>
               </template>
             </el-table-column>
-            <el-table-column label="微信交易号" min-width="180">
-              <template #default="{ row }">{{ row.provider_trade_no || '—' }}</template>
+            <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
+            <el-table-column label="金额/渠道" width="120">
+              <template #default="{ row }">
+                <div>{{ money(row.amount) }}</div>
+                <div class="muted">{{ row.channel === 'jsapi' ? '小程序' : '扫码' }}</div>
+              </template>
             </el-table-column>
-            <el-table-column label="支付时间" width="160">
-              <template #default="{ row }">{{ row.paid_at ? formatDateTime(row.paid_at) : '—' }}</template>
+            <el-table-column label="状态/支付时间" width="170">
+              <template #default="{ row }">
+                <el-tag :type="PAY_STATUS_TYPE[row.status]" size="small">{{ PAY_STATUS_TEXT[row.status] }}</el-tag>
+                <div class="muted">{{ row.paid_at ? formatDateTime(row.paid_at) : '未支付' }}</div>
+              </template>
             </el-table-column>
           </el-table>
         </PageCard>
@@ -374,6 +375,15 @@ async function rejectRequest(row: RechargeRequest) {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
+}
+/* 驳回原因挤在状态标签下方，超长单行省略，完整内容靠 title 悬浮提示 */
+.note-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
 }
 .receipt-drop {
   outline: none;

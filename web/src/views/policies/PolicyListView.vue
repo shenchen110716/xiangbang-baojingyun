@@ -120,28 +120,50 @@ async function openDetail(item: Policy) {
           </template>
         </el-table-column>
         <el-table-column prop="insured_count" label="人数" width="70" />
-        <el-table-column v-if="auth.isAdmin()" label="保司结算底价" width="110"><template #default="{ row }">{{ money(row.policy_floor_total) }}</template></el-table-column>
-        <el-table-column v-if="auth.isAdmin()" label="销售最低价" width="110"><template #default="{ row }">{{ money(row.minimum_sale_total) }}</template></el-table-column>
-        <el-table-column :label="auth.isAdmin() ? '实际销售保费' : '保费'" width="110"><template #default="{ row }">{{ money(row.sale_total ?? row.premium) }}</template></el-table-column>
-        <el-table-column v-if="auth.isAdmin()" label="总返佣金额" width="110"><template #default="{ row }">{{ money(row.total_commission_total) }}</template></el-table-column>
-        <el-table-column v-if="auth.isAdmin()" label="业务员佣金" width="110"><template #default="{ row }">{{ money(row.agent_commission_total) }}</template></el-table-column>
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }"><el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status }}</el-tag></template>
-        </el-table-column>
-        <el-table-column label="保单文件" width="110">
+        <!-- 底价/最低价是同一条价格链上的参考口径，折进销售保费下行；佣金是独立指标，
+             只把"业务员佣金"（总返佣的组成部分）折进总返佣下行，不与价格混列 -->
+        <el-table-column :label="auth.isAdmin() ? '实际销售保费' : '保费'" width="130">
           <template #default="{ row }">
-            <el-button v-if="row.document_download_url" link type="primary" size="small" @click="downloadDocument(row)">{{ row.document_name || '已导入' }}</el-button>
-            <span v-else class="muted">未导入</span>
+            <div>{{ money(row.sale_total ?? row.premium) }}</div>
+            <template v-if="auth.isAdmin()">
+              <div class="muted">底价 {{ money(row.policy_floor_total) }}</div>
+              <div class="muted">最低 {{ money(row.minimum_sale_total) }}</div>
+            </template>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column v-if="auth.isAdmin()" label="总返佣金额" width="130">
+          <template #default="{ row }">
+            <div>{{ money(row.total_commission_total) }}</div>
+            <div class="muted">业务员 {{ money(row.agent_commission_total) }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态/保单文件" width="130">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status }}</el-tag>
+            <!-- 文件名可能很长，单行省略，完整名称靠 title 悬浮提示 -->
+            <div class="doc-line" :title="row.document_name || ''">
+              <el-button v-if="row.document_download_url" link type="primary" size="small" @click="downloadDocument(row)">{{ row.document_name || '已导入' }}</el-button>
+              <span v-else class="muted">未导入</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openDetail(row)">查看计价</el-button>
             <el-button link type="primary" size="small" @click="exportOne(row)">导出明细</el-button>
             <el-button link type="primary" size="small" @click="openCertificate(row)">打印证明</el-button>
+            <!-- 导入保单是低频一次性操作，收进「更多」保持直显 ≤3 个，避免按钮被列宽裁掉；
+                 隐藏的 file input 留在单元格里（dropdown 菜单被 teleport，ref 不稳定） -->
             <template v-if="auth.isAdmin()">
               <input :ref="(el) => (fileInputs[row.id] = el as HTMLInputElement)" type="file" accept=".pdf,.jpg,.jpeg,.png" style="display: none" @change="(e) => onDocumentChange(row, e)" />
-              <el-button link type="primary" size="small" :loading="uploadingId === row.id" @click="triggerUpload(row)">导入保单</el-button>
+              <el-dropdown class="op-more" trigger="click">
+                <el-button link type="primary" size="small">更多<el-icon class="el-icon--right"><arrow-down /></el-icon></el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item :disabled="uploadingId === row.id" @click="triggerUpload(row)">导入保单</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </template>
           </template>
         </el-table-column>
@@ -185,5 +207,28 @@ async function openDetail(item: Policy) {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
+}
+/* 保单文件名挤在状态标签下方，超长单行省略，完整名称靠 title 悬浮提示 */
+.doc-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.doc-line :deep(.el-button) {
+  max-width: 100%;
+}
+.doc-line :deep(.el-button > span) {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.op-more {
+  margin-left: 12px;
+  vertical-align: middle;
 }
 </style>

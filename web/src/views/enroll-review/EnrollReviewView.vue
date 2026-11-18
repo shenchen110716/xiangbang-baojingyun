@@ -91,32 +91,40 @@ async function doExport() {
         <el-button size="small" style="margin-left: 12px" @click="doExport">导出 Excel</el-button>
       </template>
       <el-table :data="rows" size="small" style="width: 100%">
-        <el-table-column prop="name" label="姓名" width="90" />
-        <el-table-column prop="id_number_masked" label="身份证号" min-width="150" />
-        <el-table-column prop="phone" label="手机号" width="120" />
-        <el-table-column label="缴费方式" width="90">
+        <!-- 列合并排版：姓名+身份证号+手机、缴费方式+支付状态、投保单位+岗位、
+             审核状态+备注各折成一列，与参保员工列表（WorkersView）同一阅读结构。 -->
+        <el-table-column label="被保险人" min-width="170">
+          <template #default="{ row }">
+            <div>{{ row.name }}</div>
+            <div class="muted">{{ row.id_number_masked }}</div>
+            <div v-if="row.phone" class="muted">{{ row.phone }}</div>
+          </template>
+        </el-table-column>
+        <!-- 支付状态只对个人缴纳有意义且是审核前提，保留彩色 tag 放在缴费方式下行，不降级成灰字 -->
+        <el-table-column label="缴费方式/支付" width="120">
           <template #default="{ row }">
             <el-tag size="small" :type="row.payment_mode === 'personal' ? 'warning' : 'info'">{{ row.payment_mode_label }}</el-tag>
+            <div v-if="row.payment_mode === 'personal'" class="pay-line">
+              <el-tag size="small" :type="row.payment_status === 'paid' ? 'success' : 'warning'">
+                {{ row.payment_status_label }}
+              </el-tag>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="支付状态" width="90">
+        <el-table-column label="投保单位/岗位" min-width="160">
           <template #default="{ row }">
-            <el-tag v-if="row.payment_mode === 'personal'" size="small" :type="row.payment_status === 'paid' ? 'success' : 'warning'">
-              {{ row.payment_status_label }}
-            </el-tag>
-            <span v-else class="muted">—</span>
+            <div>{{ row.enterprise_name }}</div>
+            <div class="muted">{{ row.position_name }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="enterprise_name" label="投保单位" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="position_name" label="岗位" min-width="110" show-overflow-tooltip />
-        <el-table-column label="审核状态" width="90">
+        <el-table-column label="审核状态/备注" min-width="150">
           <template #default="{ row }">
             <el-tag size="small" :type="row.review_status === 'approved' ? 'success' : row.review_status === 'rejected' ? 'danger' : 'warning'">
               {{ row.review_status_label }}
             </el-tag>
+            <div v-if="row.review_note" class="muted note-line" :title="row.review_note">{{ row.review_note }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="review_note" label="备注" min-width="120" show-overflow-tooltip />
         <el-table-column v-if="auth.isAdmin()" label="操作" width="140" fixed="right">
           <template #default="{ row }">
             <template v-if="row.review_status === 'pending'">
@@ -134,7 +142,18 @@ async function doExport() {
 
 <style scoped>
 .muted {
-  color: var(--el-text-color-secondary);
+  color: var(--el-text-color-placeholder);
   font-size: 12px;
+}
+/* 拒绝原因挤在状态标签下方，超长单行省略，完整内容靠 title 悬浮提示 */
+.note-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.pay-line {
+  margin-top: 2px;
 }
 </style>

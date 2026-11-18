@@ -70,11 +70,22 @@ function exportCsv() {
             <small class="muted">{{ row.id_number }}</small>
           </template>
         </el-table-column>
-        <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
-        <el-table-column prop="actual_employer_name" label="实际工作单位" min-width="130" />
-        <el-table-column prop="position_name" label="岗位" min-width="110" />
-        <el-table-column prop="occupation_class" label="职业类别" width="90" />
-        <el-table-column prop="plan_name" label="保险方案" min-width="120" />
+        <!-- 列合并对齐参保员工列表：投保/实际单位、岗位/类别各合一列，方案下带保单号 -->
+        <el-table-column label="投保单位" min-width="140">
+          <template #default="{ row }">
+            <div>{{ row.enterprise_name || '—' }}</div>
+            <small class="muted">{{ row.actual_employer_name || '—' }}</small>
+          </template>
+        </el-table-column>
+        <el-table-column label="岗位/类别" min-width="120">
+          <template #default="{ row }">{{ row.position_name || '—' }} · {{ row.occupation_class }}</template>
+        </el-table-column>
+        <el-table-column label="保险方案/保单" min-width="150">
+          <template #default="{ row }">
+            <div>{{ row.plan_name || '未绑定' }}</div>
+            <small class="muted">{{ row.policy_no || '尚未出单' }}</small>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="insuredStatusLabel(row).type">{{ insuredStatusLabel(row).text }}</el-tag></template>
         </el-table-column>
@@ -103,5 +114,6 @@ function exportCsv() {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 </style>

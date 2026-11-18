@@ -119,13 +119,20 @@ function logout() {
         <el-tab-pane label="产品中心" name="products">
           <PageCard title="全部在售产品" subtitle="平台最低销售价由后端计算，仅供报价参考">
             <el-table :data="products" size="small" style="width: 100%">
-              <el-table-column prop="insurer" label="保司" min-width="110" />
-              <el-table-column prop="name" label="产品名称" min-width="150" />
-              <el-table-column prop="occupation_classes" label="职业类别" width="110" />
-              <el-table-column label="计费" width="90">
-                <template #default="{ row }">{{ row.billing_mode === 'monthly' ? '按月' : '按天' }}</template>
+              <!-- 保司折进产品名称下行、类别与计费同为产品属性合为一列，省出的宽度留给名称 -->
+              <el-table-column label="产品名称/保司" min-width="170">
+                <template #default="{ row }">
+                  <div>{{ row.name }}</div>
+                  <div class="muted">{{ row.insurer }}</div>
+                </template>
               </el-table-column>
-              <el-table-column label="平台最低售价" width="130">
+              <el-table-column label="职业类别/计费" width="120">
+                <template #default="{ row }">
+                  <div>{{ row.occupation_classes }}</div>
+                  <div class="muted">{{ row.billing_mode === 'monthly' ? '按月' : '按天' }}</div>
+                </template>
+              </el-table-column>
+              <el-table-column label="平台最低售价" width="120">
                 <template #default="{ row }">{{ money(row.min_sale_price) }}</template>
               </el-table-column>
               <el-table-column label="我的佣金" width="110">
@@ -152,17 +159,23 @@ function logout() {
               <el-button size="small" type="primary" :loading="exporting" @click="runExport">导出</el-button>
             </template>
             <el-table :data="rows" size="small" style="width: 100%">
-              <el-table-column prop="enterprise_name" label="投保单位" min-width="140" />
-              <el-table-column prop="plan_name" label="产品方案" min-width="140" />
-              <el-table-column prop="insurer" label="保司" min-width="100" />
-              <el-table-column prop="insured_count" label="在保人数" width="100" />
-              <el-table-column label="平台最低价" width="120">
-                <template #default="{ row }">{{ money(row.min_sale_price) }}</template>
+              <el-table-column prop="enterprise_name" label="投保单位" min-width="150" />
+              <el-table-column label="产品方案/保司" min-width="150">
+                <template #default="{ row }">
+                  <div>{{ row.plan_name }}</div>
+                  <div class="muted">{{ row.insurer }}</div>
+                </template>
               </el-table-column>
+              <el-table-column prop="insured_count" label="在保人数" width="90" />
+              <!-- 平台最低价只是销售价的报价参考，折进销售价下行（同投保单位列表余额列的
+                   充值/已用小字模式）；在保人数、累计佣金是独立指标，各自保留 -->
               <el-table-column label="销售价（我的价格）" width="150">
-                <template #default="{ row }">{{ money(row.sale_price) }}</template>
+                <template #default="{ row }">
+                  <div>{{ money(row.sale_price) }}</div>
+                  <div class="muted">平台最低 {{ money(row.min_sale_price) }}</div>
+                </template>
               </el-table-column>
-              <el-table-column label="累计佣金" width="120">
+              <el-table-column label="累计佣金" width="110">
                 <template #default="{ row }">{{ money(row.amount) }}</template>
               </el-table-column>
               <el-table-column prop="status" label="状态" width="90" />
@@ -247,6 +260,10 @@ function logout() {
   grid-template-columns: repeat(4, 1fr);
   gap: 14px;
   margin-bottom: 20px;
+}
+.muted {
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 @media (max-width: 720px) {
   .stat-grid {

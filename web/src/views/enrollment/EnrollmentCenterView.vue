@@ -234,27 +234,33 @@ async function markReceipt(row: { id: number }) {
         </FilterBar>
       </div>
       <el-table :data="pagedPeople" size="small" max-height="560">
-        <el-table-column label="被保险人" min-width="120">
+        <!-- 列合并排版：姓名+证件号+手机、投保单位+实际工作单位、生效+停保
+             各折成一列，与参保员工列表（WorkersView）保持同一阅读结构。 -->
+        <el-table-column label="被保险人" min-width="170">
           <template #default="{ row }">
             <div>{{ row.name }}</div>
-            <small class="muted">{{ row.id_number }}</small>
+            <div class="muted">{{ row.id_number }}</div>
+            <div v-if="row.phone" class="muted">{{ row.phone }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="phone" label="手机号" width="120" />
-        <el-table-column prop="enterprise_name" label="投保单位" min-width="120" />
-        <el-table-column prop="actual_employer_name" label="实际工作单位" min-width="120" />
+        <el-table-column label="投保单位" min-width="140">
+          <template #default="{ row }">
+            <div>{{ row.enterprise_name || '—' }}</div>
+            <div class="muted">{{ row.actual_employer_name || '—' }}</div>
+          </template>
+        </el-table-column>
         <el-table-column prop="position_name" label="岗位" min-width="110" />
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><el-tag size="small" :type="insuredStatusLabel(row).type">{{ insuredStatusLabel(row).text }}</el-tag></template>
         </el-table-column>
+        <el-table-column label="生效/停保时间" width="170">
+          <template #default="{ row }">
+            <div>生效 {{ formatCoverageDate(row.effective_at, row.effective_mode) }}</div>
+            <div class="muted">停保 {{ formatCoverageDate(row.terminated_at, row.effective_mode) }}</div>
+          </template>
+        </el-table-column>
         <el-table-column label="添加时间" width="150">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column label="生效时间" width="150">
-          <template #default="{ row }">{{ formatCoverageDate(row.effective_at, row.effective_mode) }}</template>
-        </el-table-column>
-        <el-table-column label="停保时间" width="150">
-          <template #default="{ row }">{{ formatCoverageDate(row.terminated_at, row.effective_mode) }}</template>
         </el-table-column>
       </el-table>
       <TablePagination v-model:page="peoplePage" v-model:page-size="peoplePageSize" :total="peoplePagedTotal" />
@@ -315,21 +321,26 @@ async function markReceipt(row: { id: number }) {
 
     <PageCard title="邮件发送记录" :count="emails.length" hint="含名单附件和请求编号">
       <el-table :data="pagedEmails" size="small">
-        <el-table-column label="发送时间" width="150"><template #default="{ row }">{{ formatDateTime(row.created_at) }}</template></el-table-column>
-        <el-table-column label="参停保日期" width="120"><template #default="{ row }">{{ row.data_date || '—' }}</template></el-table-column>
-        <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
-        <el-table-column label="保险公司 / 产品" min-width="150">
+        <!-- 列合并排版：发送时间+参停保日期、保司/产品+收件邮箱、类型+人数+附件
+             各折成一列，附件名可能很长，单行省略靠 title 悬浮看全。 -->
+        <el-table-column label="发送时间" width="160">
           <template #default="{ row }">
-            <div>{{ row.insurer }}</div>
-            <small class="muted">{{ row.plan_name }}</small>
+            <div>{{ formatDateTime(row.created_at) }}</div>
+            <div class="muted">参停保日期 {{ row.data_date || '—' }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="80"><template #default="{ row }">{{ row.kind === 'enrollment' ? '新参' : '停保' }}</template></el-table-column>
-        <el-table-column prop="recipient" label="收件邮箱" min-width="150" />
-        <el-table-column label="人数 / 附件" min-width="150">
+        <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
+        <el-table-column label="保险公司 / 产品" min-width="180">
           <template #default="{ row }">
-            <div>{{ row.people_count }}</div>
-            <small class="muted">{{ row.filename }}</small>
+            <div>{{ row.insurer }}</div>
+            <div class="muted">{{ row.plan_name }}</div>
+            <div class="muted">{{ row.recipient }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="类型 / 人数" width="120">
+          <template #default="{ row }">
+            <div>{{ row.kind === 'enrollment' ? '新参' : '停保' }} · {{ row.people_count }} 人</div>
+            <div class="muted note-line" :title="row.filename">{{ row.filename }}</div>
           </template>
         </el-table-column>
         <el-table-column label="状态 / 请求编号" min-width="150">
@@ -389,6 +400,15 @@ async function markReceipt(row: { id: number }) {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
+}
+/* 附件名挤在类型/人数下方，超长单行省略，完整内容靠 title 悬浮提示 */
+.note-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
 }
 .filter-row {
   padding: 0 20px 14px;

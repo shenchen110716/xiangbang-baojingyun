@@ -141,10 +141,18 @@ async function removeItem(item: ActualEmployer) {
       </template>
       <div class="filter-row"><FilterBar v-model:search="search" /></div>
       <el-table :data="paged" size="small">
-        <el-table-column prop="name" label="单位名称" min-width="160" />
-        <el-table-column prop="credit_code" label="统一社会信用代码" min-width="160" />
-        <el-table-column prop="contact" label="联系人" width="110" />
-        <el-table-column prop="phone" label="联系电话" width="130" />
+        <el-table-column label="单位名称" min-width="200">
+          <template #default="{ row }">
+            <div>{{ row.name }}</div>
+            <div class="muted">{{ row.credit_code || '—' }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="联系人" width="140">
+          <template #default="{ row }">
+            <div>{{ row.contact || '—' }}</div>
+            <div class="muted">{{ row.phone || '—' }}</div>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="row.status === 'active' ? 'success' : 'danger'" size="small">
