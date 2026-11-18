@@ -177,45 +177,40 @@ async function approveEnterprise(item: Enterprise) {
         </FilterBar>
       </div>
       <el-table :data="paged" size="small">
-        <el-table-column label="单位名称" min-width="160">
+        <el-table-column label="单位名称" min-width="170">
           <template #default="{ row }">
             <div>{{ row.name }}</div>
-            <small class="muted">ID: {{ row.id }}</small>
+            <small class="muted">ID: {{ row.id }} · {{ row.kind }}</small>
           </template>
         </el-table-column>
-        <el-table-column prop="kind" label="类型" width="100" />
-        <el-table-column label="联系人" width="130">
+        <el-table-column label="联系人/业务员" width="150">
           <template #default="{ row }">
             <div>{{ row.contact || '—' }}</div>
-            <small class="muted">{{ row.phone || '—' }}</small>
+            <div class="muted">{{ row.phone || '—' }}</div>
+            <div class="muted">业务员 {{ row.agent_name || '未指定' }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="agent_name" label="负责业务员" width="110">
-          <template #default="{ row }">{{ row.agent_name || '未指定' }}</template>
-        </el-table-column>
-        <el-table-column label="保费可用余额" width="130">
+        <el-table-column label="保费可用余额" width="135">
           <template #default="{ row }">
             <div>{{ money(row.premium_balance_total) }}</div>
-            <small class="muted">充值 {{ money(row.premium_recharged ?? row.premium_balance_total) }} · 销售保费 {{ money(row.premium_consumed ?? 0) }}</small>
+            <div class="muted">充值 {{ money(row.premium_recharged ?? row.premium_balance_total) }}</div>
+            <div class="muted">销售保费 {{ money(row.premium_consumed ?? 0) }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="服务费可用余额" width="130">
+        <el-table-column label="服务费可用余额" width="135">
           <template #default="{ row }">
             <div>{{ money(row.usage_available ?? row.usage_balance) }}</div>
-            <small class="muted">充值 {{ money(row.usage_recharged ?? row.usage_balance) }} · 已用 {{ money(row.usage_consumed ?? 0) }}</small>
+            <div class="muted">充值 {{ money(row.usage_recharged ?? row.usage_balance) }}</div>
+            <div class="muted">已用 {{ money(row.usage_consumed ?? 0) }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="申请/审批时间" width="180">
-          <template #default="{ row }">
-            <div>{{ formatDateTime(row.created_at) }}</div>
-            <small class="muted">审批 {{ row.approved_at ? formatDateTime(row.approved_at) : '—' }}</small>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column label="状态/申请·审批时间" width="185">
           <template #default="{ row }">
             <el-tag :type="row.status === 'pending' ? 'warning' : row.status === 'approved' ? 'success' : 'info'" size="small">
               {{ row.status === 'pending' ? '待核验' : row.status === 'approved' ? '已核验' : row.status === 'rejected' ? '已驳回' : row.status }}
             </el-tag>
+            <div class="muted">申请 {{ formatDateTime(row.created_at) }}</div>
+            <div class="muted">审批 {{ row.approved_at ? formatDateTime(row.approved_at) : '—' }}</div>
           </template>
         </el-table-column>
         <!-- 操作列收纳为「高频直显 + 更多下拉」。前史：按钮一度被 380px 列宽挤到
@@ -313,6 +308,7 @@ async function approveEnterprise(item: Enterprise) {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 .op-more {
   margin-left: 12px;
