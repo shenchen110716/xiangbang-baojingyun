@@ -262,9 +262,11 @@ function finishQuickInsure() {
         </FilterBar>
       </div>
       <el-table :data="paged" size="small" max-height="560">
-        <el-table-column prop="name" label="岗位名称" min-width="140" />
-        <el-table-column label="实际工作单位" min-width="150">
-          <template #default="{ row }">{{ row.actual_employer_name || row.actual_employer }}</template>
+        <el-table-column label="岗位名称" min-width="160">
+          <template #default="{ row }">
+            <div>{{ row.name }}</div>
+            <small class="muted">{{ row.actual_employer_name || row.actual_employer || '—' }}</small>
+          </template>
         </el-table-column>
         <el-table-column label="岗位视频" width="110">
           <template #default="{ row }">
@@ -272,23 +274,23 @@ function finishQuickInsure() {
             <span v-else class="muted">未上传</span>
           </template>
         </el-table-column>
-        <el-table-column prop="occupation_class" label="职业类别" width="100" />
-        <el-table-column label="保险方案" min-width="140">
-          <template #default="{ row }">{{ row.plan_name || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="审核状态" width="110">
+        <el-table-column label="职业类别/方案" min-width="150">
           <template #default="{ row }">
-            <el-tag :type="statusLabel(row).type" size="small">{{ statusLabel(row).text }}</el-tag>
+            <div>{{ row.occupation_class || '—' }}</div>
+            <small class="muted">{{ row.plan_name || '—' }}</small>
           </template>
         </el-table-column>
-        <el-table-column label="审核意见" min-width="160">
-          <template #default="{ row }">{{ row.review_note || '—' }}</template>
+        <el-table-column label="审核状态/意见" min-width="170">
+          <template #default="{ row }">
+            <el-tag :type="statusLabel(row).type" size="small">{{ statusLabel(row).text }}</el-tag>
+            <div v-if="row.review_note" class="muted note-line" :title="row.review_note">{{ row.review_note }}</div>
+          </template>
         </el-table-column>
-        <el-table-column label="添加人" width="100">
-          <template #default="{ row }">{{ row.creator_name || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="添加时间" width="160">
-          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+        <el-table-column label="添加人/时间" width="170">
+          <template #default="{ row }">
+            <div>{{ row.creator_name || '—' }}</div>
+            <small class="muted">{{ formatDateTime(row.created_at) }}</small>
+          </template>
         </el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
@@ -438,6 +440,14 @@ function finishQuickInsure() {
 .muted {
   color: var(--el-text-color-placeholder);
   font-size: 12px;
+}
+/* 审核意见挤在状态标签下方，超长单行省略，完整内容靠 title 悬浮提示 */
+.note-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
 }
 .locked-banner {
   background: var(--el-fill-color-light);

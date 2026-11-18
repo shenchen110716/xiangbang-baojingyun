@@ -338,15 +338,19 @@ function exportCsv() {
       </div>
       <el-table :data="paged" size="small" max-height="560" @selection-change="(rows: InsuredPerson[]) => (selected = rows)">
         <el-table-column type="selection" width="42" />
-        <el-table-column label="被保险人" min-width="120">
+        <el-table-column label="被保险人" min-width="170">
           <template #default="{ row }">
             <div>{{ row.name }}</div>
-            <small class="muted">{{ row.phone || '—' }}</small>
+            <div class="muted">{{ row.id_number }}</div>
+            <div v-if="row.phone" class="muted">{{ row.phone }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="id_number" label="身份证号" width="180" />
-        <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
-        <el-table-column prop="actual_employer_name" label="实际工作单位" min-width="130" />
+        <el-table-column label="投保单位" min-width="140">
+          <template #default="{ row }">
+            <div>{{ row.enterprise_name || '—' }}</div>
+            <small class="muted">{{ row.actual_employer_name || '—' }}</small>
+          </template>
+        </el-table-column>
         <el-table-column label="岗位/类别" min-width="120">
           <template #default="{ row }">{{ row.position_name || row.occupation }} · {{ row.occupation_class }}</template>
         </el-table-column>
@@ -356,36 +360,44 @@ function exportCsv() {
             <small class="muted">{{ row.policy_no || '尚未出单' }}</small>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }"><el-tag size="small" :type="insuredStatusLabel(row).type">{{ insuredStatusLabel(row).text }}</el-tag></template>
-        </el-table-column>
-        <!-- 生效/停保时间前移到保司标注前面，操作模块留在最后——生效/停保时间
-             是查这张表时最常用的信息，保司标注/添加时间更多是辅助信息，尽量把
-             重要信息往前放（用户反馈 2026-07-30 第 3 条）。 -->
-        <el-table-column label="生效时间" width="150">
-          <template #default="{ row }">{{ formatCoverageDate(row.effective_at, row.effective_mode) }}</template>
-        </el-table-column>
-        <el-table-column label="停保时间" width="150">
-          <template #default="{ row }">{{ formatCoverageDate(row.terminated_at, row.effective_mode) }}</template>
-        </el-table-column>
-        <el-table-column label="保司标注" width="140">
+        <!-- 保司标注折进状态列下行，生效/停保合成一列——重要信息仍在辅助信息
+             （添加时间）前面（用户反馈 2026-07-30 第 3 条）。 -->
+        <el-table-column label="状态" min-width="110">
           <template #default="{ row }">
-            <el-tag v-if="row.insurer_flag_reason" type="danger" size="small">{{ row.insurer_flag_reason }}</el-tag>
+            <el-tag size="small" :type="insuredStatusLabel(row).type">{{ insuredStatusLabel(row).text }}</el-tag>
+            <div v-if="row.insurer_flag_reason" class="flag-line" :title="row.insurer_flag_reason">
+              <el-tag type="danger" size="small">{{ row.insurer_flag_reason }}</el-tag>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="生效/停保时间" width="170">
+          <template #default="{ row }">
+            <div>生效 {{ formatCoverageDate(row.effective_at, row.effective_mode) }}</div>
+            <small class="muted">停保 {{ formatCoverageDate(row.terminated_at, row.effective_mode) }}</small>
           </template>
         </el-table-column>
         <el-table-column label="添加时间" width="150">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="330" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <!-- 参保/停保是最常用的操作，用实心按钮加大字号突出显示，避免和查看/编辑等
-                 次要操作一样细小、难点中；查看/编辑/参保证明保留 link 样式，视觉上分层。 -->
+            <!-- 参保/停保是最常用的操作，用实心按钮加大字号突出显示；查看次之保留
+                 link 直显；编辑/参保证明/删除收进显式「更多」菜单（同投保单位列表的
+                 收纳模式），绝不允许因列宽不足被裁掉。 -->
             <el-button v-if="row.status === 'active'" type="danger" class="primary-action-btn" @click="openStopDialog(row)">停保</el-button>
             <el-button v-else type="success" class="primary-action-btn" @click="changeStatus(row, 'active')">参保</el-button>
             <el-button link type="primary" @click="openDetail(row)">查看</el-button>
-            <el-button link type="primary" @click="openEditor(row)">编辑</el-button>
-            <el-button v-if="row.status === 'draft'" link type="danger" @click="removeDraft(row)">删除</el-button>
-            <el-button v-if="row.effective_at" link type="primary" @click="openCertificate(row)">参保证明</el-button>
+            <el-dropdown class="op-more" trigger="click">
+              <el-button link type="primary">更多<el-icon class="el-icon--right"><arrow-down /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="openEditor(row)">编辑</el-dropdown-item>
+                  <el-dropdown-item v-if="row.effective_at" @click="openCertificate(row)">参保证明</el-dropdown-item>
+                  <!-- dropdown 菜单被 teleport 到 body，scoped 样式够不着，红色只能内联 -->
+                  <el-dropdown-item v-if="row.status === 'draft'" divided @click="removeDraft(row)"><span style="color: var(--el-color-danger)">删除</span></el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -468,6 +480,23 @@ function exportCsv() {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+  font-size: 12px;
+}
+.flag-line {
+  margin-top: 2px;
+}
+/* 保司标注可能很长，tag 内容单行省略，完整文案靠 title 悬浮提示 */
+.flag-line :deep(.el-tag) {
+  max-width: 100%;
+}
+.flag-line :deep(.el-tag__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.op-more {
+  margin-left: 10px;
+  vertical-align: middle;
 }
 .primary-action-btn {
   font-size: 14px;
