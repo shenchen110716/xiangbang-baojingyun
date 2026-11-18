@@ -207,18 +207,27 @@ async function approveEnterprise(item: Enterprise) {
             </el-tag>
           </template>
         </el-table-column>
-        <!-- 操作列按钮从原来 5 个涨到 7 个（含"实际用工单位"），380px 装不下，
-             固定列超宽会被裁掉/挤没——这正是用户反馈"找不到这个操作"的原因，
-             不是没部署到，是按钮被挤到看不见了（用户反馈 2026-07-30）。 -->
-        <el-table-column label="操作" width="620" fixed="right">
+        <!-- 操作列收纳为「高频直显 + 更多下拉」。前史：按钮一度被 380px 列宽挤到
+             不可见（用户反馈 2026-07-30"找不到这个操作"），后改 620px 全部平铺又
+             太占位（用户反馈 2026-11-18）。低频操作必须收进显式的「更多」菜单，
+             绝不允许因列宽不足被裁掉。 -->
+        <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.status === 'pending'" link type="success" size="small" @click="approveEnterprise(row)">审核通过</el-button>
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-button link type="primary" size="small" @click="goManageAccounts(row)">管理账号</el-button>
-            <el-button link type="primary" size="small" @click="openProducts(row)">参保产品</el-button>
-            <el-button link type="primary" size="small" @click="openWorkUnits(row)">实际用工单位</el-button>
-            <el-button link type="primary" size="small" @click="exportEnterpriseCertificate(row)">导出整企业保单</el-button>
-            <el-button link type="danger" size="small" @click="removeEnterprise(row)">删除</el-button>
+            <el-dropdown class="op-more" trigger="click">
+              <el-button link type="primary" size="small">更多<el-icon class="el-icon--right"><arrow-down /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="openProducts(row)">参保产品</el-dropdown-item>
+                  <el-dropdown-item @click="openWorkUnits(row)">实际用工单位</el-dropdown-item>
+                  <el-dropdown-item @click="exportEnterpriseCertificate(row)">导出整企业保单</el-dropdown-item>
+                  <!-- dropdown 菜单被 teleport 到 body，scoped 样式够不着，红色只能内联 -->
+                  <el-dropdown-item divided @click="removeEnterprise(row)"><span style="color: var(--el-color-danger)">删除</span></el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -293,6 +302,10 @@ async function approveEnterprise(item: Enterprise) {
 }
 .muted {
   color: var(--el-text-color-placeholder);
+}
+.op-more {
+  margin-left: 12px;
+  vertical-align: middle;
 }
 .hint {
   display: block;

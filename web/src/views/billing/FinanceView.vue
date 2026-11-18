@@ -149,7 +149,12 @@ async function handleInvoiceUpload(item: Invoice, file: File) {
         <el-button type="primary" @click="openInvoiceCreate">＋ 申请发票</el-button>
       </template>
       <el-table :data="pagedAccounts" size="small">
-        <el-table-column prop="enterprise_name" label="投保单位" min-width="150" />
+        <el-table-column label="投保单位" min-width="150">
+          <template #default="{ row }">
+            <div>{{ row.enterprise_name }}</div>
+            <small class="muted">ID: {{ row.id }}</small>
+          </template>
+        </el-table-column>
         <el-table-column prop="account" label="账户" width="140" />
         <el-table-column label="可用余额" width="150"><template #default="{ row }"><div>{{ money(row.available ?? row.balance) }}</div><small class="muted">充值 {{ money(row.recharged ?? row.balance) }} · {{ row.account === '平台使用费账户' ? '已用' : '销售保费' }} {{ money(row.account === '平台使用费账户' ? row.total_accrued : (row.premium_consumed ?? 0)) }}</small></template></el-table-column>
         <el-table-column label="计费单价 / 今日" width="155">
@@ -170,7 +175,12 @@ async function handleInvoiceUpload(item: Invoice, file: File) {
     <PageCard title="发票申请" :count="invoices.length" hint="企业提交、平台审核并登记开票状态">
       <el-table :data="pagedInvoices" size="small">
         <el-table-column label="申请时间" width="150"><template #default="{ row }">{{ formatDateTime(row.created_at) }}</template></el-table-column>
-        <el-table-column prop="enterprise_name" label="投保单位" min-width="130" />
+        <el-table-column label="投保单位" min-width="130">
+          <template #default="{ row }">
+            <div>{{ row.enterprise_name }}</div>
+            <small class="muted">ID: {{ row.enterprise_id }}</small>
+          </template>
+        </el-table-column>
         <el-table-column label="发票抬头 / 税号" min-width="160">
           <template #default="{ row }">
             <div>{{ row.title }}</div>
