@@ -177,7 +177,12 @@ async function approveEnterprise(item: Enterprise) {
         </FilterBar>
       </div>
       <el-table :data="paged" size="small">
-        <el-table-column prop="name" label="单位名称" min-width="160" />
+        <el-table-column label="单位名称" min-width="160">
+          <template #default="{ row }">
+            <div>{{ row.name }}</div>
+            <small class="muted">ID: {{ row.id }}</small>
+          </template>
+        </el-table-column>
         <el-table-column prop="kind" label="类型" width="100" />
         <el-table-column prop="contact" label="联系人" width="110" />
         <el-table-column prop="agent_name" label="负责业务员" width="110">
