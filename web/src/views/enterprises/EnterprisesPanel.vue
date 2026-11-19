@@ -14,6 +14,7 @@ import DetailModal from '@/components/DetailModal.vue'
 import StatTile from '@/components/StatTile.vue'
 import TablePagination from '@/components/TablePagination.vue'
 import WorkUnitsPanel from './WorkUnitsPanel.vue'
+import OpenApiClientsPanel from '@/views/openapi/OpenApiClientsPanel.vue'
 import { usePagedList } from '@/composables/usePagedList'
 
 const router = useRouter()
@@ -129,6 +130,15 @@ function openWorkUnits(item: Enterprise) {
   workUnitsVisible.value = true
 }
 
+// ---- 开放平台密钥（P0 地基 AC11）：以企业为单位签发/启停 AppKey、查调用
+// 日志。复用对话框承载独立面板的既有形态（同 WorkUnitsPanel）。
+const openApiVisible = ref(false)
+const openApiTarget = ref<Enterprise | null>(null)
+function openOpenApi(item: Enterprise) {
+  openApiTarget.value = item
+  openApiVisible.value = true
+}
+
 async function removeEnterprise(item: Enterprise) {
   try {
     await ElMessageBox.confirm(`确定删除投保单位「${item.name}」吗？`, '删除确认', { type: 'warning' })
@@ -229,6 +239,7 @@ async function approveEnterprise(item: Enterprise) {
                   <el-dropdown-item @click="openProducts(row)">参保产品</el-dropdown-item>
                   <el-dropdown-item @click="openWorkUnits(row)">实际用工单位</el-dropdown-item>
                   <el-dropdown-item @click="exportEnterpriseCertificate(row)">导出整企业保单</el-dropdown-item>
+                  <el-dropdown-item @click="openOpenApi(row)">开放平台</el-dropdown-item>
                   <!-- dropdown 菜单被 teleport 到 body，scoped 样式够不着，红色只能内联 -->
                   <el-dropdown-item divided @click="removeEnterprise(row)"><span style="color: var(--el-color-danger)">删除</span></el-dropdown-item>
                 </el-dropdown-menu>
@@ -289,6 +300,10 @@ async function approveEnterprise(item: Enterprise) {
 
     <el-dialog v-model="workUnitsVisible" :title="`实际用工单位管理 · ${workUnitsTarget?.name ?? ''}`" width="960px" destroy-on-close>
       <WorkUnitsPanel v-if="workUnitsTarget" :enterprise-id="workUnitsTarget.id" />
+    </el-dialog>
+
+    <el-dialog v-model="openApiVisible" :title="`开放平台密钥 · ${openApiTarget?.name ?? ''}`" width="960px" destroy-on-close>
+      <OpenApiClientsPanel v-if="openApiTarget" :enterprise-id="openApiTarget.id" />
     </el-dialog>
   </div>
 </template>

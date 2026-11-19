@@ -777,3 +777,37 @@ export interface AgentPayment {
   allocated_amount: number
   created_at: string | null
 }
+
+// ---- 开放平台密钥管理（P0 地基，routers/openapi_admin.py）----
+export interface OpenApiClient {
+  id: number
+  enterprise_id: number
+  name: string
+  key_id: string
+  scopes: string[]
+  allowed_employer_ids: number[]
+  ip_allowlist: string[]
+  status: string // active | disabled
+  env: string // prod | sandbox
+  expires_at: string | null
+  rotated_at: string | null
+  created_at: string | null
+}
+
+/** 签发响应：secret 明文只在这一次响应里出现 */
+export interface OpenApiClientIssued extends OpenApiClient {
+  secret: string
+}
+
+export interface OpenApiRequestLogItem {
+  id: number
+  request_id: string
+  key_id: string | null
+  enterprise_id: number | null
+  method: string
+  path: string
+  status: number
+  latency_ms: number | null
+  ip: string
+  created_at: string | null
+}

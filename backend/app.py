@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,8 +13,43 @@ from .core.config import ROOT, DATABASE_URL
 from .core.db import Base, engine, SessionLocal
 from .core.migrations import run_sqlite_bridge_migrations, migrate_premium_balances
 from .core.seed import seed_default_accounts
+from .services.openapi.background import background_loop
 
-app = FastAPI(title="响帮帮无忧保 API", version="3.6.0")
+
+def startup():
+    """既有四步启动顺序，次序不可变（create_all → SQLite 桥 → 种子 →
+    余额搬迁）。保留为模块级可独立调用：存量 ~70 个 smoke 都是
+    `from backend.app import startup; startup()`，这是测试契约的一部分。
+    """
+    Base.metadata.create_all(engine)
+    with SessionLocal() as s:
+        run_sqlite_bridge_migrations(s, DATABASE_URL)
+        seed_default_accounts(s)
+        migrate_premium_balances(s)
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # Starlette 的 on_event 与 lifespan 互斥（传了 lifespan 就忽略
+    # on_event），所以原 @app.on_event("startup") 并入这里，整个应用只有
+    # 这一个 lifespan。
+    startup()
+    # 统一后台任务循环（开放平台清理任务等，30s tick；PG 上用
+    # pg_try_advisory_lock 保证多实例只有一个在跑）。
+    stop_event = asyncio.Event()
+    task = asyncio.create_task(background_loop(stop_event))
+    app.state.openapi_background_task = task
+    try:
+        yield
+    finally:
+        stop_event.set()
+        try:
+            await asyncio.wait_for(task, timeout=35)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            task.cancel()
+
+
+app = FastAPI(title="响帮帮无忧保 API", version="3.6.0", lifespan=_lifespan)
 cors_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "*").split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -21,15 +58,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def startup():
-    Base.metadata.create_all(engine)
-    with SessionLocal() as s:
-        run_sqlite_bridge_migrations(s, DATABASE_URL)
-        seed_default_accounts(s)
-        migrate_premium_balances(s)
 
 
 from .routers.health import router as health_router
@@ -64,6 +92,8 @@ from .routers.settings_admin import router as settings_admin_router
 from .routers.ocr import router as ocr_router
 from .routers.insurers import router as insurers_router
 from .routers.insurer_portal import router as insurer_portal_router
+from .routers.openapi import router as openapi_router
+from .routers.openapi_admin import router as openapi_admin_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
@@ -97,6 +127,8 @@ app.include_router(settings_admin_router)
 app.include_router(ocr_router)
 app.include_router(insurers_router)
 app.include_router(insurer_portal_router)
+app.include_router(openapi_router)
+app.include_router(openapi_admin_router)
 
 # SYSTEM-DESIGN-V4.md Phase 0 stop-loss item #1: the project root (source
 # code, data.db, .env, requirements.txt, ...) must never be reachable over

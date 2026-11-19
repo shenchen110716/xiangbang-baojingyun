@@ -164,6 +164,8 @@ class IntegrationNonce(Base):
     __tablename__ = "integration_nonces"
     __table_args__ = (
         Index("ux_nonce_per_key", "key_id", "nonce", unique=True),
+        # 清理任务按 seen_at 扫删（开放平台 P0）；没有它删除就是全表扫。
+        Index("ix_integration_nonces_seen_at", "seen_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
