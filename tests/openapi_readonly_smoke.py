@@ -752,7 +752,9 @@ def test_migration_on_isolated_sqlite(folder):
     heads = subprocess.run([sys.executable, "-m", "alembic", "heads"],
                            cwd=ROOT, env=env, capture_output=True, text=True)
     head_lines = [l for l in heads.stdout.splitlines() if l.strip()]
-    assert len(head_lines) == 1 and P1_HEAD in head_lines[0], heads.stdout
+    # 只钉「单一 head」不变量，不钉 head 的具体修订号——后续 story 在
+    # P1 之后追加迁移（如 P2 的 d8e3f6a2b9c4）是预期内的。
+    assert len(head_lines) == 1, f"must keep a single alembic head:\n{heads.stdout}"
 
     with sqlite3.connect(mig_db) as conn:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(export_tasks)")}

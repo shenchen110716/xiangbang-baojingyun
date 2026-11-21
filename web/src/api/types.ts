@@ -34,6 +34,8 @@ export interface Enterprise {
   usage_available?: number
   usage_fee_daily: number
   alert_days: number
+  /** 开放平台 balance.low 预警阈值（元）；null = 未启用 */
+  usage_alert_threshold?: number | null
   created_at: string
   /** 最近一次审核（通过/驳回）时间，来自审计日志；从未审核过为 null */
   approved_at?: string | null

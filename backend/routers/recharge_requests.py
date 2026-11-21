@@ -16,6 +16,7 @@ from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import Enterprise, RechargeRequest, User
 from ..services import get_or_create_premium_account, notify_enterprise, post_ledger_entry, premium_payment_options, recharge_payment_account_view, resolve_account_for_insurer, serialize
+from ..services.openapi.webhook_outbox import emit_event
 
 router = APIRouter(prefix="/api", tags=["recharge-requests"])
 
@@ -107,6 +108,11 @@ def confirm_recharge_request(item_id: int, user: User = Depends(current_user), s
         enterprise.usage_balance += item.amount
         post_ledger_entry(session, enterprise, "usage", "credit", item.amount, "recharge_request", str(item.id), user)
     item.status = "confirmed"; item.confirmed_by = user.id; item.confirmed_at = business_now()
+    # 开放平台 webhook（story-p2-write AC11）：入账与事件同一事务落 outbox。
+    emit_event(session, item.enterprise_id, "recharge.succeeded", {
+        "recharge_id": f"bank-{item.id}", "enterprise_id": item.enterprise_id,
+        "account": item.account_type, "amount": item.amount, "channel": "bank_transfer",
+    })
     session.commit(); audit(session, user, "confirm", "recharge_request", str(item.id))
     notify_enterprise(session, item.enterprise_id, "recharge_confirmed", {"amount": item.amount, "account_type": item.account_type})
     return _recharge_dict(item, session)
@@ -119,6 +125,12 @@ def reject_recharge_request(item_id: int, reason: str = Query(...), user: User =
     if item.status != "pending": raise HTTPException(400, "该申请已处理，不能重复驳回")
     if not reason.strip(): raise HTTPException(400, "驳回时必须填写原因")
     item.status = "rejected"; item.reject_reason = reason.strip(); item.confirmed_by = user.id; item.confirmed_at = business_now()
+    # 开放平台 webhook（story-p2-write AC11）。
+    emit_event(session, item.enterprise_id, "recharge.rejected", {
+        "recharge_id": f"bank-{item.id}", "enterprise_id": item.enterprise_id,
+        "account": item.account_type, "amount": item.amount,
+        "reason": reason.strip(),
+    })
     session.commit(); audit(session, user, "reject", "recharge_request", str(item.id), reason)
     notify_enterprise(session, item.enterprise_id, "recharge_rejected", {"amount": item.amount, "reason": reason.strip()})
     return _recharge_dict(item, session)

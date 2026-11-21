@@ -10,15 +10,22 @@ from fastapi.openapi.utils import get_openapi
 
 from .common import E_BIZ, OpenApiError, OpenApiRoute
 from .accounts import router as accounts_router
+from .declarations import router as declarations_router
 from .insured import router as insured_router
 from .meta import router as meta_router
 from .policies import router as policies_router
+from .recharges import router as recharges_router
+from .webhooks import router as webhooks_router
 
 router = APIRouter()
 router.include_router(meta_router)
 router.include_router(insured_router)
 router.include_router(policies_router)
 router.include_router(accounts_router)
+# P2 写入面（story-p2-write）：必须在 _fallback 之前 include。
+router.include_router(declarations_router)
+router.include_router(recharges_router)
+router.include_router(webhooks_router)
 
 # ---------------------------------------------------------------- AC15
 # /openapi/v1 的 OpenAPI schema 与内部 /api 的 /docs 分开暴露：这里只收

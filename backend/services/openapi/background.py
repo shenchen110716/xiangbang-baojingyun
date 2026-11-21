@@ -147,13 +147,19 @@ register_periodic_job("cleanup_openapi_rate_counters", _cleanup_openapi_rate_cou
 # P1：异步导出执行任务挂进同一循环（export_tasks 模块底部自注册；放文件
 # 末尾 import 是为了避免 export_tasks ↔ background 的导入期循环）。
 from . import export_tasks as _export_tasks  # noqa: E402,F401  (job registration)
+# P2：webhook 投递/余额预警扫描 + 幂等键清理（同样文件末尾自注册）。
+from . import webhook_outbox as _webhook_outbox  # noqa: E402,F401  (job registration)
+from . import idempotency as _idempotency  # noqa: E402,F401  (job registration)
 
 
 async def background_loop(stop_event: asyncio.Event) -> None:
     """lifespan 启动的常驻循环：每 30s 一个 tick，stop_event 置位即退出。"""
     while not stop_event.is_set():
         try:
-            run_locked_tick()
+            # review-p2 B1：tick 里是同步 DB + 出网 HTTP（webhook 投递，单条
+            # 超时 5s、每轮最多 20 条），绝不能直接在事件循环里跑——会把
+            # 整个 FastAPI 卡死最长 ~100s。丢到线程池，事件循环保持可响应。
+            await asyncio.to_thread(run_locked_tick)
         except Exception:
             # tick 级兜底：连 DB 连接都拿不到（如 DB 闪断）也不退出循环。
             logger.exception("openapi background tick failed")

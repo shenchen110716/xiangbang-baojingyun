@@ -670,8 +670,11 @@ def test_migration_on_isolated_sqlite(folder):
     import sqlite3
 
     mig_db = Path(folder) / "mig.db"
-    # 迁移前形态：旧库里 integration_nonces 存在但还没有 seen_at 索引
+    # 迁移前形态：旧库里 integration_nonces 存在但还没有 seen_at 索引；
+    # enterprises 建个最小桩——upgrade 会一路走到最新 head，P2 迁移
+    # （d8e3f6a2b9c4）要 ALTER enterprises。
     with sqlite3.connect(mig_db) as conn:
+        conn.execute("CREATE TABLE enterprises (id INTEGER PRIMARY KEY)")
         conn.execute(
             "CREATE TABLE integration_nonces ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"

@@ -13,6 +13,7 @@ from ..providers import provider_mode, wechat_pay_provider
 from ..schemas import PaymentCallbackIn, PaymentIn
 from ..services import post_ledger_entry
 from ..services import settings as settings_service
+from ..services.openapi.webhook_outbox import emit_event
 
 router = APIRouter(prefix="/api", tags=["payments"])
 
@@ -23,6 +24,11 @@ def _apply_paid(session: Session, row: PaymentRecord) -> None:
     if row.account == "premium": ent.premium_balance += row.amount
     else: ent.usage_balance += row.amount
     post_ledger_entry(session, ent, row.account, "credit", row.amount, "payment", row.order_no, idempotency_key=row.order_no)
+    # 开放平台 webhook（story-p2-write AC10）：入账与事件同一事务落 outbox。
+    emit_event(session, row.enterprise_id, "recharge.succeeded", {
+        "recharge_id": f"wechat-{row.order_no}", "enterprise_id": row.enterprise_id,
+        "account": row.account, "amount": row.amount, "channel": row.channel or "",
+    })
     session.commit()
 
 

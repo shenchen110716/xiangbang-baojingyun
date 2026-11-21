@@ -167,9 +167,12 @@ def get_export_task(
     # review-p1 M2：明文口径任务要求当前 key 仍持有 read_sensitive——
     # scope 被撤销（数据安全承诺撤销）后，旧明文任务立即不可再查/续取。
     try:
-        sensitive_task = bool(json.loads(task.params_json or "{}").get("sensitive"))
+        parsed = json.loads(task.params_json or "{}")
     except ValueError:
-        sensitive_task = True   # 参数损坏时按最严格口径处理
+        parsed = None
+    # review-p1 n1：合法 JSON 但非对象（如 "[]"、"1"）时 .get 会炸——
+    # 非 dict 一律与解析失败同口径：按最严格（明文）处理。
+    sensitive_task = bool(parsed.get("sensitive")) if isinstance(parsed, dict) else True
     if sensitive_task and SENSITIVE_SCOPE not in principal.scopes:
         raise OpenApiError(403, E_PERM, "该导出任务为明文口径，当前密钥无权访问")
     payload = {

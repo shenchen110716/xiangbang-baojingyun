@@ -13,8 +13,9 @@ from .recharge import (
     recharge_payment_account_view, usage_payment_account, premium_payment_options, PLATFORM_USAGE_INSURER_KEY,
 )
 from .policy_members import (
-    activate_person_policy, correct_person_policy_dates, earliest_effective_at,
-    earliest_termination_at, effective_person_status, terminate_person_policy, validate_person_policy_dates,
+    activate_person_policy, assert_status_transition, correct_person_policy_dates,
+    earliest_effective_at, earliest_termination_at, effective_person_status,
+    terminate_person_policy, validate_person_policy_dates,
 )
 from .employer_scopes import (
     allowed_employer_ids, assert_employer_access, grant_employer_scope,

@@ -52,16 +52,17 @@ const editingId = ref<number | null>(null)
 const form = reactive({
   name: '', kind: '企业', credit_code: '', contact: '', phone: '',
   agent_id: null as number | null, usage_fee_daily: 0.1, alert_days: 3,
+  usage_alert_threshold: null as number | null,
 })
 function openCreate() {
   editingId.value = null
-  Object.assign(form, { name: '', kind: '企业', credit_code: '', contact: '', phone: '', agent_id: null, usage_fee_daily: 0.1, alert_days: 3 })
+  Object.assign(form, { name: '', kind: '企业', credit_code: '', contact: '', phone: '', agent_id: null, usage_fee_daily: 0.1, alert_days: 3, usage_alert_threshold: null })
   ocrHint.value = ''
   formVisible.value = true
 }
 function openEdit(item: Enterprise) {
   editingId.value = item.id
-  Object.assign(form, { name: item.name, kind: item.kind, credit_code: item.credit_code, contact: item.contact, phone: item.phone, agent_id: item.agent_id, usage_fee_daily: item.usage_fee_daily, alert_days: item.alert_days })
+  Object.assign(form, { name: item.name, kind: item.kind, credit_code: item.credit_code, contact: item.contact, phone: item.phone, agent_id: item.agent_id, usage_fee_daily: item.usage_fee_daily, alert_days: item.alert_days, usage_alert_threshold: item.usage_alert_threshold ?? null })
   formVisible.value = true
 }
 
@@ -279,6 +280,11 @@ async function approveEnterprise(item: Enterprise) {
         </el-form-item>
         <el-form-item label="余额预警天数">
           <el-input-number v-model="form.alert_days" :min="3" :max="7" />
+        </el-form-item>
+        <!-- review-p2 M5：开放平台 balance.low 预警阈值（仅编辑时展示；创建接口不含此字段） -->
+        <el-form-item v-if="editingId" label="开放平台预警阈值">
+          <el-input-number v-model="form.usage_alert_threshold" :min="0" :step="10" placeholder="未启用" />
+          <div class="hint">服务费可用余额跌破该金额时，向该企业开放平台回调地址投递 balance.low 预警；留空表示不启用</div>
         </el-form-item>
       </el-form>
       <template #footer>

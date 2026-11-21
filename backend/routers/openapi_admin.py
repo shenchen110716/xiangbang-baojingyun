@@ -16,8 +16,9 @@ from sqlalchemy.orm import Session
 from ..core.audit import audit
 from ..core.db import db
 from ..core.rbac import require_role
-from ..models import Enterprise, OpenApiClient, OpenApiRequestLog, User
+from ..models import Enterprise, OpenApiClient, OpenApiRequestLog, OpenApiWebhookDelivery, User
 from ..services.openapi.auth import KNOWN_SCOPES, issue_client_secret, parse_csv
+from ..services.openapi.webhook_outbox import resend_delivery
 
 router = APIRouter(prefix="/api", tags=["开放平台管理"])
 
@@ -189,3 +190,49 @@ def list_openapi_request_logs(key_id: Optional[str] = None,
         "ip": row.ip,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     } for row in rows]
+
+
+@router.get("/openapi-webhook-deliveries")
+def list_openapi_webhook_deliveries(enterprise_id: Optional[int] = None,
+                                    status_value: Optional[str] = Query(None, alias="status"),
+                                    limit: int = Query(100, ge=1, le=500),
+                                    user: User = Depends(require_role("admin")),
+                                    session: Session = Depends(db)):
+    """webhook 投递记录（story-p2-write AC13）：排查失败投递用。"""
+    query = select(OpenApiWebhookDelivery).order_by(OpenApiWebhookDelivery.id.desc())
+    if enterprise_id is not None:
+        query = query.where(OpenApiWebhookDelivery.enterprise_id == enterprise_id)
+    if status_value:
+        query = query.where(OpenApiWebhookDelivery.status == status_value)
+    rows = session.scalars(query.limit(limit)).all()
+    return [{
+        "id": row.id,
+        "enterprise_id": row.enterprise_id,
+        "endpoint_id": row.endpoint_id,
+        "event_id": row.event_id,
+        "event_type": row.event_type,
+        "status": row.status,
+        "attempts": row.attempts,
+        "last_error": row.last_error,
+        "next_retry_at": row.next_retry_at.isoformat() if row.next_retry_at else None,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "delivered_at": row.delivered_at.isoformat() if row.delivered_at else None,
+    } for row in rows]
+
+
+@router.post("/openapi-webhook-deliveries/{delivery_id}/resend")
+def resend_openapi_webhook_delivery(delivery_id: int,
+                                    user: User = Depends(require_role("admin")),
+                                    session: Session = Depends(db)):
+    """失败投递手动重发（AC13）：重置为 pending，下个后台 tick 立即投递。"""
+    delivery = session.get(OpenApiWebhookDelivery, delivery_id)
+    if delivery is None:
+        raise HTTPException(404, "投递记录不存在")
+    if delivery.status != "failed":
+        # review-p2 minor：只允许重发 failed——pending 的还在退避队列里，
+        # 重发等于清退避插队；delivered 的重发纯属重复投递。
+        raise HTTPException(400, "仅失败（failed）状态的投递可手动重发")
+    resend_delivery(delivery)
+    session.commit()
+    audit(session, user, "resend", "openapi_webhook_delivery", str(delivery.id))
+    return {"id": delivery.id, "status": delivery.status}

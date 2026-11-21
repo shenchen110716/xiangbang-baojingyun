@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "无忧保开放平台 API（P1 只读）",
-    "description": "无忧保开放平台 /openapi/v1 只读接口集合。\n\n使用方法：\n1. 在集合变量里填好 baseUrl / keyId / appSecret（Secret 建议存为 secret 类型变量）。\n2. 直接发送请求——签名 v2（HMAC-SHA256）由集合级 Pre-request Script 自动计算并写入请求头。\n\n签名串：METHOD \\n PATH \\n sorted_query \\n X-Timestamp \\n X-Nonce \\n sha256(body)。\nsorted_query 为查询参数按 key（再按 value）字典序排序后的 URL 编码串（空格编码为 +）。\n\n详细说明见《无忧保开放平台 API 接口使用说明》（open-api-usage-guide.md）。",
+    "name": "无忧保开放平台 API",
+    "description": "无忧保开放平台 /openapi/v1 接口集合（P1 只读 + P2 写入）。\n\n使用方法：\n1. 在集合变量里填好 baseUrl / keyId / appSecret（Secret 建议存为 secret 类型变量）。\n2. 直接发送请求——签名 v2（HMAC-SHA256）由集合级 Pre-request Script 自动计算并写入请求头。\n\n签名串：METHOD \\n PATH \\n sorted_query \\n X-Timestamp \\n X-Nonce \\n sha256(body)。\nsorted_query 为查询参数按 key（再按 value）字典序排序后的 URL 编码串（空格编码为 +）。\n\n创建类写接口（参保/停保申报、发起充值）必须携带 Idempotency-Key 头（集合里已用 {{$guid}} 预填，重试同一业务请求时请改为固定值）。\n\n详细说明见《无忧保开放平台 API 接口使用说明》（open-api-usage-guide.md）。",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -10,7 +10,10 @@
     { "key": "appSecret", "value": "", "type": "string" },
     { "key": "personId", "value": "1", "type": "string" },
     { "key": "taskId", "value": "1", "type": "string" },
-    { "key": "policyId", "value": "1", "type": "string" }
+    { "key": "policyId", "value": "1", "type": "string" },
+    { "key": "declarationId", "value": "1", "type": "string" },
+    { "key": "rechargeId", "value": "bank-1", "type": "string" },
+    { "key": "webhookId", "value": "1", "type": "string" }
   ],
   "event": [
     {
@@ -246,6 +249,212 @@
                 { "key": "limit", "value": "50", "disabled": true }
               ]
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "参停保申报（P2 写入）",
+      "item": [
+        {
+          "name": "批量参保申报",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}", "description": "必填；重试同一业务请求时请改为固定值" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"name\": \"张三\",\n      \"id_type\": \"id_card\",\n      \"id_number\": \"110101199001011234\",\n      \"phone\": \"13800000000\",\n      \"position_id\": 7,\n      \"expected_effective_at\": \"2026-12-01\",\n      \"external_person_id\": \"EMP-0012\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "enrollments"]
+            },
+            "description": "≤500 人/单；限流 60 次/小时/密钥（与停保申报共享）。整单 422：空单/超 500 人/服务费余额不足/岗位不属本企业。其余问题逐人 rejected + reason。"
+          }
+        },
+        {
+          "name": "批量停保申报",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}", "description": "必填；重试同一业务请求时请改为固定值" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"person_id\": {{personId}},\n      \"external_person_id\": \"EMP-0012\",\n      \"expected_terminated_at\": \"2026-12-31\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/terminations",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "terminations"]
+            },
+            "description": "每项用 person_id（推荐）或 id_number 二选一定位人员。"
+          }
+        },
+        {
+          "name": "申报单列表",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/declarations",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "declarations"],
+              "query": [
+                { "key": "kind", "value": "enrollment", "disabled": true, "description": "enrollment/termination" },
+                { "key": "status", "value": "processing", "disabled": true, "description": "accepted/processing/succeeded/partial_succeeded/failed" },
+                { "key": "cursor", "value": "", "disabled": true },
+                { "key": "limit", "value": "50", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "申报单状态 + 逐人明细",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/declarations/{{declarationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "declarations", "{{declarationId}}"]
+            },
+            "description": "明细逐人携带 status（pending/succeeded/rejected）、reason、external_person_id；证件号脱敏。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "充值（P2 写入）",
+      "item": [
+        {
+          "name": "发起充值（微信 Native，仅服务费户）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}", "description": "必填；重试同一业务请求时请改为固定值" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account\": \"usage\",\n  \"amount\": 1000,\n  \"channel\": \"wechat_native\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/recharges",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "recharges"]
+            },
+            "description": "响应返回 code_url（扫码支付）与 recharge_id（wechat-… 前缀）。保费户（premium）不支持微信通道。"
+          }
+        },
+        {
+          "name": "发起充值（银行转账）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}", "description": "必填；重试同一业务请求时请改为固定值" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account\": \"premium\",\n  \"insurer\": \"平安\",\n  \"amount\": 5000,\n  \"channel\": \"bank_transfer\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/recharges",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "recharges"]
+            },
+            "description": "account=premium 必须携带 insurer。响应返回 payment_account（收款账户）与 recharge_id（bank-… 前缀）。"
+          }
+        },
+        {
+          "name": "上传付款回单（仅银行转账）",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "file",
+              "file": {}
+            },
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/recharges/{{rechargeId}}/receipt?filename=receipt.pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "recharges", "{{rechargeId}}", "receipt"],
+              "query": [
+                { "key": "filename", "value": "receipt.pdf", "description": "必填，需带扩展名（.pdf/.jpg/.jpeg/.png）" }
+              ]
+            },
+            "description": "请求体为文件原始字节（binary，≤20MB），非 multipart。注意：Postman 的 Pre-request Script 读不到 binary body，sha256(body) 会按空串计算导致 40100——binary 上传请改用第 3 节的代码示例直接调用；本条目仅作端点说明。"
+          }
+        },
+        {
+          "name": "充值单状态",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/recharges/{{rechargeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "recharges", "{{rechargeId}}"]
+            },
+            "description": "recharge_id 形如 bank-123 或 wechat-OPAY…；status：pending/succeeded/rejected。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhook（P2 写入）",
+      "item": [
+        {
+          "name": "注册回调地址",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.com/webhooks/wuyoubao\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/webhooks",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "webhooks"]
+            },
+            "description": "必须 HTTPS（非 https 返回 422）；每企业最多 10 个。"
+          }
+        },
+        {
+          "name": "回调地址列表",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/webhooks",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "webhooks"]
+            }
+          }
+        },
+        {
+          "name": "删除回调地址",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/webhooks/{{webhookId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "webhooks", "{{webhookId}}"]
+            }
+          }
+        },
+        {
+          "name": "发送测试事件",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/webhooks/{{webhookId}}/test",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "webhooks", "{{webhookId}}", "test"]
+            },
+            "description": "投递 webhook.test 事件，走真实投递链路（v2 签名 + X-Event-Id + 退避重试）。"
           }
         }
       ]

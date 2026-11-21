@@ -91,6 +91,107 @@ class ExportTask(Base):
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class OpenApiDeclaration(Base):
+    """写入面申报单（story-p2-write AC3/AC7）：participation 异步受理回执。
+
+    状态机：accepted（受理落库瞬间）→ processing（存在待人工确认项）→
+    succeeded / partial_succeeded / failed（全部项终态后翻转，由
+    PATCH /api/insured/{id}/status 的人工确认驱动，不承诺同步生效）。
+    """
+    __tablename__ = "openapi_declarations"
+    __table_args__ = (
+        Index("ix_openapi_declarations_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    enterprise_id: Mapped[int] = mapped_column(ForeignKey("enterprises.id"), index=True)
+    key_id: Mapped[str] = mapped_column(String(32), default="")
+    kind: Mapped[str] = mapped_column(String(20))  # enrollment | termination
+    status: Mapped[str] = mapped_column(String(20), default="accepted")
+    item_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OpenApiDeclarationItem(Base):
+    """申报单逐人明细。受理即拒的项直接落 rejected+reason；受理项 pending，
+    由管理员确认（insured_status 翻转）推进到 succeeded / rejected。
+    external_person_id 原样存储并在明细中回传（AC5）。"""
+    __tablename__ = "openapi_declaration_items"
+    __table_args__ = (
+        Index("ix_openapi_declaration_items_person_status", "person_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    declaration_id: Mapped[int] = mapped_column(
+        ForeignKey("openapi_declarations.id"), index=True)
+    # 防御性冗余：事件/明细查询显式按企业过滤（红线），不只信 join。
+    enterprise_id: Mapped[int] = mapped_column(ForeignKey("enterprises.id"), index=True)
+    person_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    external_person_id: Mapped[str] = mapped_column(String(64), default="")
+    name: Mapped[str] = mapped_column(String(80), default="")
+    id_number: Mapped[str] = mapped_column(String(40), default="")
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|succeeded|rejected
+    reason: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OpenApiWebhookEndpoint(Base):
+    """企业注册的 webhook 回调地址（AC12）。key_id 记录注册时所用密钥——
+    投递签名用这把密钥的 AppSecret（对方用自己手里的 secret 验签）。"""
+    __tablename__ = "openapi_webhook_endpoints"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    enterprise_id: Mapped[int] = mapped_column(ForeignKey("enterprises.id"), index=True)
+    url: Mapped[str] = mapped_column(Text)
+    key_id: Mapped[str] = mapped_column(String(32), default="")
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active|disabled
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class OpenApiWebhookDelivery(Base):
+    """webhook outbox（AC13）：事件与业务写同一事务落库，后台循环投递。
+
+    endpoint_id 不设 FK：端点删除后历史投递行保留为审计痕迹，投递时查不到
+    端点即置 failed。退避 1m/5m/30m/2h/12h，超过重试上限置 failed，
+    admin 可手动重发。"""
+    __tablename__ = "openapi_webhook_deliveries"
+    __table_args__ = (
+        Index("ix_openapi_webhook_deliveries_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    enterprise_id: Mapped[int] = mapped_column(ForeignKey("enterprises.id"), index=True)
+    endpoint_id: Mapped[int] = mapped_column(Integer, index=True)
+    event_id: Mapped[str] = mapped_column(String(32), index=True)
+    event_type: Mapped[str] = mapped_column(String(40))
+    payload: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|delivered|failed
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OpenApiIdempotencyKey(Base):
+    """写接口幂等键（AC2）：(key_id, idem_key) 唯一；request_hash 识别
+    「同 key 不同体」409；response_snapshot 为空表示首次请求仍在进行中
+    （或已失败被清理前的残留）；7 天后由后台循环清理（Hazard 6）。"""
+    __tablename__ = "openapi_idempotency_keys"
+    __table_args__ = (
+        Index("ux_openapi_idempotency_key", "key_id", "idem_key", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key_id: Mapped[str] = mapped_column(String(32))
+    idem_key: Mapped[str] = mapped_column(String(128))
+    request_hash: Mapped[str] = mapped_column(String(64), default="")
+    response_snapshot: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class OpenApiRateCounter(Base):
     """固定窗口限流计数（存 DB 而非进程内存：enroll.py 的进程内 dict 在
     多 worker 下形同虚设，是测绘明确的 hazard）。window_start 用整型

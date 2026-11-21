@@ -11,6 +11,34 @@ from ..core.business_time import as_business_time, business_now
 from ..models import AgentCommission, InsurancePlan, InsuredPerson, Policy, PolicyMember, WorkPosition
 from .pricing import plan_price_for_class, pricing_snapshot
 
+# 参保状态机（story-p2-write AC9）：PATCH /api/insured/{id}/status 允许的
+# (前态, 新态) 组合。same→same 恒放行（幂等重放/界面重复点击不该报错，
+# system_smoke 的冗余 active→active 依赖这一点）。拒绝集合里最关键的是
+# draft→active/stopped（未参保的人不经参保直接生效/停保会跳过计费起点）
+# 与 stopped→pending / active→pending（时间倒流，及时率统计会错乱）。
+ALLOWED_STATUS_TRANSITIONS = {
+    ("draft", "pending"),     # 名单 → 申报参保
+    ("pending", "active"),    # 申报 → 确认生效
+    ("pending", "stopped"),   # 生效前撤回/停保
+    ("active", "stopped"),    # 在保 → 停保
+    ("stopped", "active"),    # 复保（新保障期）
+}
+
+_STATUS_LABELS = {"draft": "未参保", "pending": "待生效",
+                  "active": "在保", "stopped": "已停保"}
+
+
+def assert_status_transition(previous_status: str, new_status: str) -> None:
+    """非法状态流转 → 400 中文说明（AC9）。"""
+    if previous_status == new_status:
+        return
+    if (previous_status, new_status) in ALLOWED_STATUS_TRANSITIONS:
+        return
+    raise HTTPException(
+        400,
+        f"不允许把参保状态从「{_STATUS_LABELS.get(previous_status, previous_status)}」"
+        f"直接改为「{_STATUS_LABELS.get(new_status, new_status)}」")
+
 
 def _plan_for_person(session: Session, person: InsuredPerson) -> InsurancePlan | None:
     if not person.position_id:

@@ -1,6 +1,6 @@
 # 无忧保开放平台 API 接口使用说明
 
-> ✅ **当前状态：P1 只读接口已上线**（参保名单 / 异步导出 / 保单 / 账户余额 / 流水 / 发票，详见第 6–8 节）。**P2 写入接口（参保/停保申报、充值、Webhook）即将上线**，相关章节（第 5、7.2、9 节）当前仅为设计规范，供提前评估对接工作量。机器可读的接口定义见 `GET /openapi/v1/openapi.json`（无需签名）。
+> ✅ **当前状态：P1 只读接口与 P2 写入接口均已上线**——查询面（参保名单 / 异步导出 / 保单 / 账户余额 / 流水 / 发票，第 6–8 节）与写入面（参保/停保申报、充值、Webhook 事件回调，第 5、7.2、9 节）。机器可读的接口定义见 `GET /openapi/v1/openapi.json`（无需签名）。
 
 ## 1. 概述
 
@@ -11,10 +11,10 @@
 | 参保人员名单 | 名单查询、保障期间、操作历史、异步导出 | `insured:read` | ✅ 已上线 |
 | 保单 | 保单列表、详情、成员、短时效下载链接 | `policy:read` | ✅ 已上线 |
 | 账户查询 | 账户余额、收支流水、发票记录 | `account:read` | ✅ 已上线 |
-| 参保/停保申报 | 批量提交参保、停保申报单，异步回执 | `declaration:write` | 🕐 P2 即将上线 |
-| 发起充值 | 微信 Native / 银行转账充值 | `recharge:write` | 🕐 P2 即将上线 |
+| 参保/停保申报 | 批量提交参保、停保申报单，异步回执 | `declaration:write` | ✅ 已上线 |
+| 发起充值 | 微信 Native / 银行转账充值 | `recharge:write` | ✅ 已上线 |
 
-另有 Webhook 事件回调（`webhook:manage`）用于接收申报回执、充值到账等异步通知（🕐 P2 即将上线）。
+另有 Webhook 事件回调（`webhook:manage`）用于接收申报回执、充值到账等异步通知（✅ 已上线）。
 
 ## 2. 环境与接入流程
 
@@ -204,19 +204,19 @@ function openApiSign(method, path, query, body, appSecret) {
 - **分页**：游标式 `?cursor=&limit=`，`limit` 默认 50、上限 200，响应携带 `next_cursor`，为 `null` 表示到底；下一页请求把 `next_cursor` 原样作为 `cursor` 传入。
 - **增量同步**：名单列表支持 `updated_since`（ISO8601 时间戳，建议 `Z` 后缀 UTC）。「更新」按业务事件口径：人员建档、保障期写入/终止、参停保操作任一发生在该时刻之后即命中。该口径**宁滥勿缺**：保障期的生效/终止日期晚于 `updated_since` 的人员会持续命中（例如未来生效的保障期在生效日前每次增量都返回），对接方应按 `id` 做幂等合并，不要假设每人只出现一次。
 - **时间口径**：不带时区的时间参数（如流水 `from`/`to`）一律按**北京时间**（UTC+8）理解；带时区偏移或 `Z` 后缀的按其自身时区。响应中的时间戳统一输出带 `+00:00` 偏移量的 UTC。查询串里直接写 `+00:00` 时 `+` 会被解码成空格导致 422，请使用 `Z` 后缀或对 `+` 做 URL 编码（`%2B`）。
-- **幂等**（P2 写接口）：所有写接口必须携带 `Idempotency-Key` 头（建议 UUID）。同 key 同请求体返回首次结果快照；同 key 不同请求体返回 409。
-- **限流**：默认 10 QPS/密钥；异步导出 10 次/小时/密钥；批量申报 60 次/小时（P2）。
+- **幂等**：三个**创建类**写接口（`POST /enrollments`、`POST /terminations`、`POST /recharges`）必须携带 `Idempotency-Key` 头（≤128 字符，建议 UUID），缺头 422。同 key 同请求体返回首次结果快照（不重复执行）；同 key 不同请求体返回 409；同 key 首次请求仍在处理中时并发重放返回 409（稍后重试即可）。首次请求以**业务失败**（4xx/5xx）告终时 key 自动释放，修正后可用同 key 重试。幂等记录保留 **7 天**，过期后同 key 视为新请求。回单上传与 Webhook 管理接口天然幂等，无需该头。
+- **限流**：默认 10 QPS/密钥；异步导出 10 次/小时/密钥；批量申报 60 次/小时/密钥（参保与停保申报共享一个配额）。超限 429 + `Retry-After`（秒）。
 - **接口定义**：`GET /openapi/v1/openapi.json` 返回开放平台独立的 OpenAPI 3.x schema（无需签名），可直接导入代码生成器；平台内部 `/docs` 不含开放平台接口。
 
-## 5. 参保/停保申报（🕐 P2 即将上线）
+## 5. 参保/停保申报（✅ 已上线）
 
-参保落地后仍需保司与运营确认，接口为**异步申报单模型**：受理即返回申报单号，终态通过查询或 Webhook 获知（回执 SLA：T+1 工作日）。
+参保落地后仍需保司与运营确认，接口为**异步申报单模型**：受理即返回申报单号，人员生效/停保由平台人工确认后生效，终态通过查询或 Webhook 获知（回执 SLA：T+1 工作日）。
 
 ```
-POST /openapi/v1/enrollments        批量参保申报（≤500 人/单）
-POST /openapi/v1/terminations       批量停保申报
+POST /openapi/v1/enrollments        批量参保申报（≤500 人/单，需 Idempotency-Key）
+POST /openapi/v1/terminations       批量停保申报（需 Idempotency-Key）
 GET  /openapi/v1/declarations/{id}  申报单状态 + 逐人明细
-GET  /openapi/v1/declarations       申报单列表
+GET  /openapi/v1/declarations       申报单列表（?kind=enrollment|termination&status=&cursor=&limit=）
 ```
 
 参保申报示例：
@@ -226,30 +226,34 @@ POST /openapi/v1/enrollments
 Idempotency-Key: 3f2a…
 
 {
-  "plan_id": 12,
   "items": [
     {
       "name": "张三",
-      "id_type": "idcard",
+      "id_type": "id_card",
       "id_number": "110101199001011234",
       "phone": "13800000000",
       "position_id": 7,
-      "expect_effective_date": "2026-12-01",
+      "expected_effective_at": "2026-12-01",
       "external_person_id": "EMP-0012"
     }
   ]
 }
 ```
 
-受理响应（同步校验通过）：
+- 目前仅支持身份证（`id_type=id_card`，也是缺省值）。`position_id` 可选，必须是**本企业已审核通过**的岗位。`external_person_id` 为贵司系统的人员号，会在明细与 webhook 事件中原样回传。
+- 停保申报 `POST /openapi/v1/terminations` 请求体同构，每项用 `person_id`（平台人员 ID，推荐）或 `id_number` 二选一定位人员，另可携带 `external_person_id`、`expected_terminated_at`。
+
+受理响应（同步）：
 
 ```json
-{ "code": 0, "data": { "declaration_id": "DEC202612010001", "status": "accepted", "item_count": 1 } }
+{ "code": 0, "data": { "declaration_id": 42, "status": "accepted", "item_count": 1 } }
 ```
 
-申报单状态机：`accepted → processing → succeeded / partial_succeeded / failed`（终态逐人携带 `reason`）。
+同步响应只承诺「受理」。申报单状态机：`accepted →（落库即转）processing → succeeded / partial_succeeded / failed`；全部项受理即拒时申报单直接 `failed`。逐人明细状态：`pending → succeeded / rejected`（`rejected` 携带中文 `reason`），明细中证件号脱敏。
 
-受理时即时拒绝的情形：证件号格式错误、重复在保、**服务费账户余额不足**（整单 422 拒绝，请先充值）。
+**整单拒绝（HTTP 422，不产生申报单）**：`items` 为空或超过 500 人；**服务费账户余额不足或账户被锁定**（请先充值）；任一项 `position_id` 不存在或不属于本企业。
+
+**逐人受理即拒**（申报单照常受理，该项 `rejected` + `reason`）：证件类型不支持、证件号格式错误、未满 16 周岁、姓名与证件号在本企业已有登记不一致（拒绝原因为固定文案，不回显系统已登记的姓名）、同企业重复在保/待生效、批内重复（同证件号同期望生效日期只受理第一条）；停保面还有：人员不存在（含他企业人员，不区分）、人员当前不在保。
 
 ## 6. 参保人员名单（✅ 已上线）
 
@@ -377,16 +381,20 @@ GET  /openapi/v1/invoices                                    发票记录
 
 发票项字段：`account`、`invoice_type`、`amount`、`title`、`status`、`has_document`、`created_at`。
 
-### 7.2 发起充值（🕐 P2 即将上线）
+### 7.2 发起充值（✅ 已上线）
 
 ```
-POST /openapi/v1/recharges               发起充值 {account, amount, channel}
-GET  /openapi/v1/recharges/{id}          充值单状态
+POST /openapi/v1/recharges                      发起充值 {account, insurer, amount, channel}（需 Idempotency-Key）
+POST /openapi/v1/recharges/{id}/receipt?filename=  上传付款回单（仅 bank_transfer）
+GET  /openapi/v1/recharges/{id}                 充值单状态
 ```
 
-- `channel=wechat_native`：返回 `code_url`，企业财务扫码支付，到账后推送 `recharge.succeeded` 事件。
-- `channel=bank_transfer`：返回平台收款账户信息；可通过 `POST /recharges/{id}/receipt` 上传付款回单，平台确认到账后推送事件。
-- 可设置余额预警阈值，低于阈值推送 `balance.low` 事件（建议配置，避免参保申报因余额不足被拒）。
+- 请求体：`account` 为 `premium`（保费户）或 `usage`（服务费户）；`account=premium` 时必须携带 `insurer`（保司名，用于定位收款账户）；`amount` 必须大于 0。
+- 充值单号 `recharge_id` 为字符串：微信通道形如 `wechat-OPAY…`，银行转账形如 `bank-123`，后续查询/回单均用该 ID。
+- `channel=wechat_native`（**仅限 `account=usage`**）：响应返回 `code_url`，企业财务扫码支付，到账后推送 `recharge.succeeded` 事件。保费户充值须走银行转账审核流程，`premium + wechat_native` 返回 422。
+- `channel=bank_transfer`：响应返回平台收款账户信息（`payment_account`，未配置时为 `null`）与回单上传地址；按账户信息转账后，通过 `POST /recharges/{id}/receipt?filename=回单.pdf` 上传付款回单——请求体为**文件原始字节**（非 multipart；v2 签名的 `sha256(body)` 直接对文件字节计算），`filename` 查询参数需带扩展名，仅支持 PDF/JPG/PNG，≤20MB。平台人工确认到账后推送 `recharge.succeeded`，驳回则推送 `recharge.rejected`（查询响应的 `reject_reason` 带原因）。
+- `GET /recharges/{id}` 返回 `status`（`pending / succeeded / rejected`）、`amount`、`channel`、`receipt_uploaded`（银行转账）、`paid_at`（微信）等。
+- 服务费余额预警阈值由平台运营在**管理端「参保单位 → 编辑」**中按企业配置（如需开通或调整请联系平台运营）；配置后，可用余额跌破阈值时推送一次 `balance.low` 事件（回升后再次跌破会再次推送；建议配置，避免参保申报因余额不足被拒）。
 
 ## 8. 保单（✅ 已上线）
 
@@ -402,29 +410,32 @@ GET  /openapi/v1/policies/{id}/members               该保单下本企业在保
 - 下载采用「换取短时效链接」模式，不直接回文件流：`download-url` 响应携带 `download_url`（带签名 token 的相对路径，无需签名头）与 `expires_at`（Unix 秒）；**链接 300 秒内有效**，过期后重新调用即可。保单暂无电子保单文件时（`has_document=false`）返回 `code=42200`。
 - `members` 返回该保单下本企业人员的 `person_id`、`name`、`id_number`（脱敏规则与第 6 节一致）、`status`、`effective_at`、`terminated_at`、`endorsement_no`。
 
-## 9. Webhook 事件回调（🕐 P2 即将上线）
+## 9. Webhook 事件回调（✅ 已上线）
 
 ```
-POST   /openapi/v1/webhooks        注册回调地址（必须 HTTPS）
+POST   /openapi/v1/webhooks        注册回调地址 {url}（必须 HTTPS 且为公网地址；每企业最多 10 个）
 GET    /openapi/v1/webhooks
 DELETE /openapi/v1/webhooks/{id}
-POST   /openapi/v1/webhooks/{id}/test   发送测试事件
+POST   /openapi/v1/webhooks/{id}/test   发送 webhook.test 测试事件（走真实投递链路）
 ```
 
 事件字典：
 
 | 事件 | 触发时机 |
 |---|---|
-| `declaration.completed` | 参保/停保申报单到达终态 |
-| `insured.activated` | 人员保障生效 |
-| `insured.stopped` | 人员停保生效 |
-| `recharge.succeeded` / `recharge.rejected` | 充值到账 / 被驳回 |
-| `policy.issued` | 新保单出单 |
-| `balance.low` | 账户余额低于预警阈值 |
+| `declaration.completed` | 参保/停保申报单到达终态（`data` 携带 `declaration_id`、`kind`、`status`、`item_count`） |
+| `insured.activated` | 人员保障生效（`data` 携带 `person_id`、`external_person_id`） |
+| `insured.stopped` | 人员停保生效（同上） |
+| `recharge.succeeded` / `recharge.rejected` | 充值到账 / 被驳回（`data` 携带 `recharge_id`、`account`、`amount`、`channel`） |
+| `balance.low` | 服务费可用余额跌破预警阈值（同一次跌破只推送一次，回升后再次跌破再推） |
+| `webhook.test` | 调用 test 端点触发的测试事件 |
 
-- 推送请求携带与第 3 节同款 HMAC 签名头（使用贵司 AppSecret），请务必验签。
-- payload 只含 ID 与关键字段，敏感明细请回查 API。
-- 响应 2xx 即视为投递成功；失败按 1m/5m/30m/2h/12h 指数退避重试 5 次。请按 `event_id` 做幂等消费。
+- 回调 URL 必须为 **https 且指向公网地址**：私网/内网/链路本地段（`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`127.0.0.0/8`、`169.254.0.0/16`、`::1` 等）与 `localhost` 一律返回 422。本地联调可由平台在部署侧开启 `OPENAPI_WEBHOOK_ALLOW_INSECURE=1` 豁免 http loopback（生产默认关闭）。
+- 注册按**（企业, URL）去重**：同一 URL 重复注册直接返回已有 endpoint（同一 `id`），因此 `POST /webhooks` 天然幂等，重试不会产生重复回调地址。
+- 推送为 `POST` 到注册的 URL，请求体：`{"event_id": "…", "event_type": "…", "occurred_at": "…", "data": { }}`。
+- 推送请求携带与第 3 节**同款 v2 HMAC 签名头**（`X-Api-Key-Id` / `X-Timestamp` / `X-Nonce` / `X-Signature` / `X-Sign-Version: 2`，使用贵司 AppSecret 签名，PATH 取回调 URL 的路径部分），另加 `X-Event-Id` 头，请务必验签。
+- payload 只含 ID 与关键字段，**绝不含明文证件号**，敏感明细请回查 API。
+- 响应 2xx 即视为投递成功；失败按 1m / 5m / 30m / 2h / 12h 退避重试 5 次，仍失败置 `failed`（可联系平台运营在管理后台手动重发）。同一事件可能多次送达，请按 `X-Event-Id`（即 `event_id`）做幂等消费。
 
 ## 10. 常见问题
 

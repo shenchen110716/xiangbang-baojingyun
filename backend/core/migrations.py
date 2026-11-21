@@ -38,6 +38,8 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     if "agent_id" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN agent_id INTEGER")
     if "usage_fee_daily" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN usage_fee_daily FLOAT DEFAULT 0.1")
     if "alert_days" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN alert_days INTEGER DEFAULT 3")
+    # 开放平台 P2（story-p2-write AC15）：余额预警阈值，可空=不预警。
+    if "usage_alert_threshold" not in enterprise_columns: s.connection().exec_driver_sql("ALTER TABLE enterprises ADD COLUMN usage_alert_threshold FLOAT")
     # 平台端系统设置 key-value 表（存储/短信/OCR 配置）。
     from ..models import SystemSetting
     SystemSetting.__table__.create(bind=s.connection(), checkfirst=True)
