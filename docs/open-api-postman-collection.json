@@ -1,0 +1,266 @@
+{
+  "info": {
+    "name": "无忧保开放平台 API（P1 只读）",
+    "description": "无忧保开放平台 /openapi/v1 只读接口集合。\n\n使用方法：\n1. 在集合变量里填好 baseUrl / keyId / appSecret（Secret 建议存为 secret 类型变量）。\n2. 直接发送请求——签名 v2（HMAC-SHA256）由集合级 Pre-request Script 自动计算并写入请求头。\n\n签名串：METHOD \\n PATH \\n sorted_query \\n X-Timestamp \\n X-Nonce \\n sha256(body)。\nsorted_query 为查询参数按 key（再按 value）字典序排序后的 URL 编码串（空格编码为 +）。\n\n详细说明见《无忧保开放平台 API 接口使用说明》（open-api-usage-guide.md）。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://bx.xbbzp.com", "type": "string" },
+    { "key": "keyId", "value": "", "type": "string" },
+    { "key": "appSecret", "value": "", "type": "string" },
+    { "key": "personId", "value": "1", "type": "string" },
+    { "key": "taskId", "value": "1", "type": "string" },
+    { "key": "policyId", "value": "1", "type": "string" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// 无忧保开放平台签名 v2（X-Sign-Version: 2）",
+          "const CryptoJS = require('crypto-js');",
+          "",
+          "const appSecret = pm.variables.get('appSecret');",
+          "const keyId = pm.variables.get('keyId');",
+          "if (!appSecret || !keyId) {",
+          "    throw new Error('请先在集合变量里配置 keyId 与 appSecret');",
+          "}",
+          "",
+          "const ts = String(Math.floor(Date.now() / 1000));",
+          "const nonce = CryptoJS.lib.WordArray.random(16).toString();",
+          "const method = pm.request.method.toUpperCase();",
+          "",
+          "// PATH：不含域名与查询串（路径段里的 {{变量}} 先行解析）",
+          "const path = '/' + pm.request.url.path",
+          "    .map(seg => pm.variables.replaceIn(seg))",
+          "    .join('/');",
+          "",
+          "// sorted_query：按 key（再按 value）字典序排序 + URL 编码（空格为 +），",
+          "// 与服务端 urlencode(sorted(parse_qsl(query, keep_blank_values=True))) 逐字一致。",
+          "const encode = s => encodeURIComponent(s)",
+          "    .replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase())",
+          "    .replace(/%20/g, '+');",
+          "const pairs = pm.request.url.query",
+          "    .filter(q => !q.disabled)",
+          "    .map(q => [pm.variables.replaceIn(q.key || ''), pm.variables.replaceIn(q.value || '')]);",
+          "pairs.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1",
+          "    : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0);",
+          "const sortedQuery = pairs.map(([k, v]) => encode(k) + '=' + encode(v)).join('&');",
+          "",
+          "// sha256(body)：无请求体时对空串求哈希",
+          "let rawBody = '';",
+          "if (pm.request.body && pm.request.body.mode === 'raw' && pm.request.body.raw) {",
+          "    rawBody = pm.variables.replaceIn(pm.request.body.raw);",
+          "}",
+          "const bodyHash = CryptoJS.SHA256(rawBody).toString(CryptoJS.enc.Hex);",
+          "",
+          "const stringToSign = [method, path, sortedQuery, ts, nonce, bodyHash].join('\\n');",
+          "const signature = CryptoJS.HmacSHA256(stringToSign, appSecret).toString(CryptoJS.enc.Hex);",
+          "",
+          "pm.request.headers.upsert({ key: 'X-Api-Key-Id', value: keyId });",
+          "pm.request.headers.upsert({ key: 'X-Timestamp', value: ts });",
+          "pm.request.headers.upsert({ key: 'X-Nonce', value: nonce });",
+          "pm.request.headers.upsert({ key: 'X-Signature', value: signature });",
+          "pm.request.headers.upsert({ key: 'X-Sign-Version', value: '2' });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "参保人员名单",
+      "item": [
+        {
+          "name": "名单查询",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/insured-persons?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "insured-persons"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "status", "value": "active", "disabled": true, "description": "draft/pending/active/stopped" },
+                { "key": "position_id", "value": "1", "disabled": true },
+                { "key": "updated_since", "value": "2026-01-01T00:00:00Z", "disabled": true, "description": "ISO8601，建议 Z 后缀 UTC" },
+                { "key": "cursor", "value": "", "disabled": true, "description": "上一页响应的 next_cursor" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "人员详情（含当前保障期间）",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/insured-persons/{{personId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "insured-persons", "{{personId}}"]
+            }
+          }
+        },
+        {
+          "name": "参停保操作历史",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/insured-persons/{{personId}}/history",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "insured-persons", "{{personId}}", "history"]
+            }
+          }
+        },
+        {
+          "name": "发起异步导出（XLSX）",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/insured-persons/export",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "insured-persons", "export"]
+            },
+            "description": "限流 10 次/小时/密钥。请求体可为空对象；过滤字段同名单查询（status/position_id/updated_since）。"
+          }
+        },
+        {
+          "name": "查询导出任务（done 后带下载链接）",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/export-tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "export-tasks", "{{taskId}}"]
+            },
+            "description": "status=done 时返回 download_url（300 秒有效，直接 GET、无需签名头）。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "保单",
+      "item": [
+        {
+          "name": "保单列表",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/policies",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "policies"],
+              "query": [
+                { "key": "status", "value": "active", "disabled": true },
+                { "key": "cursor", "value": "", "disabled": true },
+                { "key": "limit", "value": "50", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "保单详情",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/policies/{{policyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "policies", "{{policyId}}"]
+            }
+          }
+        },
+        {
+          "name": "换取保单下载链接（300 秒有效）",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/policies/{{policyId}}/download-url",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "policies", "{{policyId}}", "download-url"]
+            },
+            "description": "保单暂无电子保单文件时返回 code=42200。"
+          }
+        },
+        {
+          "name": "保单成员",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/policies/{{policyId}}/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "policies", "{{policyId}}", "members"],
+              "query": [
+                { "key": "cursor", "value": "", "disabled": true },
+                { "key": "limit", "value": "50", "disabled": true }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "账户",
+      "item": [
+        {
+          "name": "账户余额（分账户保费 + 服务费视图）",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/accounts",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "accounts"]
+            }
+          }
+        },
+        {
+          "name": "收支流水",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/ledger-entries",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "ledger-entries"],
+              "query": [
+                { "key": "account", "value": "premium", "disabled": true, "description": "premium/usage" },
+                { "key": "from", "value": "2026-01-01", "disabled": true },
+                { "key": "to", "value": "2026-12-31", "disabled": true },
+                { "key": "cursor", "value": "", "disabled": true },
+                { "key": "limit", "value": "50", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "发票记录",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/openapi/v1/invoices",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi", "v1", "invoices"],
+              "query": [
+                { "key": "cursor", "value": "", "disabled": true },
+                { "key": "limit", "value": "50", "disabled": true }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "接口定义（OpenAPI schema，无需签名）",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/openapi/v1/openapi.json",
+          "host": ["{{baseUrl}}"],
+          "path": ["openapi", "v1", "openapi.json"]
+        },
+        "description": "开放平台独立的 OpenAPI 3.x schema，可直接导入代码生成器。该端点无需签名，但脚本附加签名头不影响访问。"
+      }
+    }
+  ]
+}

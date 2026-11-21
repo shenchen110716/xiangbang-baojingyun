@@ -67,6 +67,30 @@ class OpenApiRequestLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class ExportTask(Base):
+    """异步导出任务（story-p1-readonly AC1/AC7）。
+
+    params_json 固化入队时的过滤条件与脱敏口径（sensitive 由入队那一刻
+    key 的 scope 决定）；file_url 是 core/storage 的存储标记，对外只经
+    短时签名 URL 下发。
+    """
+    __tablename__ = "export_tasks"
+    __table_args__ = (
+        Index("ix_export_tasks_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    enterprise_id: Mapped[int] = mapped_column(ForeignKey("enterprises.id"), index=True)
+    key_id: Mapped[str] = mapped_column(String(32), default="")
+    task_type: Mapped[str] = mapped_column(String(40), default="insured_persons")
+    params_json: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|processing|done|failed
+    file_url: Mapped[str] = mapped_column(Text, default="")
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class OpenApiRateCounter(Base):
     """固定窗口限流计数（存 DB 而非进程内存：enroll.py 的进程内 dict 在
     多 worker 下形同虚设，是测绘明确的 hazard）。window_start 用整型

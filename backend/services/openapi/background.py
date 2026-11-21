@@ -144,6 +144,11 @@ register_periodic_job("cleanup_openapi_request_logs", _cleanup_openapi_request_l
 register_periodic_job("cleanup_openapi_rate_counters", _cleanup_openapi_rate_counters)
 
 
+# P1：异步导出执行任务挂进同一循环（export_tasks 模块底部自注册；放文件
+# 末尾 import 是为了避免 export_tasks ↔ background 的导入期循环）。
+from . import export_tasks as _export_tasks  # noqa: E402,F401  (job registration)
+
+
 async def background_loop(stop_event: asyncio.Event) -> None:
     """lifespan 启动的常驻循环：每 30s 一个 tick，stop_event 置位即退出。"""
     while not stop_event.is_set():

@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -129,6 +130,24 @@ app.include_router(insurers_router)
 app.include_router(insurer_portal_router)
 app.include_router(openapi_router)
 app.include_router(openapi_admin_router)
+
+
+# /openapi/v1 的 schema 与内部 /api 的 /docs 分开暴露（story-p1-readonly
+# AC15）：主 schema（/openapi.json → /docs）反向排除开放路由组；开放平台
+# 自己的 schema 在 GET /openapi/v1/openapi.json（routers/openapi/__init__.py）。
+def _internal_api_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+    # 按生成后的 path 过滤而不是过滤 routes：FastAPI 0.139 的 include_router
+    # 产物是惰性 _IncludedRouter（无 path 属性），routes 级过滤筛不掉。
+    schema["paths"] = {path: item for path, item in schema.get("paths", {}).items()
+                       if not path.startswith("/openapi/v1")}
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = _internal_api_openapi
 
 # SYSTEM-DESIGN-V4.md Phase 0 stop-loss item #1: the project root (source
 # code, data.db, .env, requirements.txt, ...) must never be reachable over

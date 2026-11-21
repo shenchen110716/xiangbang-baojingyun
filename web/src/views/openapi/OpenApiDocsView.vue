@@ -13,7 +13,15 @@ const designHtml = marked.parse(designMd, { async: false }) as string
 </script>
 
 <template>
-  <PageCard title="开放平台" hint="面向企业客户的 Open API：设计规范与接入说明（尚未上线）">
+  <PageCard title="开放平台" hint="面向企业客户的 Open API：接入说明与设计规范">
+    <el-alert
+      class="status-alert"
+      type="success"
+      :closable="false"
+      show-icon
+      title="P1 只读接口已上线"
+      description="参保名单 / 异步导出 / 保单 / 账户余额 / 流水 / 发票均可对接；P2 写入接口（参保停保申报、充值、Webhook）即将上线。"
+    />
     <el-tabs v-model="activeTab" class="docs-tabs">
       <el-tab-pane label="API 接口使用说明" name="usage">
         <div class="md-body" v-html="usageHtml" />
@@ -26,6 +34,10 @@ const designHtml = marked.parse(designMd, { async: false }) as string
 </template>
 
 <style scoped>
+.status-alert {
+  margin: 0 20px 4px;
+  width: auto;
+}
 .docs-tabs {
   padding: 0 20px 20px;
 }

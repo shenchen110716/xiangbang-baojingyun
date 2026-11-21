@@ -19,7 +19,7 @@ from .employment import (
 from .timeliness import (
     ParticipationOperation, EmploymentTimelinessResult, TimelinessOutbox,
 )
-from .openapi import OpenApiClient, OpenApiRateCounter, OpenApiRequestLog
+from .openapi import ExportTask, OpenApiClient, OpenApiRateCounter, OpenApiRequestLog
 from .misc import AuditLog, EnrollmentEmail
 from .settings import SystemSetting
 
@@ -56,6 +56,7 @@ __all__ = [
     "EmploymentFactMatch",
     "IntegrationApiKey",
     "IntegrationNonce",
+    "ExportTask",
     "OpenApiClient",
     "OpenApiRequestLog",
     "OpenApiRateCounter",
