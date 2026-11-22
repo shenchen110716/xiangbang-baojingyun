@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Web 管理端** `web/`（Vue 3 + Vite + Element Plus + Pinia + vue-router + ECharts），构建产物落在 `web/dist`，由后端提供。
 - **微信小程序** `miniprogram/`（用微信开发者工具打开），默认连 `http://127.0.0.1:8001/api`。
 - **Java 后端** `java-backend/`（Maven）是运行时**镜像**，只同步实体与 Mapper，**不建立第二套迁移历史**。
+- **企业开放平台** `backend/routers/openapi/`：面向企业客户（ERP/HR）的 server-to-server 接口，挂载在**独立的 `/openapi/v1`**（不走 `/api` 与 JWT）。认证 = OpenApiClient HMAC-SHA256 v2 签名（key_id/timestamp/nonce 头，防重放），scope 授权 + IP 白名单 + DB 固定窗口限流（429），统一信封 `{"code":0,"message","data","request_id"}`。业务逻辑在 `backend/services/openapi/`（declarations/export_tasks/idempotency/rate_limit/request_log/webhook_outbox 等）；管理端签发密钥走 `routers/openapi_admin.py`（`/api` + JWT），UI 在「投保单位」列表 → 开放平台（`web/src/views/openapi/OpenApiClientsPanel.vue`）。集成文档：`docs/open-api-usage-guide.md`，设计：`docs/open-api-platform-design.md`。
 
 ### 关键设计事实（跨多文件，容易踩坑）
 
@@ -20,6 +21,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **分层**：`routers/`（HTTP 与鉴权）→ `services/`（业务逻辑）→ `models/`（SQLAlchemy）+ `schemas/`（Pydantic）。横切能力在 `backend/core/`：`config`、`db`、`security`（JWT）、`rbac`（角色/数据范围）、`business_time`（生效规则与有效天数）、`audit`、`file_tokens`（短时签名下载）、`id_number`、`seed`、`migrations`。
 - **核心业务服务**（`backend/services/`）：`participation_lock`（使用费余额门禁）、`termination_scan`（保费欠费扫描 → 待确认停保）、`policies` / `policy_members`（保障期生命周期，停保以当前有效 `PolicyMember` 保障期为权威）、`pricing`（保费与有效天数）、`commissions` / `accruals` / `ledger`（佣金与账本）、`recharge`（保司分账户充值）、`notify`（短信/邮件）。
 - **外部服务适配**：`backend/providers.py` 统一封装保司 API、短信、邮件、支付；`INTEGRATION_MODE=mock|real` 切换，**默认 `mock`，不会向第三方发真实请求，也不存密钥**。
+- **身份证号加密存储**（P3 硬化）：`insured_people.id_number` 以 HMAC 哈希列（精确查询用）+ Fernet 密文列落库（密钥派生自 `ID_ENCRYPTION_KEY`，`backend/core/id_number.py`），ORM 双写，序列化层全局排除明文；管理端明文导出需显式参数并记审计。**时效页身份证搜索已改为全号精确匹配**（不再子串 LIKE）。生产部署必须配置稳定的 `ID_ENCRYPTION_KEY`。
+- **后台任务循环**：`app.py` lifespan 里有 asyncio tick 循环（AdvisoryLock 防多实例并发），驱动开放平台 webhook 投递重试与异步导出任务，不要另起第二套调度。
 - **安全姿态**：项目根、源码、`data.db`、`.env` 不得经 HTTP 触达；SPA 走**显式路由白名单**（`app.py` 里的 `_FRONTEND_ROUTES`）而非通配回退；上传的岗位视频/理赔材料**不静态挂载**，只通过短时签名 URL 下载。新增 Web 路由时，记得同步加进 `_FRONTEND_ROUTES` 白名单。
 
 设计与测试详情见 `README.md`、`SYSTEM-DESIGN-V4.2.md`、`SYSTEM-DESIGN-V4.md`、`PRODUCT-DESIGN.md`、`TESTING-GUIDE.md`。
