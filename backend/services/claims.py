@@ -8,6 +8,7 @@ from ..models import (
     ActualEmployer, Claim, ClaimDocument, ClaimTimeline, Enterprise,
     InsurancePlan, InsuredPerson, Policy, User, WorkPosition,
 )
+from ..core.id_number import mask_id_number
 from .serialization import serialize
 from .employer_scopes import assert_employer_access, is_enterprise_owner
 from .insurer_scope import claim_insurer_id
@@ -58,7 +59,7 @@ def claim_payload(item:Claim,session:Session):
     try: sla_overdue=bool(item.sla_deadline and datetime.strptime(item.sla_deadline[:16],'%Y-%m-%d %H:%M')<datetime.now())
     except Exception: pass
     calculated_risk='high' if (deadline_days is not None and deadline_days<0) or sla_overdue else 'attention' if item.status=='supplement' or (deadline_days is not None and deadline_days<=5) else item.risk_level
-    result.update(enterprise_name=enterprise.name if enterprise else '',person_name=person.name if person else '',id_number=person.id_number if person else '',position_name=position.name if position else '',actual_employer_name=employer.name if employer else (position.actual_employer if position else ''),policy_no=policy.policy_no if policy else '',plan_name=plan.name if plan else '',insurer=plan.insurer if plan else '',document_count=len(docs),missing_count=len(missing),missing_types=sorted(missing),complete_percent=round((len(CLAIM_REQUIRED_TYPES)-len(missing))/len(CLAIM_REQUIRED_TYPES)*100),deadline_days=deadline_days,deadline_overdue=deadline_days is not None and deadline_days<0,sla_overdue=sla_overdue,calculated_risk=calculated_risk)
+    result.update(enterprise_name=enterprise.name if enterprise else '',person_name=person.name if person else '',id_number=mask_id_number(person.decrypted_id_number()) if person else '',position_name=position.name if position else '',actual_employer_name=employer.name if employer else (position.actual_employer if position else ''),policy_no=policy.policy_no if policy else '',plan_name=plan.name if plan else '',insurer=plan.insurer if plan else '',document_count=len(docs),missing_count=len(missing),missing_types=sorted(missing),complete_percent=round((len(CLAIM_REQUIRED_TYPES)-len(missing))/len(CLAIM_REQUIRED_TYPES)*100),deadline_days=deadline_days,deadline_overdue=deadline_days is not None and deadline_days<0,sla_overdue=sla_overdue,calculated_risk=calculated_risk)
     return result
 
 def prepare_claim_upload(item:Claim,user:User,session:Session):

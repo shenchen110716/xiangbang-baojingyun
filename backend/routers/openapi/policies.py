@@ -136,8 +136,9 @@ def policy_members(
         items.append({
             "person_id": member.person_id,
             "name": person.name if person else None,
-            "id_number": (person.id_number if sensitive
-                          else mask_id_number_openapi(person.id_number))
+            # story-p3-compliance AC6：明文走密文列解密，脱敏同 P1 口径。
+            "id_number": (person.decrypted_id_number() if sensitive
+                          else mask_id_number_openapi(person.decrypted_id_number()))
             if person else None,
             "status": member.status,
             "effective_at": member.effective_at.isoformat()

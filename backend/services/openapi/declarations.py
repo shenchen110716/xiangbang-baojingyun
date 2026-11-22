@@ -29,7 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...core.business_time import business_today
-from ...core.id_number import age_on, birth_date_from_id, is_valid_id_number
+from ...core.id_number import age_on, birth_date_from_id, id_hash, is_valid_id_number
 from ...models import (
     Enterprise, InsuredPerson, OpenApiDeclaration, OpenApiDeclarationItem,
     WorkPosition,
@@ -94,7 +94,7 @@ def _reject_reason_for_enrollment(session: Session, enterprise_id: int,
     mismatch = session.scalar(
         select(InsuredPerson.id).where(
             InsuredPerson.enterprise_id == enterprise_id,
-            InsuredPerson.id_number == id_number,
+            InsuredPerson.id_number_hash == id_hash(id_number),
             InsuredPerson.name != name).limit(1))
     if mismatch is not None:
         return "该证件号与本企业已登记的姓名不一致，请核对后重新提交"
@@ -102,7 +102,7 @@ def _reject_reason_for_enrollment(session: Session, enterprise_id: int,
     duplicate = session.scalar(
         select(InsuredPerson.id).where(
             InsuredPerson.enterprise_id == enterprise_id,
-            InsuredPerson.id_number == id_number,
+            InsuredPerson.id_number_hash == id_hash(id_number),
             InsuredPerson.status.in_(_IN_FORCE_STATUSES)).limit(1))
     if duplicate is not None:
         return "该人员在本企业已在保或待生效，请勿重复申报"
@@ -194,7 +194,7 @@ def _enroll_person(session: Session, enterprise_id: int, name: str,
     person = session.scalar(
         select(InsuredPerson).where(
             InsuredPerson.enterprise_id == enterprise_id,
-            InsuredPerson.id_number == id_number,
+            InsuredPerson.id_number_hash == id_hash(id_number),
             InsuredPerson.status.in_(("draft", "stopped")))
         .order_by(InsuredPerson.id.desc()).limit(1))
     if person is None:
@@ -256,7 +256,7 @@ def accept_termination_declaration(session: Session, principal,
             row.person_id = person.id
             row.name = person.name
             if not row.id_number:
-                row.id_number = person.id_number
+                row.id_number = person.decrypted_id_number()
         if reason:
             row.status = "rejected"
             row.reason = reason
@@ -290,7 +290,7 @@ def _find_termination_target(session: Session, enterprise_id: int,
         person = session.scalar(
             select(InsuredPerson).where(
                 InsuredPerson.enterprise_id == enterprise_id,
-                InsuredPerson.id_number == id_number,
+                InsuredPerson.id_number_hash == id_hash(id_number),
                 InsuredPerson.status.in_(_IN_FORCE_STATUSES))
             .order_by(InsuredPerson.id.desc()).limit(1))
         if person is not None:
@@ -298,7 +298,7 @@ def _find_termination_target(session: Session, enterprise_id: int,
         return session.scalar(
             select(InsuredPerson).where(
                 InsuredPerson.enterprise_id == enterprise_id,
-                InsuredPerson.id_number == id_number)
+                InsuredPerson.id_number_hash == id_hash(id_number))
             .order_by(InsuredPerson.id.desc()).limit(1))
     return None
 

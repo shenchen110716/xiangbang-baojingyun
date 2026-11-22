@@ -130,6 +130,47 @@ async function submitEdit() {
   }
 }
 
+// ---- 轮换（story-p3-compliance AC7）----
+// 旧 secret 自 rotated_at 起 7 天宽限期内仍可验签，超期自动废止；
+// 新 AppSecret 明文只显示一次，复用签发对话框的一次性展示。
+const ROTATION_GRACE_DAYS = 7
+
+function rotationDeadline(rotatedAt: string): string {
+  const deadline = new Date(rotatedAt)
+  deadline.setDate(deadline.getDate() + ROTATION_GRACE_DAYS)
+  return formatDateTime(deadline.toISOString())
+}
+
+const rotatedVisible = ref(false)
+const rotatedSecret = ref('')
+const rotatedKeyId = ref('')
+const rotatedAt = ref('')
+
+async function rotateClient(item: OpenApiClient) {
+  try {
+    await ElMessageBox.confirm(
+      `确定轮换密钥「${item.key_id}」吗？新 AppSecret 立即生效；旧 AppSecret 还有 ${ROTATION_GRACE_DAYS} 天宽限期，宽限期满自动废止。`,
+      '轮换确认', { type: 'warning' },
+    )
+  } catch { return }
+  try {
+    const result = await openapiAdmin.rotateOpenApiClient(item.id)
+    rotatedSecret.value = result.secret
+    rotatedKeyId.value = result.key_id
+    rotatedAt.value = result.rotated_at ?? ''
+    rotatedVisible.value = true
+    ElMessage.success('密钥已轮换')
+    load()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
+async function copyRotatedSecret() {
+  await navigator.clipboard.writeText(rotatedSecret.value)
+  ElMessage.success('已复制新 AppSecret')
+}
+
 // ---- 调用日志 ----
 const logsVisible = ref(false)
 const logsTarget = ref<OpenApiClient | null>(null)
@@ -173,12 +214,16 @@ async function openLogs(item: OpenApiClient) {
             {{ row.status === 'active' ? '启用' : '停用' }}
           </el-tag>
           <div class="muted">{{ row.expires_at ? `过期 ${formatDateTime(row.expires_at)}` : '长期有效' }}</div>
+          <div v-if="row.rotated_at" class="muted">
+            {{ `已轮换 ${formatDateTime(row.rotated_at)}，旧钥 ${rotationDeadline(row.rotated_at)} 废止` }}
+          </div>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="248" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click="openEdit(row)">配置</el-button>
           <el-button link type="primary" size="small" @click="openLogs(row)">调用日志</el-button>
+          <el-button link type="warning" size="small" @click="rotateClient(row)">轮换</el-button>
           <el-button link :type="row.status === 'active' ? 'danger' : 'success'" size="small" @click="toggleStatus(row)">
             {{ row.status === 'active' ? '停用' : '启用' }}
           </el-button>
@@ -245,6 +290,21 @@ async function openLogs(item: OpenApiClient) {
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
         <el-button type="primary" @click="submitEdit">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="rotatedVisible" title="密钥已轮换" width="520px">
+      <el-alert type="warning" :closable="false" title="新 AppSecret 只显示这一次，请立即保存并更新到对接方；关闭后无法再次查看。" />
+      <div class="secret-box">
+        <div><span class="muted">AppKey：</span><span class="mono">{{ rotatedKeyId }}</span></div>
+        <div><span class="muted">新 AppSecret：</span><span class="mono">{{ rotatedSecret }}</span></div>
+        <div v-if="rotatedAt" class="muted">
+          {{ `旧 AppSecret 宽限期至 ${rotationDeadline(rotatedAt)}（${ROTATION_GRACE_DAYS} 天），到期自动废止。` }}
+        </div>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="copyRotatedSecret">复制新 AppSecret</el-button>
+        <el-button @click="rotatedVisible = false">我已保存，关闭</el-button>
       </template>
     </el-dialog>
 

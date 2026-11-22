@@ -13,7 +13,7 @@ from ..core.audit import audit
 from ..core.business_time import as_business_time, business_now
 from ..core.db import db
 from ..core.business_time import business_today
-from ..core.id_number import age_on, birth_date_from_id, is_valid_id_number
+from ..core.id_number import age_on, birth_date_from_id, id_hash, is_valid_id_number, mask_id_number
 
 MIN_INSURE_AGE = 16
 
@@ -32,8 +32,9 @@ def _assert_id_number_matches_name(session: Session, id_number: str, name: str, 
     不同单位兼职、同时处于在保/待生效状态，这些都是正常业务，不能拦。真正要拦的是数据
     质量问题：同一个身份证号如果在系统里（不分单位、不分状态）对应过不同的姓名，大概率
     是身份证号或姓名有一处打错了，放过去将来出工伤时可能对不上人。"""
+    # story-p3-compliance AC3：等值检索走 hash 列（带索引），不碰明文列。
     stmt = select(InsuredPerson.name).where(
-        InsuredPerson.id_number == id_number,
+        InsuredPerson.id_number_hash == id_hash(id_number),
         InsuredPerson.name != name,
     )
     if exclude_person_id is not None:
@@ -74,6 +75,8 @@ def _coverage_dates(session: Session, person_id: int) -> tuple[datetime | None, 
 
 def _person_payload(session: Session, item: InsuredPerson) -> dict:
     payload = serialize(item)
+    # 双写期展示读：密文列优先、空则回退明文（story-p3-compliance AC3）。
+    payload["id_number"] = item.decrypted_id_number()
     effective_at, terminated_at = _coverage_dates(session, item.id)
     payload["effective_at"], payload["terminated_at"] = effective_at, terminated_at
     payload["status"] = effective_person_status(item, terminated_at)
@@ -131,7 +134,10 @@ def insured(q: str = "", policy_id: int = 0, user: User = Depends(current_user),
     return result
 
 @router.get("/insured/export")
-def insured_export(ids: str = Query(..., description="逗号分隔的参保员工 id"), user: User = Depends(current_user), session: Session = Depends(db)):
+def insured_export(ids: str = Query(..., description="逗号分隔的参保员工 id"), user: User = Depends(current_user), session: Session = Depends(db), plaintext: bool = False):
+    # story-p3-compliance AC4/AC5：默认脱敏；明文仅 admin + 显式参数 + 审计。
+    if plaintext and user.role != 'admin':
+        raise HTTPException(403, '仅平台管理员可明文导出身份证号')
     # 小程序/网页端筛选（搜索关键字 + 状态 chip + 岗位）都是在已经拿到的
     # /insured 全量列表上本地过滤的，不是每次筛选都单独打接口——所以导出
     # 直接收当前筛选结果的 id 列表，而不是重新收 q/status/position_id 在
@@ -158,8 +164,9 @@ def insured_export(ids: str = Query(..., description="逗号分隔的参保员�
         pending_bucket = item['status']=='pending' or (item['status']=='active' and item['effective_at'] and as_business_time(item['effective_at']) > business_now())
         status_display = 'pending' if pending_bucket else item['status']
         position=session.get(WorkPosition,x.position_id) if x.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None;enterprise=session.get(Enterprise,x.enterprise_id);plan=session.get(InsurancePlan,position.plan_id) if position and position.plan_id else None
+        id_display = x.decrypted_id_number() if plaintext else mask_id_number(x.decrypted_id_number())
         sheet.append([
-            x.name, x.id_number, x.phone or '', status_label.get(status_display, status_display),
+            x.name, id_display, x.phone or '', status_label.get(status_display, status_display),
             enterprise.name if enterprise else '', employer.name if employer else (position.actual_employer if position else ''), position.name if position else x.occupation,
             plan.insurer if plan else '', plan.name if plan else '',
             item['effective_at'].strftime('%Y-%m-%d %H:%M') if item['effective_at'] else '',
@@ -168,7 +175,12 @@ def insured_export(ids: str = Query(..., description="逗号分隔的参保员�
     for row_number in range(2, sheet.max_row+1): sheet.cell(row_number, 2).number_format='@'
     for column in sheet.columns: sheet.column_dimensions[column[0].column_letter].width=min(32,max(10,max(len(str(cell.value or '')) for cell in column)+2))
     output=io.BytesIO();book.save(output);output.seek(0)
-    audit(session, user, "export", "insured_person", ",".join(str(i) for i in id_list))
+    if plaintext:
+        # AC5：明文导出每请求一条独立审计（who/when/范围），detail 不含明文。
+        audit(session, user, "export_plaintext", "insured_person", ",".join(str(i) for i in id_list),
+              f"管理员明文导出参保员工身份证号（{len(id_list)} 人）")
+    else:
+        audit(session, user, "export", "insured_person", ",".join(str(i) for i in id_list))
     return StreamingResponse(output,media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':'attachment; filename=insured-export.xlsx'})
 
 @router.post("/insured")
@@ -490,7 +502,7 @@ async def import_insured_file(kind:Literal['enrollment','termination']=Form(...)
             terminated_at=_parse_business_time(terminated_raw,'停保') if terminated_raw else None
         except HTTPException as exc:
             errors.append({'row':row_no,'message':exc.detail});continue
-        existing=session.scalar(select(InsuredPerson).where(InsuredPerson.enterprise_id==row_enterprise_id,InsuredPerson.id_number==identity))
+        existing=session.scalar(select(InsuredPerson).where(InsuredPerson.enterprise_id==row_enterprise_id,InsuredPerson.id_number_hash==id_hash(identity)))
         if kind=='enrollment':
             if not person_name: errors.append({'row':row_no,'message':'姓名必填'});continue
             if existing and existing.status!='stopped': errors.append({'row':row_no,'message':'该员工已在保或待审核'});continue

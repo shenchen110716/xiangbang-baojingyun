@@ -136,8 +136,10 @@ def serialize_insured_person(person: InsuredPerson, *, sensitive: bool) -> dict:
         "id": person.id,
         "name": person.name,
         "phone": person.phone,
-        "id_number": (person.id_number if sensitive
-                      else mask_id_number_openapi(person.id_number)),
+        # story-p3-compliance AC6：明文来自密文列解密（密文空回退明文列），
+        # 行为与 P1 AC4 完全一致：sensitive scope 得完整号，否则脱敏。
+        "id_number": (person.decrypted_id_number() if sensitive
+                      else mask_id_number_openapi(person.decrypted_id_number())),
         "status": person.status,
         "status_label": INSURED_STATUS_SEMANTICS.get(person.status, person.status),
         "position_id": person.position_id,

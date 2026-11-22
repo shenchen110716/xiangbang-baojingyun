@@ -93,7 +93,10 @@ def scoped_results(session: Session, user: User, **filters) -> list[EmploymentTi
         if person_name:
             person_stmt = person_stmt.where(InsuredPerson.name.like(f"%{person_name}%"))
         if id_number:
-            person_stmt = person_stmt.where(InsuredPerson.id_number.like(f"%{id_number}%"))
+            # story-p3-compliance AC3：明文列不再参与检索，改走 hash 等值
+            # ——语义从「子串模糊匹配」收紧为「完整证件号精确匹配」。
+            from ..core.id_number import id_hash
+            person_stmt = person_stmt.where(InsuredPerson.id_number_hash == id_hash(id_number))
         stmt = stmt.where(EmploymentTimelinessResult.person_id.in_(person_stmt))
 
     since, until = filters.get("since"), filters.get("until")
@@ -202,7 +205,7 @@ def detail_rows(session: Session, user: User, **filters) -> list[dict]:
             "actual_employer_name": employer.name if employer else "",
             "position_name": position.name if position else "",
             "person_name": person.name if person else "",
-            "id_number_masked": mask_id_number(person.id_number) if person and person.id_number else "",
+            "id_number_masked": mask_id_number(person.decrypted_id_number()) if person else "",
             "responsible_user_name": responsible.name if responsible else "",
         })
         payloads.append(payload)

@@ -40,6 +40,7 @@ from openapi_foundation_smoke import (  # noqa: E402  共用 ASGI 驱动与签�
 
 P1_HEAD = "c7d2e9f4a1b8"
 P2_HEAD = "d8e3f6a2b9c4"
+P3_HEAD = "e5f8a1c3d7b2"
 
 _cleanup_urls: list[str] = []
 
@@ -149,6 +150,11 @@ def test_migration_on_isolated_sqlite(folder):
     mig_db = Path(folder) / "mig.db"
     with sqlite3.connect(mig_db) as conn:
         conn.execute("CREATE TABLE enterprises (id INTEGER PRIMARY KEY)")
+        # story-p3-compliance 后 head 前移到 e5f8a1c3d7b2（ALTER insured_people），
+        # 隔离库补最小 insured_people 桩，让 upgrade 一路走到新 head。
+        conn.execute("CREATE TABLE insured_people ("
+                     "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                     "id_number VARCHAR(40) DEFAULT '')")
 
     env = {**os.environ, "DATABASE_URL": f"sqlite:///{mig_db}"}
     for args in (["stamp", P1_HEAD], ["upgrade", "head"]):
@@ -158,7 +164,7 @@ def test_migration_on_isolated_sqlite(folder):
     heads = subprocess.run([sys.executable, "-m", "alembic", "heads"],
                            cwd=ROOT, env=env, capture_output=True, text=True)
     head_lines = [l for l in heads.stdout.splitlines() if l.strip()]
-    assert len(head_lines) == 1 and P2_HEAD in head_lines[0], heads.stdout
+    assert len(head_lines) == 1 and P3_HEAD in head_lines[0], heads.stdout
 
     with sqlite3.connect(mig_db) as conn:
         tables = {r[0] for r in conn.execute(

@@ -34,6 +34,9 @@ from .rate_limit import enforce_rate_limit
 from .request_log import client_ip
 
 MAX_CLOCK_SKEW_SECONDS = 300
+# story-p3-compliance AC7：密钥轮换后旧 secret 的宽限期（7 天），
+# 自 OpenApiClient.rotated_at 起算，超期旧 secret 验签一律 40100。
+ROTATION_GRACE_SECONDS = 7 * 24 * 3600
 
 # 设计方案 §4 的 scope 清单 + probe:read（联调/冒烟探针，无业务数据）。
 KNOWN_SCOPES = frozenset({
@@ -116,7 +119,12 @@ async def _authenticate_v2(session: Session, request: Request) -> OpenApiPrincip
         raise OpenApiError(401, E_SIGN, "接入签名校验失败")
 
     candidates = [key.secret_encrypted]
-    if key.secondary_secret_encrypted:
+    # story-p3-compliance AC7：轮换后的旧密钥只在宽限期内可验签，宽限自
+    # rotated_at 起算；超期即废止（与错签名同一回答，不泄漏废止状态）。
+    rotated_at = _aware(key.rotated_at)
+    if key.secondary_secret_encrypted and rotated_at is not None and (
+            (datetime.now(timezone.utc) - rotated_at).total_seconds()
+            <= ROTATION_GRACE_SECONDS):
         candidates.append(key.secondary_secret_encrypted)  # 轮换宽限期旧密钥
     for cipher in candidates:
         secret = decrypt_bytes(cipher.encode()).decode()

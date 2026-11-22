@@ -166,6 +166,30 @@ def update_openapi_client(client_id: int, payload: OpenApiClientUpdateIn,
     return _client_dict(client)
 
 
+@router.post("/openapi-clients/{client_id}/rotate")
+def rotate_openapi_client(client_id: int,
+                          user: User = Depends(require_role("admin")),
+                          session: Session = Depends(db)):
+    """story-p3-compliance AC7：轮换密钥。
+
+    旧 secret 挪进 secondary 槽，自 rotated_at 起 7 天宽限期内仍可验签
+    （auth.ROTATION_GRACE_SECONDS），超期 40100。新 secret 明文仅此一次。
+    再次轮换会顶掉 secondary 槽——上上任 secret 立即失效。
+    """
+    client = session.get(OpenApiClient, client_id)
+    if not client:
+        raise HTTPException(404, "密钥不存在")
+    secret, cipher = issue_client_secret()
+    client.secondary_secret_encrypted = client.secret_encrypted
+    client.secret_encrypted = cipher
+    client.rotated_at = datetime.now(timezone.utc)
+    audit(session, user, "openapi_client_rotate", "openapi_client", str(client.id),
+          f"轮换开放平台密钥 {client.key_id}（旧密钥 7 天宽限后废止）")
+    result = _client_dict(client)
+    result["secret"] = secret   # 明文仅此一次
+    return result
+
+
 @router.get("/openapi-request-logs")
 def list_openapi_request_logs(key_id: Optional[str] = None,
                               enterprise_id: Optional[int] = None,

@@ -682,6 +682,11 @@ def test_migration_on_isolated_sqlite(folder):
             "seen_at DATETIME NOT NULL)")
         conn.execute("CREATE UNIQUE INDEX ux_nonce_per_key "
                      "ON integration_nonces (key_id, nonce)")
+        # story-p3-compliance 后 head 前移到 e5f8a1c3d7b2（ALTER insured_people），
+        # 隔离库补最小 insured_people 桩，让 upgrade 一路走到新 head。
+        conn.execute("CREATE TABLE insured_people ("
+                     "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                     "id_number VARCHAR(40) DEFAULT '')")
 
     env = {**os.environ, "DATABASE_URL": f"sqlite:///{mig_db}"}
     for args in (["stamp", PREV_HEAD], ["upgrade", "head"]):

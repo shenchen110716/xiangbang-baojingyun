@@ -743,6 +743,10 @@ def test_migration_on_isolated_sqlite(folder):
     mig_db = Path(folder) / "mig.db"
     with sqlite3.connect(mig_db) as conn:
         conn.execute("CREATE TABLE enterprises (id INTEGER PRIMARY KEY)")
+        # story-p3-compliance 后 head 前移（ALTER insured_people）：补最小桩。
+        conn.execute("CREATE TABLE insured_people ("
+                     "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                     "id_number VARCHAR(40) DEFAULT '')")
 
     env = {**os.environ, "DATABASE_URL": f"sqlite:///{mig_db}"}
     for args in (["stamp", P0_HEAD], ["upgrade", "head"]):

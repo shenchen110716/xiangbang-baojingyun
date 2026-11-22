@@ -32,6 +32,12 @@ export function updateOpenApiClient(
   return client.patch<OpenApiClient>(`/openapi-clients/${id}`, data).then((r) => r.data)
 }
 
+// story-p3-compliance AC7：轮换密钥。响应带一次性新 secret；
+// 旧 secret 自 rotated_at 起 7 天宽限期内仍可验签，超期废止。
+export function rotateOpenApiClient(id: number) {
+  return client.post<OpenApiClientIssued>(`/openapi-clients/${id}/rotate`).then((r) => r.data)
+}
+
 export function listOpenApiRequestLogs(params: {
   key_id?: string
   enterprise_id?: number

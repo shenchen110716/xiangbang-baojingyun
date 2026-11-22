@@ -1,5 +1,48 @@
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+
+
+def backfill_insured_id_numbers(connection, batch_size: int = 500) -> int:
+    """story-p3-compliance AC1：回填 insured_people 的 hash/cipher 列。
+
+    幂等可重跑：只挑「明文（TRIM 后）非空且 hash 或 cipher 缺失」的行；
+    分批 SELECT … LIMIT 扫描，逐行 UPDATE。注意：Alembic 下整个迁移仍是
+    **单事务**（分批只是避免一次性把全表读进内存，并非分事务提交）；
+    生产大表的迁移窗口评估见交接文档 openapi-p3-compliance.md。
+    被 Alembic 迁移（PostgreSQL 权威路径）、SQLite 启动桥和测试共用。
+    返回本次回填的行数（重跑应为 0）。
+
+    密钥防呆（review-p3 B2）：在非 SQLite 库上禁止使用开发缺省
+    ID_ENCRYPTION_KEY 回填——错钥写满 hash/cipher 后，幂等判据只看
+    「非空」，换对密钥重跑是 0 行，投毒不可自愈。
+    """
+    from .config import ID_ENCRYPTION_KEY, _DEV_ID_KEY
+    from .id_number import id_encrypt, id_hash
+
+    dialect = getattr(getattr(connection, "dialect", None), "name", "")
+    if dialect != "sqlite" and ID_ENCRYPTION_KEY == _DEV_ID_KEY:
+        raise RuntimeError(
+            "ID_ENCRYPTION_KEY 未设置（仍为开发默认值），拒绝在非本地 SQLite 库上"
+            "回填 insured_people 身份证号 hash/cipher：错误密钥写入后无法自愈"
+            "（回填幂等判据只看列非空，换对密钥重跑为 0 行）。"
+            "请先 export ID_ENCRYPTION_KEY=<正式密钥> 再执行 alembic upgrade。")
+
+    total = 0
+    while True:
+        rows = connection.execute(text(
+            "SELECT id, id_number FROM insured_people "
+            "WHERE id_number IS NOT NULL AND TRIM(id_number) != '' "
+            "AND (id_number_hash IS NULL OR id_number_hash = '' "
+            "     OR id_number_cipher IS NULL OR id_number_cipher = '') "
+            "ORDER BY id LIMIT :n"), {"n": batch_size}).fetchall()
+        if not rows:
+            return total
+        for row_id, plain in rows:
+            connection.execute(text(
+                "UPDATE insured_people SET id_number_hash = :h, "
+                "id_number_cipher = :c WHERE id = :i"),
+                {"h": id_hash(plain), "c": id_encrypt(plain), "i": row_id})
+        total += len(rows)
 
 
 def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
@@ -66,6 +109,12 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     insured_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(insured_people)")}
     if "id_number" not in insured_columns: s.connection().exec_driver_sql("ALTER TABLE insured_people ADD COLUMN id_number VARCHAR(40) DEFAULT ''")
     if "position_id" not in insured_columns: s.connection().exec_driver_sql("ALTER TABLE insured_people ADD COLUMN position_id INTEGER")
+    # story-p3-compliance 双写列（Alembic 权威迁移 = openapi_p3_compliance）：
+    # hash 查重 + cipher 展示解密；回填幂等，每次启动跑一遍兜底存量行。
+    if "id_number_hash" not in insured_columns: s.connection().exec_driver_sql("ALTER TABLE insured_people ADD COLUMN id_number_hash VARCHAR(64) DEFAULT ''")
+    if "id_number_cipher" not in insured_columns: s.connection().exec_driver_sql("ALTER TABLE insured_people ADD COLUMN id_number_cipher TEXT")
+    s.connection().exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_insured_people_id_number_hash ON insured_people (id_number_hash)")
+    backfill_insured_id_numbers(s.connection())
     position_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(work_positions)")}
     if "actual_employer_id" not in position_columns: s.connection().exec_driver_sql("ALTER TABLE work_positions ADD COLUMN actual_employer_id INTEGER")
     if "created_by" not in position_columns: s.connection().exec_driver_sql("ALTER TABLE work_positions ADD COLUMN created_by INTEGER")
