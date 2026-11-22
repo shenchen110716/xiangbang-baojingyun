@@ -1,0 +1,198 @@
+# Smoke evidence — step 12 attempt 1 — 无忧保开放平台 end-to-end over real HTTP
+# Date: 2026-11-22 13:07:00 +1100  Branch: feature/openapi-platform  HEAD: a71a627 (+uncommitted P1-P3 worktree)
+# Server: python3 -m uvicorn backend.app:app --host 127.0.0.1 --port 8003
+#   env: DATABASE_URL=sqlite:////tmp/smoke-openapi.db  OPENAPI_WEBHOOK_ALLOW_INSECURE=1 (loopback http receiver)
+#   Demo/data.db untouched. Webhook receiver: python3 http.server variant on 127.0.0.1:8077 capturing POSTs.
+# Driver: /tmp/openapi_smoke/driver.py — urllib over the wire only (no TestClient); v2 HMAC-SHA256 signing implemented client-side.
+#
+# NOTE attempt history: run 1 (driver-run1.log) had 3 harness bugs, zero app defects:
+#   - asserted declaration terminal status 'completed' but API contract is 'succeeded' (webhook event name is declaration.completed)
+#   - driver bursts tripped the real 10 req/s rate limit, bleeding 429 into flows 3/4 (itself evidence the limiter works)
+# run 2 below is the authoritative pass on a FRESH isolated DB (server restarted, /tmp/smoke-openapi.db recreated).
+
+===================== DRIVER RUN 2 (authoritative) =====================
+smoke driver start 2026-11-22 13:05:41  base=http://127.0.0.1:8003
+synthetic IDs: 11010519900101031X 110105199001010424 110105199001010539 (valid checksum, test-only)
+
+===== FLOW: 1-bootstrap =====
+  [admin-login] POST /api/auth/login -> HTTP 200
+         body: {"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwic3YiOjEsImV4cCI6MTc5NTM1NjM0MX0.l_zA7UL6R5fx85oB5E3LCStWFg2ILnjFLpSfkODNpmw","token_type":"bearer"}
+  [create-enterprise] POST /api/enterprises -> HTTP 200
+         body: {"id":2,"name":"开放平台烟测沙箱企业","kind":"沙箱","credit_code":"","contact":"","phone":"","status":"pending","agent_id":null,"premium_balance":0.0,"usage_balance":0.0,"usage_fee_daily":0.1,"alert_days":3,"usage_alert_threshold":null,"created_at":"2026-11-22T02:05:41.681143"}
+  [fund-usage] POST /api/enterprises/2/recharge -> HTTP 200
+         body: {"id":2,"name":"开放平台烟测沙箱企业","kind":"沙箱","credit_code":"","contact":"","phone":"","status":"pending","agent_id":null,"premium_balance":0.0,"usage_balance":1000.0,"usage_fee_daily":0.1,"alert_days":3,"usage_alert_threshold":null,"created_at":"2026-11-22T02:05:41.681143"}
+  [issue-client] POST /api/openapi-clients -> HTTP 200
+         body: {"id": 1, "enterprise_id": 2, "name": "smoke-sandbox-key", "key_id": "oka5c15a02f5b6735d710a39d7", "scopes": ["probe:read", "insured:read", "declaration:write", "account:read", "recharge:write", "policy:read", "webhook:manage"], "allowed_employer_ids": [], "ip_allowlist": [], "status": "active", "env": "sandbox", "expires_at": null, "rotated_at": null, "created_at": "2026-11-22T02:05:41.713131+00:00", "secret": "AkmnsU...[redacted]"}
+  key_id=oka5c15a02f5b6735d710a39d7 client_id=1 (secret captured, redacted in log)
+----- 1-bootstrap: PASS
+
+===== FLOW: 2-signature-chain =====
+  [unsigned] GET /openapi/v1/insured-persons -> HTTP 401
+         body: {"code":40100,"message":"接入认证信息不完整","data":null,"request_id":"2d42eae0814243e3914dde8486e65846"}
+  [signed-list] GET /openapi/v1/insured-persons?limit=10 -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"items": [], "next_cursor": null}, "request_id": "580c915c121a43f288a290ab34e87bd6"}
+  [replay-nonce] GET /openapi/v1/insured-persons?limit=10 -> HTTP 401
+         body: {"code": 40100, "message": "请求已被处理，请勿重放", "data": null, "request_id": "8be1875d8f814ca59cd5514f146ca646"}
+  [skewed-ts] GET /openapi/v1/insured-persons -> HTTP 401
+         body: {"code": 40100, "message": "接入时间戳已过期", "data": null, "request_id": "60f4df63cd2b41409d8eafb53bef6757"}
+----- 2-signature-chain: PASS
+
+===== FLOW: 6a-webhook-register =====
+  [register] POST /openapi/v1/webhooks -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"id": 1, "url": "http://127.0.0.1:8077/hook", "status": "active", "created_at": "2026-11-22T02:05:41.740079+00:00"}, "request_id": "ce641c7fdcd24022ab18aec54791d4ce"}
+  [test-event] POST /openapi/v1/webhooks/1/test -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"event_id": "96a897954fdb4941a79a83c4e2817f96", "status": "pending"}, "request_id": "131a46ab05a34de3bb8b6253ca88468c"}
+----- 6a-webhook-register: PASS
+
+===== FLOW: 5-write-declarations =====
+  [enroll-1st] POST /openapi/v1/enrollments -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"declaration_id": 1, "status": "accepted", "item_count": 2}, "request_id": "370f5daa02af4b7abd9373aecdee1016"}
+  [enroll-replay] POST /openapi/v1/enrollments -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"declaration_id": 1, "status": "accepted", "item_count": 2}, "request_id": "a48a9d5474134dc19e5b68006fba6659"}
+  [enroll-conflict] POST /openapi/v1/enrollments -> HTTP 409
+         body: {"code": 42200, "message": "该 Idempotency-Key 已用于不同的请求，请更换新的 Idempotency-Key", "data": null, "request_id": "4e6b5879cd5145a1a7a0742aaeaa5635"}
+  [enroll-no-key] POST /openapi/v1/enrollments -> HTTP 422
+         body: {"code": 42200, "message": "缺少 Idempotency-Key 请求头", "data": null, "request_id": "77ac1af75fcd40a7b67e9fe0cd0ce017"}
+  [decl-list] GET /openapi/v1/declarations -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"items": [{"declaration_id": 1, "kind": "enrollment", "status": "processing", "item_count": 2, "created_at": "2026-11-22T02:05:41.758220", "finished_at": null}], "next_cursor": null}, "request_id": "728b94aee6124b76b04a24b856937263"}
+  [decl-detail] GET /openapi/v1/declarations/1 -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"declaration_id": 1, "kind": "enrollment", "status": "processing", "item_count": 2, "created_at": "2026-11-22T02:05:41.758220", "finished_at": null, "items": [{"external_person_id": "", "person_id": 1, "name": "烟测甲", "id_number": "110***********031X", "status": "pending", "reason": null, "finished_at": null}, {"external_person_id": "", "person_id": 2, "name": "烟测乙", "id_number": "110***********0424", "status": "pending", "reason": null, "finished_at": null}]}, "request_id": "afe7e481cc864802b04a1917748c8a7c"}
+  [admin-confirm] PATCH /api/insured/1/status?status=active -> HTTP 200
+         body: {"id":1,"enterprise_id":2,"name":"烟测甲","phone":"13800000001","id_number":"11010519900101031X","occupation":"","occupation_class":"3类","position_id":null,"status":"active","insurer_flag_reason":"","insurer_flagged_at":null,"insurer_flagged_by":null,"policy_id":null,"created_at":"2026-11-22T10:05:41.761003","effective_at":null,"terminated_at":null}
+  [admin-confirm] PATCH /api/insured/2/status?status=active -> HTTP 200
+         body: {"id":2,"enterprise_id":2,"name":"烟测乙","phone":"13800000002","id_number":"110105199001010424","occupation":"","occupation_class":"3类","position_id":null,"status":"active","insurer_flag_reason":"","insurer_flagged_at":null,"insurer_flagged_by":null,"policy_id":null,"created_at":"2026-11-22T10:05:41.763329","effective_at":null,"terminated_at":null}
+  [decl-after-confirm] GET /openapi/v1/declarations/1 -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"declaration_id": 1, "kind": "enrollment", "status": "succeeded", "item_count": 2, "created_at": "2026-11-22T02:05:41.758220", "finished_at": "2026-11-22T02:05:41.808881", "items": [{"external_person_id": "", "person_id": 1, "name": "烟测甲", "id_number": "110***********031X", "status": "succeeded", "reason": null, "finished_at": "2026-11-22T02:05:41.801609"}, {"external_person_id": "", "person_id": 2, "name": "烟测乙", "id_number": "110***********0424", "status": "succeeded", "reason": null, "finished_at": "2026-11-22T02:05:41.808881"}]}, "request_id": "702df6a...[truncated, 627 chars total]
+  [terminate-1st] POST /openapi/v1/terminations -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"declaration_id": 2, "status": "accepted", "item_count": 1}, "request_id": "27ee2689c75f498fb520c46bc6d72877"}
+  [terminate-replay] POST /openapi/v1/terminations -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"declaration_id": 2, "status": "accepted", "item_count": 1}, "request_id": "555278c2a7614853bd001f95f57ddee6"}
+----- 5-write-declarations: PASS
+
+===== FLOW: 3-read-insured =====
+  [page-1] GET /openapi/v1/insured-persons?limit=1 -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"items": [{"id": 2, "name": "烟测乙", "phone": "13800000002", "id_number": "110***********0424", "status": "active", "status_label": "在保", "position_id": null, "occupation": "", "occupation_class": "3类", "created_at": "2026-11-22T10:05:41.763329"}], "next_cursor": "2"}, "request_id": "14a84d86dbd445f18e7ab07c51502b0a"}
+  [page-2] GET /openapi/v1/insured-persons?limit=1&cursor=2 -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"items": [{"id": 1, "name": "烟测甲", "phone": "13800000001", "id_number": "110***********031X", "status": "active", "status_label": "在保", "position_id": null, "occupation": "", "occupation_class": "3类", "created_at": "2026-11-22T10:05:41.761003"}], "next_cursor": "1"}, "request_id": "284267c103a54d92a7018829c727a014"}
+  [detail] GET /openapi/v1/insured-persons/2 -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"id": 2, "name": "烟测乙", "phone": "13800000002", "id_number": "110***********0424", "status": "active", "status_label": "在保", "position_id": null, "occupation": "", "occupation_class": "3类", "created_at": "2026-11-22T10:05:41.763329", "coverage": null}, "request_id": "93c46554b8be460f873ec5465262ba32"}
+----- 3-read-insured: PASS
+
+===== FLOW: 4-export-xlsx =====
+  [export-create] POST /openapi/v1/insured-persons/export -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"task_id": 1, "status": "pending"}, "request_id": "637a1758b72d4b3496421977ca664485"}
+  [export-poll-final] GET /openapi/v1/export-tasks/1 -> HTTP 200
+         body: {"task_id": 1, "task_type": "insured_persons", "status": "done", "created_at": "2026-11-22T02:05:45.959299", "finished_at": "2026-11-22T02:06:06.748961", "error": null, "download_url": "/openapi/v1/export-files/1?token=9ad7153757f0e900faad0eaca2925508e19ad83cd0435b59ada48e9ada069f2d&expires=1795313471", "download_expires_at": 1795313471}
+  [export-download] GET /openapi/v1/export-files/1?token=9ad7153757f0e900faad0eaca2925508e19ad83cd0435b59ada48e9ada069f2d&expires=1795313471 -> HTTP 200
+         resp-headers: {'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content-length': '5174'}
+         body: <5174 bytes, first4=b'PK\x03\x04'>
+  saved 5174 bytes to /tmp/openapi_smoke/export.xlsx
+----- 4-export-xlsx: PASS
+
+===== FLOW: 6b-webhook-delivery =====
+  captured 4 deliveries
+  delivery event_type=webhook.test event_id=96a897954fdb4941a79a83c4e2817f96 sig_valid=True key=oka5c15a02f5b6735d710a39d7
+    body: {"event_id": "96a897954fdb4941a79a83c4e2817f96", "event_type": "webhook.test", "occurred_at": "2026-11-22T02:05:41.747381", "data": {"endpoint_id": 1}}
+  delivery event_type=insured.activated event_id=deda4351285f454d8b38a90c37ad01d3 sig_valid=True key=oka5c15a02f5b6735d710a39d7
+    body: {"event_id": "deda4351285f454d8b38a90c37ad01d3", "event_type": "insured.activated", "occurred_at": "2026-11-22T02:05:41.804152", "data": {"person_id": 1, "enterprise_id": 2, "external_person_id": "", "status": "active"}}
+  delivery event_type=declaration.completed event_id=469586a2921645a8b4349e6e50d2bbca sig_valid=True key=oka5c15a02f5b6735d710a39d7
+    body: {"event_id": "469586a2921645a8b4349e6e50d2bbca", "event_type": "declaration.completed", "occurred_at": "2026-11-22T02:05:41.810675", "data": {"declaration_id": 1, "kind": "enrollment", "status": "succeeded", "item_count": 2}}
+  delivery event_type=insured.activated event_id=280595f5320a4b54b9e146f8c6a70513 sig_valid=True key=oka5c15a02f5b6735d710a39d7
+    body: {"event_id": "280595f5320a4b54b9e146f8c6a70513", "event_type": "insured.activated", "occurred_at": "2026-11-22T02:05:41.810677", "data": {"person_id": 2, "enterprise_id": 2, "external_person_id": "", "status": "active"}}
+  events received: ['webhook.test', 'insured.activated', 'declaration.completed', 'insured.activated']
+----- 6b-webhook-delivery: PASS
+
+===== FLOW: 7-rate-limit =====
+  fired 10 rapid signed GET /openapi/v1/ping: statuses=[200, 200, 200, 200, 200, 200, 200, 200, 200, 429]
+  [rate-limited] GET /openapi/v1/ping -> HTTP 429
+         resp-headers: {'retry-after': '1', 'content-length': '123', 'content-type': 'application/json'}
+         body: {"code": 42900, "message": "请求过于频繁，请稍后重试", "data": null, "request_id": "72ca5c7584e04bd7b1a9473a1c4f8941"}
+  Retry-After: 1
+----- 7-rate-limit: PASS
+
+===== FLOW: 8-secret-rotation =====
+  [rotate] POST /api/openapi-clients/1/rotate -> HTTP 200
+         body: {"id": 1, "enterprise_id": 2, "name": "smoke-sandbox-key", "key_id": "oka5c15a02f5b6735d710a39d7", "scopes": ["probe:read", "insured:read", "declaration:write", "account:read", "recharge:write", "policy:read", "webhook:manage"], "allowed_employer_ids": [], "ip_allowlist": [], "status": "active", "env": "sandbox", "expires_at": null, "rotated_at": "2026-11-22T02:06:13.867910+00:00", "created_at": "2026-11-22T02:05:41.713131", "secret": "0jZ_fU...[redacted]"}
+  [old-secret-grace] GET /openapi/v1/ping -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"pong": true, "demo": null, "enterprise_id": 2, "env": "sandbox", "key_id": "oka5c15a02f5b6735d710a39d7", "server_time": "2026-11-22T02:06:15.522093+00:00"}, "request_id": "11a9448fcc1f47b2b3f03a064dbfc424"}
+  [new-secret] GET /openapi/v1/ping -> HTTP 200
+         body: {"code": 0, "message": "ok", "data": {"pong": true, "demo": null, "enterprise_id": 2, "env": "sandbox", "key_id": "oka5c15a02f5b6735d710a39d7", "server_time": "2026-11-22T02:06:15.532182+00:00"}, "request_id": "b406650188fa41f19edd99c726227cc7"}
+----- 8-secret-rotation: PASS
+
+===== SUMMARY =====
+1-bootstrap: PASS
+2-signature-chain: PASS
+6a-webhook-register: PASS
+5-write-declarations: PASS
+3-read-insured: PASS
+4-export-xlsx: PASS
+6b-webhook-delivery: PASS
+7-rate-limit: PASS
+8-secret-rotation: PASS
+OVERALL: PASS
+
+===================== XLSX CONTENT VERIFICATION (openpyxl) =====================
+sheet: 参保人员名单 rows: 3
+['人员ID', '姓名', '手机号', '证件号', '状态', '状态说明', '岗位ID', '工种', '职业类别', '建档时间']
+[1, '烟测甲', '13800000001', '110***********031X', 'active', '在保', None, None, '3类', '2026-11-22T10:05:41.761003']
+[2, '烟测乙', '13800000002', '110***********0424', 'active', '在保', None, None, '3类', '2026-11-22T10:05:41.763329']
+=> valid XLSX (PK zip magic + openpyxl parse), id_number masked in export (key has no insured:read_sensitive)
+
+===================== FLOW VERDICTS =====================
+| Flow | Verdict | Notes |
+|---|---|---|
+| 1 bootstrap (admin JWT -> sandbox enterprise -> usage recharge -> OpenApiClient issue) | PASS | secret returned exactly once at issuance |
+| 2 signature chain (unsigned 401/40100; signed 200/0; nonce replay 401; ts skew -1000s 401) | PASS | unified envelope with request_id on every response |
+| 3 read (cursor pagination limit=1 x2 pages; detail; id masked 前3+*+后4) | PASS | no plaintext id in any read response |
+| 4 async export (enqueue -> poll ~25s -> done -> signed URL -> XLSX bytes + parse) | PASS | download via short-lived token, no signature headers needed |
+| 5 write (enrollment Idempotency-Key: replay=same declaration_id, diff-body=409, missing=422; admin confirm -> succeeded; termination + idempotent replay) | PASS | exactly 1 declaration after replay — no duplicate |
+| 6 webhook (register loopback http via OPENAPI_WEBHOOK_ALLOW_INSECURE; test event + insured.activated x2 + declaration.completed delivered; v2 signature verified on all 4; X-Event-Id present; no plaintext id in payloads) | PASS | deliveries arrived on background tick (~30s) |
+| 7 rate limit (10/s default; 10th rapid ping -> 429, code 42900, Retry-After: 1) | PASS | real limiter, no config lowered |
+| 8 secret rotation (admin rotate -> old secret OK in grace, new secret OK) | PASS | dual-verify during 7d grace confirmed |
+
+OVERALL: PASS (9/9 driver flows incl. 6a/6b; 0 app defects found)
+
+===================== SERVER LOG TAIL =====================
+INFO:     127.0.0.1:54798 - "GET /openapi/v1/insured-persons?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54799 - "GET /openapi/v1/insured-persons?limit=10 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54800 - "GET /openapi/v1/insured-persons HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54801 - "POST /openapi/v1/webhooks HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54802 - "POST /openapi/v1/webhooks/1/test HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54803 - "POST /openapi/v1/enrollments HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54804 - "POST /openapi/v1/enrollments HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54805 - "POST /openapi/v1/enrollments HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:54806 - "POST /openapi/v1/enrollments HTTP/1.1" 422 Unprocessable Content
+INFO:     127.0.0.1:54807 - "GET /openapi/v1/declarations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54808 - "GET /openapi/v1/declarations/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54809 - "PATCH /api/insured/1/status?status=active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54810 - "PATCH /api/insured/2/status?status=active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54811 - "GET /openapi/v1/declarations/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54812 - "POST /openapi/v1/terminations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54813 - "POST /openapi/v1/terminations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54814 - "GET /openapi/v1/insured-persons?limit=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54815 - "GET /openapi/v1/insured-persons?limit=1&cursor=2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54816 - "GET /openapi/v1/insured-persons/2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54817 - "POST /openapi/v1/insured-persons/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54818 - "GET /openapi/v1/export-tasks/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54819 - "GET /openapi/v1/export-tasks/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54826 - "GET /openapi/v1/export-tasks/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54830 - "GET /openapi/v1/export-tasks/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54831 - "GET /openapi/v1/export-tasks/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54836 - "GET /openapi/v1/export-tasks/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54837 - "GET /openapi/v1/export-files/1?token=9ad7153757f0e900faad0eaca2925508e19ad83cd0435b59ada48e9ada069f2d&expires=1795313471 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54838 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54839 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54840 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54841 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54842 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54843 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54844 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54845 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54846 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54847 - "GET /openapi/v1/ping HTTP/1.1" 429 Too Many Requests
+INFO:     127.0.0.1:54848 - "POST /api/openapi-clients/1/rotate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54849 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54850 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+
+===================== CLEANUP =====================
+uploads/ diff vs pre-run: restored (export artifact uploads/openapi-exports/2/1-*.xlsx deleted)

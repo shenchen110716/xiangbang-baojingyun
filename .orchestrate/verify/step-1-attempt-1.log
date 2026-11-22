@@ -1,0 +1,13 @@
+CMD: wc -l + grep checks on knowledge outputs (2026-11-19T03:25:27Z)
+     157 knowledge/registry/api.yaml
+     118 knowledge/registry/db.md
+      72 knowledge/registry/app.md
+     180 knowledge/architecture/structure.md
+      99 knowledge/architecture/decisions.md
+     626 total
+26
+147:## 设计方案勘误（对照 docs/open-api-platform-design.md，逐条核对后）
+77:## AD-007: 私有文件只走短时签名下载，不静态挂载
+85:## AD-008: SPA 路由显式白名单，项目根不可经 HTTP 触达
+93:## AD-009: 敏感证件号 = HMAC 哈希列 + Fernet 密文列 + 脱敏展示
+EXIT: 0

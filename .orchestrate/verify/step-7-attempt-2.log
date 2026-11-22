@@ -1,0 +1,38 @@
+=== step7 attempt2 verify 2026-11-21T20:49:39Z ===
+--- python3 tests/openapi_write_smoke.py ---
+openapi write smoke passed
+exit=0
+--- python3 tests/openapi_readonly_smoke.py ---
+openapi readonly smoke passed
+exit=0
+--- python3 tests/openapi_foundation_smoke.py ---
+openapi foundation smoke passed
+exit=0
+--- python3 tests/system_smoke.py ---
+system smoke: ok
+exit=0
+--- python3 tests/security_smoke.py ---
+security smoke: ok
+exit=0
+--- python3 tests/participation_lock_smoke.py ---
+participation lock smoke: ok
+exit=0
+--- python3 tests/recharge_smoke.py ---
+recharge smoke: ok
+exit=0
+--- python3 tests/enroll_payment_test.py ---
+enroll payment test: PASS
+exit=0
+--- python3 tests/insured_draft_enroll_test.py ---
+insured draft enroll test: PASS
+exit=0
+--- compileall ---
+exit=0
+--- git diff --check ---
+exit=0
+--- alembic heads ---
+d8e3f6a2b9c4 (head)
+exit=0
+--- npm run build ---
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+exit=0

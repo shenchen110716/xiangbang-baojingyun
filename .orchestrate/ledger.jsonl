@@ -1,0 +1,75 @@
+{"ts":"2026-09-12T07:40:00Z","event":"dispatched","step":"task8-review-queue","desc":"后台审核队列+批准落地InsuredPerson+导出"}
+{"ts":"2026-09-12T07:55:00Z","event":"done","step":"task8-review-queue","evidence":"tests/enroll_review_test.py PASS + regression green, commit"}
+{"ts":"2026-09-12T07:56:00Z","event":"dispatched","step":"task6-h5-enroll-page","desc":"公开H5录入页(Vue)+路由白名单"}
+{"ts":"2026-09-12T08:10:00Z","event":"done","step":"task6-h5-enroll-page","evidence":"vue-tsc clean, build ok, HTTP e2e smoke PASS incl unpaid-block"}
+{"ts":"2026-09-12T08:12:00Z","event":"dispatched","step":"task7-miniprogram-toggles","desc":"小程序岗位表单加缴费开关+二维码展示"}
+{"ts":"2026-09-12T08:25:00Z","event":"done","step":"task7-miniprogram-toggles","evidence":"regression suite green incl Optional-flag fix"}
+{"ts":"2026-09-12T08:40:00Z","event":"done","step":"task8-review-ui","evidence":"vue-tsc clean, build ok, route 200"}
+{"ts":"2026-09-14T10:20:00Z","event":"done","step":"vps-deploy","evidence":"139.9.105.198 rsync+pip(tuna)+alembic f1a2b3->427ea6 on prod PG + restart; bx.xbbzp.com api-health/enroll-review/enroll-h5/login all 200 from public internet, data.db still 404"}
+{"ts":"2026-09-14T10:40:00Z","event":"done","step":"miniprogram-upload","evidence":"miniprogram-ci upload 1.20260914.0 done via robot1; DEFAULT_API_BASE switched render->bx.xbbzp.com and pushed"}
+{"ts":"2026-09-14T11:00:00Z","event":"dispatched","step":"plan-image-backend","desc":"方案图片：模型+迁移+上传/签名下载端点"}
+{"ts":"2026-09-14T11:20:00Z","event":"done","step":"plan-image-backend","evidence":"plan_image_test PASS, commit 3e9553a"}
+{"ts":"2026-09-14T11:21:00Z","event":"dispatched","step":"plan-image-web","desc":"管理端上传+企业端查看下载"}
+{"ts":"2026-09-14T11:40:00Z","event":"done","step":"plan-image-web","evidence":"vue-tsc clean, build ok"}
+{"ts":"2026-09-14T11:41:00Z","event":"dispatched","step":"plan-image-miniprogram","desc":"产品详情页查看+保存到相册"}
+{"ts":"2026-09-14T11:55:00Z","event":"done","step":"plan-image-miniprogram","evidence":"full regression green, commits 3e9553a/e30adae/+mp"}
+{"ts":"2026-09-14T12:10:00Z","event":"dispatched","step":"plan-image-release","desc":"部署VPS+小程序更新上传"}
+{"ts":"2026-09-15T08:50:00Z","event":"done","step":"plan-image-release","evidence":"VPS: alembic 427ea6->9c3d1e on prod PG, image cols verified, service active, bx health/login 200, image-link route mounted; miniprogram 1.20260915.0 uploaded via robot1"}
+{"ts":"2026-09-20T09:10:00Z","event":"dispatched","step":"two-step-enroll-backend","desc":"draft状态+批量参保端点，参保时才过使用费门禁"}
+{"ts":"2026-09-20T10:20:00Z","event":"done","step":"two-step-enroll-backend","evidence":"insured_draft_enroll_test PASS + full regression"}
+{"ts":"2026-09-20T10:20:01Z","event":"done","step":"two-step-enroll-frontends","evidence":"mp syntax ok, vue-tsc clean, build ok, single commit"}
+{"ts":"2026-09-20T10:30:00Z","event":"dispatched","step":"two-step-enroll-deploy","desc":"部署两步参保到bx.xbbzp.com"}
+{"ts":"2026-09-20T10:45:00Z","event":"done","step":"two-step-enroll-deploy","evidence":"rsync+restart, alembic head unchanged 9c3d1e, bx health/workers 200, logs clean; mp upload blocked: key file wiped"}
+{"ts":"2026-09-20T11:05:00Z","event":"done","step":"miniprogram-update-1.20260920.0","evidence":"miniprogram-ci upload done via robot1; includes two-step-enroll + plan-image; key copy deleted"}
+{"ts":"2026-09-21T02:30:00Z","event":"done","step":"insured-delete","evidence":"draft-only delete + 3-end UI, tests green"}
+{"ts":"2026-09-21T02:40:00Z","event":"dispatched","step":"insured-delete-deploy","desc":"部署人员删除到bx.xbbzp.com"}
+{"ts":"2026-09-21T03:00:00Z","event":"done","step":"insured-delete-deploy","evidence":"VPS deployed (backup+rsync+restart, bx health/workers 200, logs clean); miniprogram 1.20260921.0 uploaded via robot1"}
+{"e":"run_start","run":"r-20261119-openapi-platform","intent":"完整实现并上线无忧保开放平台 Open API（设计方案 docs/open-api-platform-design.md P0-P3 四期），在 FastAPI 单体内新增 /openapi/v1 路由层并发布到生产 bx.xbbzp.com","actor":"shen110716@gmail.com","ts":"2026-11-19T03:08:01Z"}
+{"e":"plan","run":"r-20261119-openapi-platform","steps":[{"n":1,"skill":"map-codebase","title":"代码库测绘（registry 为空的强制预检）"},{"n":2,"skill":"draft-story","title":"按设计方案拆分 P0-P3 故事"},{"n":3,"skill":"implement","title":"P0 地基：密钥管理+签名v2+限流+审计+任务循环+沙箱"},{"n":4,"skill":"review-code","title":"P0 评审"},{"n":5,"skill":"implement","title":"P1 只读：名单/保单/余额/流水/导出+文档"},{"n":6,"skill":"review-code","title":"P1 评审"},{"n":7,"skill":"implement","title":"P2 写入：申报单全链路+充值+幂等+webhook"},{"n":8,"skill":"review-code","title":"P2 评审"},{"n":9,"skill":"implement","title":"P3 合规硬化：证件号加密迁移+脱敏收敛+密钥轮换"},{"n":10,"skill":"review-code","title":"P3 评审"},{"n":11,"skill":"run-tests","title":"全量回归（smoke 套件+新增测试）"},{"n":12,"skill":"smoke-test","title":"外部冒烟：沙箱密钥全链路真实 HTTP 调用"},{"n":13,"skill":"release-closeout","title":"发布收尾记录"},{"n":14,"skill":"deploy","title":"生产发布：VPS rsync+alembic+重启+线上验证"}]}
+{"e":"gate","run":"r-20261119-openapi-platform","kind":"inline_accept","question":"前门确认：发布节奏（一次上线 vs 分批）与 taste 种子授权","ts":"2026-11-19T03:08:10Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":1,"skill":"map-codebase","status":"dispatched","attempt":1,"model":"fable","ts":"2026-11-19T03:15:25Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":1,"skill":"map-codebase","status":"done","attempt":1,"model":"fable-subagent","evidence":".orchestrate/verify/step-1-attempt-1.log","ts":"2026-11-19T03:25:27Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":2,"skill":"draft-story","status":"dispatched","attempt":1,"model":"fable-subagent","ts":"2026-11-19T03:25:37Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":2,"skill":"draft-story","status":"done","attempt":1,"model":"fable-subagent","evidence":".orchestrate/verify/step-2-attempt-1.log","ts":"2026-11-19T03:36:13Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":3,"skill":"implement","status":"dispatched","attempt":1,"model":"fable-subagent","ts":"2026-11-19T03:36:33Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":3,"skill":"implement","status":"done","attempt":1,"model":"fable-subagent","evidence":".orchestrate/verify/step-3-attempt-1.log","ts":"2026-11-19T06:38:24Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":4,"skill":"review-code","status":"dispatched","attempt":1,"model":"fable-subagent","ts":"2026-11-19T06:38:24Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":4,"skill":"review-code","status":"done","attempt":1,"model":"fable-subagent","evidence":"docs/stories/review-p0.md changes_requested B1+M1/M2/M4 (M3为run前已有改动,误判)","ts":"2026-11-19T06:45:32Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":3,"skill":"implement","status":"dispatched","attempt":2,"model":"fable-subagent","ts":"2026-11-19T06:45:32Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":3,"skill":"implement","status":"done","attempt":2,"model":"fable-subagent","evidence":".orchestrate/verify/step-3-attempt-2.log","ts":"2026-11-19T06:55:18Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":4,"skill":"review-code","status":"dispatched","attempt":2,"model":"fable-subagent","ts":"2026-11-19T06:55:18Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":4,"skill":"review-code","status":"done","attempt":2,"model":"fable-subagent","evidence":"docs/stories/review-p0.md approved; P0 committed fbd176a","ts":"2026-11-19T06:58:47Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":5,"skill":"implement","status":"dispatched","attempt":1,"model":"fable-subagent","ts":"2026-11-19T06:58:47Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":5,"skill":"implement","status":"dispatched","attempt":2,"model":"fable-subagent","note":"attempt1 died at spawn (weekly limit), zero work","ts":"2026-11-21T10:19:42Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":5,"skill":"implement","status":"done","attempt":2,"model":"fable-subagent","evidence":".orchestrate/verify/step-5-attempt-2.log","ts":"2026-11-21T10:43:42Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":6,"skill":"review-code","status":"dispatched","attempt":1,"model":"fable-subagent","ts":"2026-11-21T10:43:42Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":6,"skill":"review-code","status":"done","attempt":1,"model":"fable-subagent","evidence":"docs/stories/review-p1.md changes_requested M1 ledger-time-tz M2 export-file-scope-escape M3 stuck-processing","ts":"2026-11-21T10:54:34Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":5,"skill":"implement","status":"dispatched","attempt":3,"model":"fable-subagent","note":"rework per review-p1.md","ts":"2026-11-21T10:54:34Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":5,"skill":"implement","status":"done","attempt":3,"model":"fable-subagent","evidence":".orchestrate/verify/step-5-attempt-3.log","ts":"2026-11-21T11:09:00Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":6,"skill":"review-code","status":"dispatched","attempt":2,"model":"fable-subagent","note":"re-review after rework","ts":"2026-11-21T11:09:00Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":6,"skill":"review-code","status":"done","attempt":2,"model":"fable-subagent","evidence":"docs/stories/review-p1.md approved (attempt2); n1/n2 non-blocking","ts":"2026-11-21T15:14:40Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":7,"skill":"implement","status":"dispatched","attempt":1,"model":"fable-subagent","note":"P1 committed dfe53ca","ts":"2026-11-21T15:15:09Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":7,"skill":"implement","status":"done","attempt":1,"model":"fable-subagent","evidence":".orchestrate/verify/step-7-attempt-1.log","ts":"2026-11-21T16:11:17Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":8,"skill":"review-code","status":"dispatched","attempt":1,"model":"fable-subagent","ts":"2026-11-21T16:11:17Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":8,"skill":"review-code","status":"done","attempt":1,"model":"fable-subagent","evidence":"docs/stories/review-p2.md changes_requested B1+M1-M7","ts":"2026-11-21T20:25:13Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":7,"skill":"implement","status":"dispatched","attempt":2,"model":"fable-subagent","note":"rework per review-p2.md","ts":"2026-11-21T20:25:13Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":7,"skill":"implement","status":"done","attempt":2,"model":"fable-subagent","evidence":".orchestrate/verify/step-7-attempt-2.log","ts":"2026-11-21T20:50:45Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":8,"skill":"review-code","status":"dispatched","attempt":2,"model":"fable-subagent","note":"re-review after rework","ts":"2026-11-21T20:50:45Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":8,"skill":"review-code","status":"done","attempt":2,"model":"fable-subagent","evidence":"docs/stories/review-p2.md approved (attempt2)","ts":"2026-11-21T20:57:11Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":9,"skill":"implement","status":"dispatched","attempt":1,"model":"fable-subagent","note":"P2 committed 58141f3","ts":"2026-11-21T20:57:36Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":9,"skill":"implement","status":"done","attempt":1,"model":"fable-subagent","evidence":".orchestrate/verify/step-9-attempt-1.log","ts":"2026-11-22T01:29:07Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":10,"skill":"review-code","status":"dispatched","attempt":1,"model":"fable-subagent","ts":"2026-11-22T01:29:07Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":10,"skill":"review-code","status":"done","attempt":1,"model":"fable-subagent","evidence":"docs/stories/review-p3.md changes_requested B1(pg-verify run级)+B2(回填密钥防呆)+M1(UI文案)","ts":"2026-11-22T01:38:36Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":9,"skill":"implement","status":"dispatched","attempt":2,"model":"fable-subagent","note":"rework B2+M1+minors per review-p3.md","ts":"2026-11-22T01:38:36Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":9,"skill":"implement","status":"done","attempt":2,"model":"fable-subagent","evidence":".orchestrate/verify/step-9-attempt-2.log","ts":"2026-11-22T01:45:15Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":10,"skill":"review-code","status":"dispatched","attempt":2,"model":"fable-subagent","note":"re-review after rework","ts":"2026-11-22T01:45:15Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":10,"skill":"review-code","status":"done","attempt":2,"model":"fable-subagent","evidence":"docs/stories/review-p3.md approved(代码面,attempt2); B1=pg-verify留部署步","ts":"2026-11-22T01:48:09Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":11,"skill":"run-tests","status":"dispatched","attempt":1,"model":"orchestrator-inline","note":"P3 committed 26c3cab","ts":"2026-11-22T01:48:37Z"}
+{"e":"step","run":"r-20261119-openapi-platform","n":11,"skill":"run-tests","status":"done","attempt":2,"evidence":"74/74 test files pass (.orchestrate/verify/step-11-attempt-2.log). Attempt-1 的 12 个失败三类修复：①core/migrations.py integration_nonces 索引创建加表存在性守卫（修 employer_scope_model_test no such table）；②pip3 install httpx2（insurer 系 10 文件为环境依赖缺失，非本 run 回归）；③timeliness_reporting_test 证件号断言改完整号精确匹配并补子串=0 断言（P3 评审已接受的行为变更）。compileall 通过。"}
+{"e":"step","run":"r-20261119-openapi-platform","n":12,"skill":"smoke-test","status":"dispatched","attempt":1}
+{"e":"step","run":"r-20261119-openapi-platform","n":12,"skill":"smoke-test","status":"done","attempt":1,"evidence":"真机 HTTP 全链路 9/9 PASS（.orchestrate/verify/step-12-attempt-1.log）：签名链（未签名40100/重放拒绝/时间戳偏移拒绝）、游标分页+证件号掩码、异步导出XLSX、幂等申报（重放同ID无重复/异体409/缺键422）、回执webhook 4次投递签名全验证通过、限流第10次429、密钥轮换宽限期双验证。隔离临时库，清理完毕，data.db 未触碰。"}
+{"e":"step","run":"r-20261119-openapi-platform","n":13,"skill":"release-closeout","status":"dispatched","attempt":1}
+{"e":"step","run":"r-20261119-openapi-platform","n":13,"skill":"release-closeout","status":"done","attempt":1,"evidence":"closeout_note 已产出；README/CLAUDE.md 更新（提交 2073584），knowledge/registry/{app.md,api.yaml,db.md} 同步（表 41→50、新 Alembic head e5f8a1c3d7b2、/openapi/v1 面）；集成文档 docs/open-api-usage-guide.md 已随代码同步。"}
+{"e":"step","run":"r-20261119-openapi-platform","n":14,"skill":"deploy","status":"dispatched","attempt":1,"model":"orchestrator-inline"}
+{"e":"step","run":"r-20261119-openapi-platform","n":14,"skill":"deploy","status":"done","attempt":1,"evidence":"PG16 临时库迁移+回填演练通过（4 迁移链全绿、待回填 0 行）；merge 97c6873 → main；生产 alembic_version=e5f8a1c3d7b2；rsync 代码+前端并重启 systemd → active；bx.xbbzp.com 外验：/ 200、/api 422、/openapi/v1/ping 未签名 40100 封装、openapi.json 200、日志无错误；临时库与暂存目录已清理；已 push origin HEAD:wuyoubao-archive。详见 .orchestrate/verify/step-14-attempt-1.log"}
+{"e":"run","run":"r-20261119-openapi-platform","status":"done","evidence":"P0–P3 全部实现、评审通过、回归 74/74、HTTP 冒烟 9/9、release-closeout 完成、生产上线验证通过"}

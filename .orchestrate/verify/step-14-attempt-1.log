@@ -1,0 +1,19 @@
+step 14 deploy — r-20261119-openapi-platform — 2026-11-22
+1. PG16 临时库演练（review-p3 B1 义务）：
+   - VPS 139.9.105.198，pg_dump xbbzp_baojingyun_prod → xbbzp_openapi_check
+   - app-next 暂存目录跑 alembic upgrade head（带生产 ID_ENCRYPTION_KEY，非 dev 默认，已验证 KEY_IS_CUSTOM）
+   - 9c3d1e5f7a2b → a1f4e8c2d6b0 → c7d2e9f4a1b8 → d8e3f6a2b9c4 → e5f8a1c3d7b2 全部成功
+   - 回填检查：待回填行 0（生产 insured_people 共 0 行），openapi 相关新表 10 个存在
+2. 合并：feature/openapi-platform → main，merge commit 97c6873（--no-ff）
+3. 生产切换：
+   - alembic upgrade head on xbbzp_baojingyun_prod：4 个迁移全部执行，alembic_version=e5f8a1c3d7b2
+   - rsync backend/ + web/dist(--delete) + alembic.ini + requirements.txt 入 /opt/xbbzp-baojingyun/app（requirements 无新增依赖，venv 未动）
+   - 清 __pycache__，systemctl restart xbbzp-baojingyun.service → active
+4. 线上外部验证（https://bx.xbbzp.com）：
+   - GET / → 200（新前端已服务）
+   - POST /api/auth/login 空体 → 422（API 正常）
+   - GET /openapi/v1/ping 未签名 → {"code":40100,"message":"接入认证信息不完整",...,request_id}（开放平台面已上线）
+   - GET /openapi/v1/openapi.json → 200
+   - journalctl 近 3 分钟无 error/traceback
+5. 清理：临时库 DROP，app-next 删除；生产 openapi% 表 8 个确认存在
+6. push：git push origin HEAD:wuyoubao-archive（main 内容）

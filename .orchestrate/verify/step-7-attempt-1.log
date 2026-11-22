@@ -1,0 +1,35 @@
+=== step7 verify 2026-11-21T16:10:15Z ===
+--- python3 tests/openapi_write_smoke.py ---
+  AC2 幂等键 7 天清理 ok
+openapi write smoke passed
+exit=0
+--- python3 tests/openapi_readonly_smoke.py ---
+  AC1(本地) export_tasks 迁移在隔离 SQLite 走通 ok
+openapi readonly smoke passed
+exit=0
+--- python3 tests/openapi_foundation_smoke.py ---
+  AC4(原语不变) ok
+openapi foundation smoke passed
+exit=0
+--- python3 tests/system_smoke.py ---
+system smoke: ok
+exit=0
+--- python3 tests/security_smoke.py ---
+security smoke: ok
+exit=0
+--- python3 tests/participation_lock_smoke.py ---
+participation lock smoke: ok
+exit=0
+--- python3 tests/recharge_smoke.py ---
+recharge smoke: ok
+exit=0
+--- compileall ---
+exit=0
+--- git diff --check ---
+exit=0
+--- alembic heads ---
+d8e3f6a2b9c4 (head)
+exit=0
+--- npm run build ---
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+exit=0

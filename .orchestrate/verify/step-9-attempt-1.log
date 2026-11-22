@@ -1,0 +1,50 @@
+=== step9 verify 2026-11-22T01:27:19Z ===
+--- python3 tests/openapi_compliance_smoke.py ---
+openapi compliance smoke passed
+exit=0
+--- python3 tests/openapi_security_smoke.py ---
+openapi security smoke passed
+exit=0
+--- python3 tests/openapi_foundation_smoke.py ---
+openapi foundation smoke passed
+exit=0
+--- python3 tests/openapi_readonly_smoke.py ---
+openapi readonly smoke passed
+exit=0
+--- python3 tests/openapi_write_smoke.py ---
+openapi write smoke passed
+exit=0
+--- python3 tests/system_smoke.py ---
+system smoke: ok
+exit=0
+--- python3 tests/security_smoke.py ---
+security smoke: ok
+exit=0
+--- python3 tests/participation_lock_smoke.py ---
+participation lock smoke: ok
+exit=0
+--- python3 tests/recharge_smoke.py ---
+recharge smoke: ok
+exit=0
+--- python3 tests/enroll_payment_test.py ---
+enroll payment test: PASS
+exit=0
+--- python3 tests/insured_draft_enroll_test.py ---
+insured draft enroll test: PASS
+exit=0
+--- python3 tests/id_number_test.py ---
+id_number tests passed
+exit=0
+--- python3 tests/insured_cross_enterprise_uniqueness_test.py ---
+insured cross-enterprise uniqueness test: PASS
+exit=0
+--- compileall ---
+exit=0
+--- git diff --check ---
+exit=0
+--- alembic heads ---
+e5f8a1c3d7b2 (head)
+exit=0
+--- npm run build ---
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+exit=0

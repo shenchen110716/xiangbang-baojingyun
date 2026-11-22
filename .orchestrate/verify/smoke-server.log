@@ -1,0 +1,54 @@
+INFO:     Started server process [24096]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8003 (Press CTRL+C to quit)
+INFO:     127.0.0.1:54792 - "GET /openapi/v1/ping HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54793 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54794 - "POST /api/enterprises HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54795 - "POST /api/enterprises/2/recharge HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54796 - "POST /api/openapi-clients HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54797 - "GET /openapi/v1/insured-persons HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54798 - "GET /openapi/v1/insured-persons?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54799 - "GET /openapi/v1/insured-persons?limit=10 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54800 - "GET /openapi/v1/insured-persons HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:54801 - "POST /openapi/v1/webhooks HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54802 - "POST /openapi/v1/webhooks/1/test HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54803 - "POST /openapi/v1/enrollments HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54804 - "POST /openapi/v1/enrollments HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54805 - "POST /openapi/v1/enrollments HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:54806 - "POST /openapi/v1/enrollments HTTP/1.1" 422 Unprocessable Content
+INFO:     127.0.0.1:54807 - "GET /openapi/v1/declarations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54808 - "GET /openapi/v1/declarations/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54809 - "PATCH /api/insured/1/status?status=active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54810 - "PATCH /api/insured/2/status?status=active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54811 - "GET /openapi/v1/declarations/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54812 - "POST /openapi/v1/terminations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54813 - "POST /openapi/v1/terminations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54814 - "GET /openapi/v1/insured-persons?limit=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54815 - "GET /openapi/v1/insured-persons?limit=1&cursor=2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54816 - "GET /openapi/v1/insured-persons/2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54817 - "POST /openapi/v1/insured-persons/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54818 - "GET /openapi/v1/export-tasks/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54819 - "GET /openapi/v1/export-tasks/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54826 - "GET /openapi/v1/export-tasks/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54830 - "GET /openapi/v1/export-tasks/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54831 - "GET /openapi/v1/export-tasks/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54836 - "GET /openapi/v1/export-tasks/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54837 - "GET /openapi/v1/export-files/1?token=9ad7153757f0e900faad0eaca2925508e19ad83cd0435b59ada48e9ada069f2d&expires=1795313471 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54838 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54839 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54840 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54841 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54842 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54843 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54844 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54845 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54846 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54847 - "GET /openapi/v1/ping HTTP/1.1" 429 Too Many Requests
+INFO:     127.0.0.1:54848 - "POST /api/openapi-clients/1/rotate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54849 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54850 - "GET /openapi/v1/ping HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [24096]

@@ -1,0 +1,261 @@
+=== step11 full regression 2026-11-22T01:48:44Z ===
+PASS tests/actual_employer_credit_code_test.py
+PASS tests/agent_portal_api_test.py
+PASS tests/agent_portal_leakage_test.py
+PASS tests/agent_pricing_visibility_test.py
+PASS tests/agent_settlement_model_test.py
+PASS tests/agent_settlement_service_test.py
+PASS tests/batch_owner_only_test.py
+PASS tests/claim_policy_fields_test.py
+PASS tests/cross_runtime_contract_test.py
+PASS tests/dashboard_usage_daily_rate_test.py
+FAIL(1) tests/employer_scope_model_test.py
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 2365, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: main.integration_nonces
+[SQL: CREATE INDEX IF NOT EXISTS ix_integration_nonces_seen_at ON integration_nonces (seen_at)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+PASS tests/employer_scope_service_test.py
+PASS tests/employer_scope_smoke.py
+PASS tests/employment_fact_service_test.py
+PASS tests/employment_facts_smoke.py
+PASS tests/employment_import_test.py
+PASS tests/employment_integration_test.py
+PASS tests/employment_matching_test.py
+PASS tests/employment_model_test.py
+PASS tests/enroll_payment_test.py
+PASS tests/enroll_review_test.py
+PASS tests/enroll_submit_test.py
+PASS tests/enterprise_admin_owner_test.py
+PASS tests/enterprise_apply_smoke.py
+PASS tests/enterprise_owner_backfill_test.py
+PASS tests/frontend_routes_test.py
+PASS tests/id_number_test.py
+PASS tests/insured_cross_enterprise_uniqueness_test.py
+PASS tests/insured_draft_enroll_test.py
+PASS tests/insured_validation_gaps_test.py
+FAIL(1) tests/insurer_admin_test.py
+Traceback (most recent call last):
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/insurer_admin_test.py", line 11, in <module>
+    from fastapi.testclient import TestClient  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/testclient.py", line 1, in <module>
+    from starlette.testclient import TestClient as TestClient  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py", line 41, in <module>
+    raise RuntimeError(
+    ...<3 lines>...
+    ) from None
+RuntimeError: The starlette.testclient module requires the httpx2 package to be installed.
+You can install this with:
+    $ pip install httpx2
+
+FAIL(1) tests/insurer_claims_scope_test.py
+Traceback (most recent call last):
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/insurer_claims_scope_test.py", line 12, in <module>
+    from fastapi.testclient import TestClient  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/testclient.py", line 1, in <module>
+    from starlette.testclient import TestClient as TestClient  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py", line 41, in <module>
+    raise RuntimeError(
+    ...<3 lines>...
+    ) from None
+RuntimeError: The starlette.testclient module requires the httpx2 package to be installed.
+You can install this with:
+    $ pip install httpx2
+
+FAIL(1) tests/insurer_flag_test.py
+Traceback (most recent call last):
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/insurer_flag_test.py", line 12, in <module>
+    from fastapi.testclient import TestClient  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/testclient.py", line 1, in <module>
+    from starlette.testclient import TestClient as TestClient  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py", line 41, in <module>
+    raise RuntimeError(
+    ...<3 lines>...
+    ) from None
+RuntimeError: The starlette.testclient module requires the httpx2 package to be installed.
+You can install this with:
+    $ pip install httpx2
+
+FAIL(1) tests/insurer_full_isolation_smoke.py
+Traceback (most recent call last):
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/insurer_full_isolation_smoke.py", line 15, in <module>
+    from fastapi.testclient import TestClient  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/testclient.py", line 1, in <module>
+    from starlette.testclient import TestClient as TestClient  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py", line 41, in <module>
+    raise RuntimeError(
+    ...<3 lines>...
+    ) from None
+RuntimeError: The starlette.testclient module requires the httpx2 package to be installed.
+You can install this with:
+    $ pip install httpx2
+
+FAIL(1) tests/insurer_invoices_scope_test.py
+Traceback (most recent call last):
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/insurer_invoices_scope_test.py", line 12, in <module>
+    from fastapi.testclient import TestClient  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/testclient.py", line 1, in <module>
+    from starlette.testclient import TestClient as TestClient  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py", line 41, in <module>
+    raise RuntimeError(
+    ...<3 lines>...
+    ) from None
+RuntimeError: The starlette.testclient module requires the httpx2 package to be installed.
+You can install this with:
+    $ pip install httpx2
+
+FAIL(1) tests/insurer_policy_upload_scope_test.py
+Traceback (most recent call last):
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/insurer_policy_upload_scope_test.py", line 11, in <module>
+    from fastapi.testclient import TestClient  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/testclient.py", line 1, in <module>
+    from starlette.testclient import TestClient as TestClient  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py", line 41, in <module>
+    raise RuntimeError(
+    ...<3 lines>...
+    ) from None
+RuntimeError: The starlette.testclient module requires the httpx2 package to be installed.
+You can install this with:
+    $ pip install httpx2
+
+FAIL(1) tests/insurer_positions_scope_test.py
+Traceback (most recent call last):
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/insurer_positions_scope_test.py", line 11, in <module>
+    from fastapi.testclient import TestClient  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/testclient.py", line 1, in <module>
+    from starlette.testclient import TestClient as TestClient  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py", line 41, in <module>
+    raise RuntimeError(
+    ...<3 lines>...
+    ) from None
+RuntimeError: The starlette.testclient module requires the httpx2 package to be installed.
+You can install this with:
+    $ pip install httpx2
+
+FAIL(1) tests/insurer_profile_test.py
+Traceback (most recent call last):
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/insurer_profile_test.py", line 11, in <module>
+    from fastapi.testclient import TestClient  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/testclient.py", line 1, in <module>
+    from starlette.testclient import TestClient as TestClient  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py", line 41, in <module>
+    raise RuntimeError(
+    ...<3 lines>...
+    ) from None
+RuntimeError: The starlette.testclient module requires the httpx2 package to be installed.
+You can install this with:
+    $ pip install httpx2
+
+PASS tests/insurer_rbac_test.py
+FAIL(1) tests/insurer_settlement_test.py
+Traceback (most recent call last):
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/insurer_settlement_test.py", line 11, in <module>
+    from fastapi.testclient import TestClient  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/testclient.py", line 1, in <module>
+    from starlette.testclient import TestClient as TestClient  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py", line 41, in <module>
+    raise RuntimeError(
+    ...<3 lines>...
+    ) from None
+RuntimeError: The starlette.testclient module requires the httpx2 package to be installed.
+You can install this with:
+    $ pip install httpx2
+
+FAIL(1) tests/invoice_titles_test.py
+    run()
+    ~~~^^
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/invoice_titles_test.py", line 21, in run
+    from fastapi.testclient import TestClient
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/fastapi/testclient.py", line 1, in <module>
+    from starlette.testclient import TestClient as TestClient  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/starlette/testclient.py", line 41, in <module>
+    raise RuntimeError(
+    ...<3 lines>...
+    ) from None
+RuntimeError: The starlette.testclient module requires the httpx2 package to be installed.
+You can install this with:
+    $ pip install httpx2
+
+PASS tests/ocr_smoke.py
+PASS tests/openapi_compliance_smoke.py
+PASS tests/openapi_foundation_smoke.py
+PASS tests/openapi_readonly_smoke.py
+PASS tests/openapi_security_smoke.py
+PASS tests/openapi_write_smoke.py
+PASS tests/operator_phone_unique_test.py
+PASS tests/outbox_wiring_test.py
+PASS tests/participation_lock_smoke.py
+PASS tests/plan_image_test.py
+PASS tests/plan_tiers_pricing_test.py
+PASS tests/policy_export_fix_test.py
+PASS tests/position_employer_lock_test.py
+PASS tests/position_enroll_qr_test.py
+PASS tests/position_plan_selection_test.py
+PASS tests/recharge_smoke.py
+PASS tests/salesperson_portal_access_test.py
+PASS tests/salesperson_portal_smoke.py
+PASS tests/security_smoke.py
+PASS tests/settings_smoke.py
+PASS tests/storage_smoke.py
+PASS tests/system_smoke.py
+PASS tests/timeliness_billing_mode_test.py
+PASS tests/timeliness_engine_test.py
+PASS tests/timeliness_model_test.py
+PASS tests/timeliness_recalculate_drain_test.py
+FAIL(1) tests/timeliness_reporting_test.py
+  operator attributable rate ok
+  gap and excess ok
+  manager scope ok
+  filters ok
+Traceback (most recent call last):
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/timeliness_reporting_test.py", line 354, in <module>
+    run()
+    ~~~^^
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/timeliness_reporting_test.py", line 137, in run
+    _test_person_level_filters_narrow_details(engine)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/Users/madisonshen/users/b0018ce1-97db-4ef8-b640-158007fe5bd9/blueprints/xiangwuyou/Demo/tests/timeliness_reporting_test.py", line 240, in _test_person_level_filters_narrow_details
+    assert len(detail_rows(session, ctx.owner, id_number="340123")) == 1
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+PASS tests/timeliness_responsibility_test.py
+PASS tests/timeliness_rules_test.py
+PASS tests/timeliness_smoke.py
+PASS tests/wechat_pay_config_test.py
+PASS tests/wechat_pay_provider_test.py
+PASS tests/wechat_pay_smoke.py
+--- compileall ---
+exit=0
+--- alembic heads ---
+e5f8a1c3d7b2 (head)
+exit=0
+=== total failures: 12 ===

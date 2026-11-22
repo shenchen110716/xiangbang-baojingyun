@@ -1,0 +1,8 @@
+CMD: P0 verify suite (2026-11-19T06:38:10Z)
+openapi_foundation_smoke exit=0
+system_smoke exit=0
+security_smoke exit=0
+compileall exit=0
+a1f4e8c2d6b0 (head)
+diff-check exit=0
+npm-build exit=0 (2026-11-19T06:38:19Z)

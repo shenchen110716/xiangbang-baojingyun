@@ -1,0 +1,31 @@
+=== step5 verify 2026-11-21T10:43:21Z ===
+--- python3 tests/openapi_readonly_smoke.py ---
+  AC15 独立 OpenAPI schema ok
+  AC1(本地) export_tasks 迁移在隔离 SQLite 走通 ok
+openapi readonly smoke passed
+exit=0
+--- python3 tests/openapi_foundation_smoke.py ---
+  AC1(本地) 迁移在隔离 SQLite 走通 ok
+  AC4(原语不变) ok
+openapi foundation smoke passed
+exit=0
+--- python3 tests/system_smoke.py ---
+system smoke: ok
+exit=0
+--- python3 tests/security_smoke.py ---
+security smoke: ok
+exit=0
+--- compileall ---
+exit=0
+--- git diff --check ---
+exit=0
+--- alembic heads ---
+c7d2e9f4a1b8 (head)
+exit=0
+--- npm run build ---
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+exit=0

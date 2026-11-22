@@ -1,0 +1,11 @@
+CMD: story files structural check (2026-11-19T03:36:13Z)
+story-p0-foundation.md
+story-p1-readonly.md
+story-p2-write.md
+story-p3-compliance.md
+story-p3b-drop-plaintext-id-number.md
+== docs/stories/story-p0-foundation.md:      113 lines, AC count: 17, origin: 1, depends: depends_on: []
+== docs/stories/story-p1-readonly.md:       92 lines, AC count: 17, origin: 1, depends: depends_on: [story-p0-foundation]
+== docs/stories/story-p2-write.md:      113 lines, AC count: 19, origin: 1, depends: depends_on: [story-p1-readonly]
+== docs/stories/story-p3-compliance.md:       88 lines, AC count: 10, origin: 1, depends: depends_on: [story-p2-write]
+== docs/stories/story-p3b-drop-plaintext-id-number.md:       49 lines, AC count: 4, origin: 1, depends: depends_on: [story-p3-compliance]

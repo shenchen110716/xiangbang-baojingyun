@@ -1,0 +1,6 @@
+CMD: P0 attempt-2 verify (2026-11-19T06:55:10Z)
+openapi_foundation_smoke exit=0
+system_smoke exit=0
+security_smoke exit=0
+compileall exit=0
+diff-check exit=0
