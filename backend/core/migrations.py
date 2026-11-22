@@ -157,9 +157,12 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
         for column, definition in [("channel", "VARCHAR(20) DEFAULT 'native'"), ("openid", "VARCHAR(64)"), ("provider_trade_no", "VARCHAR(80)"), ("paid_at", "DATETIME")]:
             if column not in payment_columns: s.connection().exec_driver_sql(f"ALTER TABLE payment_records ADD COLUMN {column} {definition}")
     # 开放平台 P0：新表由 create_all 覆盖；但 integration_nonces 在旧库里
-    # 已存在，create_all 会整表跳过，seen_at 清理索引要在这里补。
-    s.connection().exec_driver_sql(
-        "CREATE INDEX IF NOT EXISTS ix_integration_nonces_seen_at ON integration_nonces (seen_at)")
+    # 已存在，create_all 会整表跳过，seen_at 清理索引要在这里补。表不存在
+    # 时跳过（部分测试库只建业务子集表）。
+    nonce_columns = {row[1] for row in s.connection().exec_driver_sql("PRAGMA table_info(integration_nonces)")}
+    if nonce_columns:
+        s.connection().exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_integration_nonces_seen_at ON integration_nonces (seen_at)")
 
 
 def migrate_premium_balances(s: Session) -> None:

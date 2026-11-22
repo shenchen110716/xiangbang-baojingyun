@@ -237,8 +237,10 @@ def _test_person_level_filters_narrow_details(engine):
         assert len(detail_rows(session, ctx.owner, position_id=zhang.position_id)) == 1
         assert len(detail_rows(session, ctx.owner, person_name="张")) == 1
         assert len(detail_rows(session, ctx.owner, person_name="不存在的名字")) == 0
-        assert len(detail_rows(session, ctx.owner, id_number="340123")) == 1
-        assert len(detail_rows(session, ctx.owner, id_number="110101")) == 1
+        # P3 起证件号列为密文+哈希，查询从子串 LIKE 改为完整号精确匹配
+        assert len(detail_rows(session, ctx.owner, id_number="340123199001011238")) == 1
+        assert len(detail_rows(session, ctx.owner, id_number="110101199003077715")) == 1
+        assert len(detail_rows(session, ctx.owner, id_number="340123")) == 0
     print("  person-level filters ok")
 
 
