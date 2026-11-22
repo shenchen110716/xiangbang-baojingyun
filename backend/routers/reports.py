@@ -15,6 +15,7 @@ from ..core.business_time import business_today
 from ..core import storage
 from ..core.db import db
 from ..core.file_tokens import make_download_token, verify_download_token
+from ..core.id_number import mask_id_number
 from ..core.rbac import require_role
 from ..core.security import current_user
 from ..models import (
@@ -132,7 +133,9 @@ def _premium_detail_payload(
             "member_id": member.id,
             "person_id": person.id,
             "person_name": person.name,
-            "id_number": person.id_number,
+            # story-p3-compliance AC4：保费明细（页面 + XLSX 导出）对所有
+            # 角色一律脱敏——企业端/业务员可见此报表，不能有明文出口。
+            "id_number": mask_id_number(person.decrypted_id_number()),
             "enterprise_name": enterprise.name if enterprise else "",
             "agent_id": row_agent_id,
             "agent_name": row_agent.name if row_agent else "",
@@ -281,11 +284,13 @@ def download_policy_document(item_id:int,token:str,expires:int,session:Session=D
     return RedirectResponse(ref) if kind=='redirect' else FileResponse(ref,filename=policy.document_name or None)
 
 @router.get("/policies/{item_id}/export")
-def export_policy(item_id:int,user:User=Depends(current_user),session:Session=Depends(db)):
+def export_policy(item_id:int,user:User=Depends(current_user),session:Session=Depends(db),plaintext:bool=False):
     policy=session.get(Policy,item_id)
     if not policy: raise HTTPException(404,'保单不存在')
     if user.role=='insurer': raise HTTPException(403,'保司账号无权导出保单明细')
     if user.role=='enterprise' and user.enterprise_id!=policy.enterprise_id: raise HTTPException(403,'无权导出该保单')
+    # story-p3-compliance AC4/AC5：默认脱敏；明文仅 admin + 显式参数 + 审计。
+    if plaintext and user.role!='admin': raise HTTPException(403,'仅平台管理员可明文导出身份证号')
     enterprise=session.get(Enterprise,policy.enterprise_id);plan=session.get(InsurancePlan,policy.plan_id)
     relation=session.scalar(select(AgentCommission).where(AgentCommission.enterprise_id==policy.enterprise_id,AgentCommission.plan_id==policy.plan_id,AgentCommission.status=='active').order_by(AgentCommission.id.desc()))
     book=openpyxl.Workbook();sheet=book.active;sheet.title='保单人员明细'
@@ -298,10 +303,14 @@ def export_policy(item_id:int,user:User=Depends(current_user),session:Session=De
     for person in filter(None, (session.get(InsuredPerson, pid) for pid in dict.fromkeys(person_ids))):
         position=session.get(WorkPosition,person.position_id) if person.position_id else None;employer=session.get(ActualEmployer,position.actual_employer_id) if position and position.actual_employer_id else None
         pricing=pricing_snapshot(plan,relation,plan_price_for_class(session,plan,person.occupation_class)) if plan else {}
-        prefix=[policy.policy_no,enterprise.name if enterprise else '',employer.name if employer else (position.actual_employer if position else ''),position.name if position else person.occupation,person.occupation_class,person.name,person.id_number,plan.insurer if plan else '',plan.name if plan else '']
+        id_display=person.decrypted_id_number() if plaintext else mask_id_number(person.decrypted_id_number())
+        prefix=[policy.policy_no,enterprise.name if enterprise else '',employer.name if employer else (position.actual_employer if position else ''),position.name if position else person.occupation,person.occupation_class,person.name,id_display,plan.insurer if plan else '',plan.name if plan else '']
         if enterprise_export: sheet.append(prefix+[pricing.get('sale_price',0),policy.start_date,policy.end_date,policy.status])
         else: sheet.append(prefix+[pricing.get('insurance_base_price',0),pricing.get('total_commission_rate',0),pricing.get('total_commission_amount',0),pricing.get('policy_floor_price',0),pricing.get('profit_amount',0),pricing.get('minimum_sale_price',0),pricing.get('sale_price',0),pricing.get('agent_commission_amount',0),policy.start_date,policy.end_date,policy.status])
     for row_number in range(2, sheet.max_row + 1): sheet.cell(row_number, 7).number_format = '@'
     for column in sheet.columns: sheet.column_dimensions[column[0].column_letter].width=min(32,max(12,max(len(str(cell.value or '')) for cell in column)+2))
     output=io.BytesIO();book.save(output);output.seek(0)
+    if plaintext:
+        # AC5：明文导出每请求一条独立审计，detail 不含明文证件号。
+        audit(session,user,'export_plaintext','policy',str(policy.id),f'管理员明文导出保单 {policy.policy_no} 人员明细')
     return StreamingResponse(output,media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename=policy-{policy.policy_no}.xlsx'})

@@ -16,6 +16,7 @@ from ..services import (
     serialize,
     terminate_person_policy,
 )
+from ..services.openapi.declarations import apply_person_status
 from ..services.termination_scan import affected_coverage_for_account
 
 router = APIRouter(prefix="/api", tags=["pending-terminations"])
@@ -114,7 +115,9 @@ def confirm_pending_termination(
             enforce_timing=False,
             coverage_member_id=member.id,
         )
-        person.status = "stopped"
+        # review-p2 M2：统一走状态翻转入口（开放平台停保申报项终态 + webhook
+        # 事件同事务落库）；批量停保强制执行是既有语义，不收紧状态机。
+        apply_person_status(session, person, "stopped", enforce_transition=False)
 
     item.affected_insurers = ",".join(insurers)
     item.affected_count = len(affected)

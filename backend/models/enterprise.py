@@ -21,6 +21,9 @@ class Enterprise(Base):
     usage_balance: Mapped[float] = mapped_column(Float, default=0)
     usage_fee_daily: Mapped[float] = mapped_column(Float, default=0.1)
     alert_days: Mapped[int] = mapped_column(Integer, default=3)
+    # 开放平台余额预警阈值（story-p2-write AC15）：可用服务费（usage_account_view
+    # 计算值）跌破该值时投递 balance.low 事件；NULL = 未设置、不预警。
+    usage_alert_threshold: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

@@ -165,9 +165,11 @@ def run():
 
             rows = list_policies(user, session)
             assert len(rows) == 1 and rows[0]["insured_count"] == 1 and rows[0]["premium"] > 0
+            # story-p3-compliance AC4：保单导出默认脱敏身份证号。
+            from backend.core.id_number import mask_id_number
             policy_export = export_policy(policy.id, user, session)
             policy_book = openpyxl.load_workbook(BytesIO(asyncio.run(response_body(policy_export))), read_only=True, data_only=True)
-            assert policy_book.active['G2'].value == person['id_number']
+            assert policy_book.active['G2'].value == mask_id_number(person['id_number'])
             policy_book.close()
 
             # redundant active->active PATCH must not create a second PolicyMember
@@ -207,7 +209,8 @@ def run():
             assert platform_report["rows"][0]["agent_name"] == "测试业务员"
             detail_export = export_premium_details('2026-01-01', '2026-01-31', enterprise_id, '测试保司', agent['id'], admin, session)
             detail_book = openpyxl.load_workbook(BytesIO(asyncio.run(response_body(detail_export))), read_only=True, data_only=True)
-            assert detail_book.active['D2'].value == person['id_number'] and detail_book.active['A1'].value == '统计开始'
+            # story-p3-compliance AC4：保费明细导出同样默认脱敏身份证号。
+            assert detail_book.active['D2'].value == mask_id_number(person['id_number']) and detail_book.active['A1'].value == '统计开始'
             detail_book.close()
             filtered_commission = premium_details("2026-01-01", "2026-01-31", enterprise_id=None, insurer="", agent_id=agent["id"], user=admin, session=session)
             assert filtered_commission["detail_count"] == 1

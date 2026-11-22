@@ -44,6 +44,16 @@ python3 -m uvicorn backend.app:app --host 127.0.0.1 --port 8001 --reload
 - `GET/POST/PATCH /api/claims/{id}/documents` 理赔材料流转
 - `GET /docs` OpenAPI 交互文档
 
+## 开放平台（企业对接 Open API）
+
+面向企业客户（ERP / HR / 用工平台）的 server-to-server 接口，挂载在独立的 `/openapi/v1`（不走 `/api` 与 JWT）：HMAC-SHA256 v2 签名 + scope 授权 + IP 白名单 + 限流，支持沙箱环境密钥。
+
+- **查询**：参保人员名单/详情/操作历史（身份证默认脱敏）、异步 XLSX 导出、保单、账户余额/流水/发票
+- **写入**：参保/停保批量申报（支持 `Idempotency-Key` 幂等、逐人驳回）、微信 Native / 银行转账充值
+- **Webhook**：申报回执、充值到账、余额预警等 6 类事件，v2 签名投递、失败自动重试
+
+平台管理员在「投保单位」列表中为企业签发和管理 API 密钥（AppSecret 仅创建时显示一次，支持 7 天宽限期轮换）、设置余额预警阈值。接入文档见管理端「开放平台」菜单或 `docs/open-api-usage-guide.md`；机读接口定义 `GET /openapi/v1/openapi.json`（免签名）；Postman 集合 `docs/open-api-postman-collection.json`。
+
 ## 真实服务接入
 
 复制 `.env.example` 为 `.env`，填写环境变量后切换 `INTEGRATION_MODE=real`。保司 API、短信、邮件、支付服务通过 Provider 适配层接入；当前默认 `mock`，不会向第三方发送真实请求，也不存储任何密钥。

@@ -50,24 +50,20 @@ def _by_external_employment_id(session, enterprise_id, external_employment_id) -
 
 
 def _by_identity(session, enterprise_id, actual_employer_id, id_number) -> list[int]:
-    """InsuredPerson stores the ID in plaintext, so hash each candidate and
-    compare digests rather than the raw value (§6.4)."""
+    """story-p3-compliance：InsuredPerson 现在带 id_number_hash 列（双写期
+    由 ORM 事件维护），直接用索引等值匹配，不再全表取明文逐行哈希。"""
     if not id_number:
         return []
-    wanted = id_hash(id_number)
     stmt = (
-        select(InsuredPerson.id, InsuredPerson.id_number)
+        select(InsuredPerson.id)
         .join(WorkPosition, InsuredPerson.position_id == WorkPosition.id)
         .where(
             InsuredPerson.enterprise_id == enterprise_id,
             WorkPosition.actual_employer_id == actual_employer_id,
-            InsuredPerson.id_number != "",
+            InsuredPerson.id_number_hash == id_hash(id_number),
         )
     )
-    return sorted(
-        person_id for person_id, raw in session.execute(stmt)
-        if id_hash(raw) == wanted
-    )
+    return sorted(session.scalars(stmt))
 
 
 def _by_employee_no(session, enterprise_id, actual_employer_id, external_employee_no) -> list[int]:

@@ -61,6 +61,32 @@ def sign_request(secret: str, timestamp: str, nonce: str, body: bytes) -> str:
                     hashlib.sha256).hexdigest()
 
 
+# ---------------------------------------------------------------------------
+# 签名 v2（开放平台 /openapi/v1，设计方案 §2.2）。v1 只覆盖 ts+nonce+body，
+# 同窗口内签名可以被重放到另一个端点/查询串；v2 把 METHOD、PATH、规范化
+# 查询串纳入签名。既有 §7.3 用工事件端点保持 v1 不动（兼容红线）。
+
+def canonical_query(query: str) -> str:
+    """按 key（再按 value）字典序重排查询串；空值参数保留。"""
+    from urllib.parse import parse_qsl, urlencode
+    return urlencode(sorted(parse_qsl(query or "", keep_blank_values=True)))
+
+
+def signing_payload_v2(method: str, path: str, query: str,
+                       timestamp: str, nonce: str, body: bytes) -> str:
+    return "\n".join([
+        method.upper(), path, canonical_query(query),
+        timestamp, nonce, hashlib.sha256(body).hexdigest(),
+    ])
+
+
+def sign_request_v2(secret: str, method: str, path: str, query: str,
+                    timestamp: str, nonce: str, body: bytes) -> str:
+    """Client-side v2 signing; also used by tests to forge valid requests."""
+    payload = signing_payload_v2(method, path, query, timestamp, nonce, body)
+    return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
 def issue_key_secret() -> tuple[str, str]:
     """Returns (plaintext_secret, stored_cipher). Plaintext is shown once."""
     secret = secrets.token_urlsafe(32)

@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..core.id_number import mask_id_number
 from ..core.business_time import business_today
 from ..models import Enterprise, InsurancePlan, InsuredPerson, InsurerMonthlySettlement, Policy, PolicyMember, User
 from .accruals import billable_date_range, period_amount
@@ -145,7 +146,9 @@ def insurer_monthly_premium_rows(session: Session, insurer_id: int, year: int, m
             if row_amount <= 0:
                 continue
             rows.append({
-                "person_id": person.id, "person_name": person.name, "id_number": person.id_number,
+                # story-p3-compliance AC5：保司无明文出口，一律脱敏。
+                "person_id": person.id, "person_name": person.name,
+                "id_number": mask_id_number(person.decrypted_id_number()),
                 "enterprise_name": enterprise.name if enterprise else "",
                 "policy_no": policy.policy_no,
                 "effective_at": member.effective_at.date().isoformat(),

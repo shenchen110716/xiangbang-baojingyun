@@ -14,6 +14,7 @@ import DetailModal from '@/components/DetailModal.vue'
 import StatTile from '@/components/StatTile.vue'
 import TablePagination from '@/components/TablePagination.vue'
 import WorkUnitsPanel from './WorkUnitsPanel.vue'
+import OpenApiClientsPanel from '@/views/openapi/OpenApiClientsPanel.vue'
 import { usePagedList } from '@/composables/usePagedList'
 
 const router = useRouter()
@@ -51,16 +52,17 @@ const editingId = ref<number | null>(null)
 const form = reactive({
   name: '', kind: '企业', credit_code: '', contact: '', phone: '',
   agent_id: null as number | null, usage_fee_daily: 0.1, alert_days: 3,
+  usage_alert_threshold: null as number | null,
 })
 function openCreate() {
   editingId.value = null
-  Object.assign(form, { name: '', kind: '企业', credit_code: '', contact: '', phone: '', agent_id: null, usage_fee_daily: 0.1, alert_days: 3 })
+  Object.assign(form, { name: '', kind: '企业', credit_code: '', contact: '', phone: '', agent_id: null, usage_fee_daily: 0.1, alert_days: 3, usage_alert_threshold: null })
   ocrHint.value = ''
   formVisible.value = true
 }
 function openEdit(item: Enterprise) {
   editingId.value = item.id
-  Object.assign(form, { name: item.name, kind: item.kind, credit_code: item.credit_code, contact: item.contact, phone: item.phone, agent_id: item.agent_id, usage_fee_daily: item.usage_fee_daily, alert_days: item.alert_days })
+  Object.assign(form, { name: item.name, kind: item.kind, credit_code: item.credit_code, contact: item.contact, phone: item.phone, agent_id: item.agent_id, usage_fee_daily: item.usage_fee_daily, alert_days: item.alert_days, usage_alert_threshold: item.usage_alert_threshold ?? null })
   formVisible.value = true
 }
 
@@ -127,6 +129,15 @@ const workUnitsTarget = ref<Enterprise | null>(null)
 function openWorkUnits(item: Enterprise) {
   workUnitsTarget.value = item
   workUnitsVisible.value = true
+}
+
+// ---- 开放平台密钥（P0 地基 AC11）：以企业为单位签发/启停 AppKey、查调用
+// 日志。复用对话框承载独立面板的既有形态（同 WorkUnitsPanel）。
+const openApiVisible = ref(false)
+const openApiTarget = ref<Enterprise | null>(null)
+function openOpenApi(item: Enterprise) {
+  openApiTarget.value = item
+  openApiVisible.value = true
 }
 
 async function removeEnterprise(item: Enterprise) {
@@ -229,6 +240,7 @@ async function approveEnterprise(item: Enterprise) {
                   <el-dropdown-item @click="openProducts(row)">参保产品</el-dropdown-item>
                   <el-dropdown-item @click="openWorkUnits(row)">实际用工单位</el-dropdown-item>
                   <el-dropdown-item @click="exportEnterpriseCertificate(row)">导出整企业保单</el-dropdown-item>
+                  <el-dropdown-item @click="openOpenApi(row)">开放平台</el-dropdown-item>
                   <!-- dropdown 菜单被 teleport 到 body，scoped 样式够不着，红色只能内联 -->
                   <el-dropdown-item divided @click="removeEnterprise(row)"><span style="color: var(--el-color-danger)">删除</span></el-dropdown-item>
                 </el-dropdown-menu>
@@ -269,6 +281,11 @@ async function approveEnterprise(item: Enterprise) {
         <el-form-item label="余额预警天数">
           <el-input-number v-model="form.alert_days" :min="3" :max="7" />
         </el-form-item>
+        <!-- review-p2 M5：开放平台 balance.low 预警阈值（仅编辑时展示；创建接口不含此字段） -->
+        <el-form-item v-if="editingId" label="开放平台预警阈值">
+          <el-input-number v-model="form.usage_alert_threshold" :min="0" :step="10" placeholder="未启用" />
+          <div class="hint">服务费可用余额跌破该金额时，向该企业开放平台回调地址投递 balance.low 预警；留空表示不启用</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="formVisible = false">取消</el-button>
@@ -289,6 +306,10 @@ async function approveEnterprise(item: Enterprise) {
 
     <el-dialog v-model="workUnitsVisible" :title="`实际用工单位管理 · ${workUnitsTarget?.name ?? ''}`" width="960px" destroy-on-close>
       <WorkUnitsPanel v-if="workUnitsTarget" :enterprise-id="workUnitsTarget.id" />
+    </el-dialog>
+
+    <el-dialog v-model="openApiVisible" :title="`开放平台密钥 · ${openApiTarget?.name ?? ''}`" width="960px" destroy-on-close>
+      <OpenApiClientsPanel v-if="openApiTarget" :enterprise-id="openApiTarget.id" />
     </el-dialog>
   </div>
 </template>

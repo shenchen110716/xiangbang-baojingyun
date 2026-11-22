@@ -248,8 +248,9 @@ async function doConfirm() {
       <el-form-item label="姓名">
         <el-input v-model="filters.person_name" clearable placeholder="支持模糊查询" style="width: 130px" />
       </el-form-item>
+      <!-- story-p3-compliance：后端改为 hash 全号精确匹配，不再支持子串模糊查询 -->
       <el-form-item label="身份证号">
-        <el-input v-model="filters.id_number" clearable placeholder="支持模糊查询" style="width: 160px" />
+        <el-input v-model="filters.id_number" clearable placeholder="输入完整证件号精确查询" style="width: 180px" />
       </el-form-item>
       <el-form-item label="责任人">
         <el-select v-model="filters.responsible_user_id" clearable filterable placeholder="全部" style="width: 140px">
