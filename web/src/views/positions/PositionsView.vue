@@ -265,6 +265,7 @@ function finishQuickInsure() {
         <el-table-column label="岗位名称" min-width="160">
           <template #default="{ row }">
             <div>{{ row.name }}</div>
+            <div><small class="muted">编号 #{{ row.id }}</small></div>
             <small class="muted">{{ row.actual_employer_name || row.actual_employer || '—' }}</small>
           </template>
         </el-table-column>
