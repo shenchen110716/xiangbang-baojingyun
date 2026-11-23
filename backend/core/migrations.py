@@ -55,6 +55,8 @@ def run_sqlite_bridge_migrations(s: Session, database_url: str) -> None:
     for column, definition in [("phone", "VARCHAR(30) DEFAULT ''"), ("status", "VARCHAR(30) DEFAULT 'active'"), ("is_owner", "BOOLEAN DEFAULT 0"), ("enterprise_role", "VARCHAR(30)")]:
         if column not in columns: s.connection().exec_driver_sql(f"ALTER TABLE users ADD COLUMN {column} {definition}")
     if "wx_openid" not in columns: s.connection().exec_driver_sql("ALTER TABLE users ADD COLUMN wx_openid VARCHAR(64)")
+    # 保司端账号（v4.2）：旧本地库没有 insurer_id，启动期 seed 查 users 会崩
+    if "insurer_id" not in columns: s.connection().exec_driver_sql("ALTER TABLE users ADD COLUMN insurer_id INTEGER")
     s.connection().exec_driver_sql(
         "UPDATE users SET enterprise_role=CASE WHEN is_owner THEN 'owner' ELSE 'project_manager' END "
         "WHERE role='enterprise' AND enterprise_role IS NULL"
